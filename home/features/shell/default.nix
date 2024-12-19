@@ -43,9 +43,6 @@
       set -gx VOLTA_HOME $HOME/.volta
       fish_add_path $VOLTA_HOME/bin
 
-      # Krew
-      fish_add_path $HOME/.krew/bin
-
       # Go Binaries
       fish_add_path $GOPATH/bin
     '';
@@ -103,10 +100,7 @@
   };
 
   home.shellAliases = {
-    "wgup-staging" = "wg-quick up ~/.config/wireguard/staging.conf";
-    "wgdown-staging" = "wg-quick down ~/.config/wireguard/staging.conf";
     "cat" = "bat -pp";
     "tailscale" = "/Applications/Tailscale.app/Contents/MacOS/Tailscale";
-    "k" = "kubectl";
   };
 }
