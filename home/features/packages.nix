@@ -39,7 +39,7 @@
     bandwhich
     dogdns                   # Modern dig replacement for DNS queries
     httpie                   # User-friendly HTTP client (modern curl)
-    tailscale
+  ] ++ [
     
     # ═══════════════════════════════════════════════════════════════════════════
     # ☁️ CLOUD & INFRASTRUCTURE TOOLS
@@ -110,6 +110,8 @@
     # 🤖 AI & MACHINE LEARNING
     # ═══════════════════════════════════════════════════════════════════════════
     ollama                   # Local LLM server
+    claude-code              # Agentic coding tool that lives in your terminal
+    openai                   # OpenAI Python client library with CLI capabilities
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 📊 DATA & ANALYTICS

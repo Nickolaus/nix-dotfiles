@@ -100,27 +100,55 @@
       # Configure sponge to keep git commit commands in history even when pre-commit hooks fail
       # This allows commit messages to remain accessible for retry after fixing hook failures
       set -U sponge_regex_patterns '^git\s+commit.*'
+      
+      # 📂 Dynamic multi-dot navigation: automatically handle any number of dots
+      # Override Fish's command-not-found handler to catch dot patterns
+      function __fish_command_not_found_handler --on-event fish_command_not_found
+          set -l cmd $argv[1]
+          
+          # Check if command is only dots (3 or more)
+          if string match -qr '^\.{3,}$' -- "$cmd"
+              # Count the dots and calculate levels to go up
+              set -l dot_count (string length "$cmd")
+              set -l levels (math $dot_count - 1)
+              
+              # Build the cd command
+              set -l path_parts ""
+              for i in (seq $levels)
+                  set path_parts "$path_parts../"
+              end
+              
+              # Execute the cd command
+              echo "📂 Going up $levels levels..."
+              cd $path_parts
+              commandline -f repaint
+              return 0
+          end
+          
+          # If not a dot pattern, let other handlers deal with it
+          return 1
+      end
+      
+      # 🎨 Create minimal wrapper functions to prevent red highlighting
+      # These are ultra-lightweight functions that just call our handler
+      # Fish will recognize them as valid commands (no red highlighting)
+      # Cover 3-20 dots (covers 99% of realistic use cases)
+      for i in (seq 3 20)
+          set -l dots (string repeat -n $i .)
+          eval "function $dots
+              __fish_command_not_found_handler $dots
+          end"
+      end
     '';
 
     # workaround for fixing the path order: https://github.com/LnL7/nix-darwin/issues/122
     shellInit = ''
-      # Homebrew config
-      set -gx HOMEBREW_PREFIX "/opt/homebrew";
-      set -gx HOMEBREW_CELLAR "/opt/homebrew/Cellar";
-      set -gx HOMEBREW_REPOSITORY "/opt/homebrew";
-      ! set -q PATH; and set PATH \'\'; set -gx PATH "/opt/homebrew/bin" "/opt/homebrew/sbin" $PATH;
-      ! set -q MANPATH; and set MANPATH \'\'; set -gx MANPATH "/opt/homebrew/share/man" $MANPATH;
-      ! set -q INFOPATH; and set INFOPATH \'\'; set -gx INFOPATH "/opt/homebrew/share/info" $INFOPATH;
-
       # Volta
       set -gx VOLTA_HOME $HOME/.volta
       fish_add_path $VOLTA_HOME/bin
 
       # Go Binaries
       fish_add_path $GOPATH/bin
-
-      # MySQL
-      fish_add_path /opt/homebrew/opt/mysql-client/bin
 
       # Cargo
       fish_add_path $HOME/.cargo/bin
@@ -226,7 +254,6 @@
 
   home.shellAliases = {
     "cat" = "bat -pp";
-    "tailscale" = "/Applications/Tailscale.localized/Tailscale.app/Contents/MacOS/Tailscale";
     "k" = "kubectl";
     "ll" = "eza --icons --group --group-directories-first -l";
     # New CLI tool shortcuts

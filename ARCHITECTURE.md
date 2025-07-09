@@ -9,12 +9,15 @@ nix-dotfiles/
 ├── flake.nix              # Main flake configuration with outputs
 ├── install.sh             # Cross-platform installation script
 ├── scripts/               # Utility scripts and tools
+│   ├── update-system.sh   # Comprehensive system update script
 │   └── hot-benchmark.sh   # AI model performance benchmarking tool
 ├── 
 ├── hosts/                 # System configurations per machine
 │   ├── zoidberg/          # Primary macOS system (nix-darwin)
 │   ├── example-linux/     # Example Linux configuration (NixOS)
 │   └── shared/            # Shared system configurations
+│       ├── determinate.nix # Determinate Systems Nix configuration
+│       └── fonts.nix      # Font configuration
 │
 ├── home/                  # Home Manager configurations
 │   ├── default.nix        # Base user configuration (imports ./features)
@@ -80,6 +83,7 @@ nix-dotfiles/
 
 ### 3. **Clear Separation of Concerns**
 - **System vs User**: Clear distinction between system-level (`modules/`, `hosts/`) and user-level (`home/`) configurations
+- **Package Placement**: GUI applications in Home Manager (`home/features/`), system tools in `environment.systemPackages`
 - **Host-Specific**: Machine-specific customizations are isolated in `hosts/` and user-specific files
 - **Feature Isolation**: Each feature (editor, shell, etc.) is self-contained
 - **Platform Separation**: OS-specific packages and features clearly separated
@@ -107,6 +111,8 @@ hosts/zoidberg/default.nix → home/zoidberg.nix → home/default.nix → home/f
 - **`flake.nix`**: Defines inputs, outputs, and system configurations
 - **`home/default.nix`**: Base Home Manager configuration (imports `./features`)
 - **`home/zoidberg.nix`**: User-specific configuration with platform-specific imports
+- **`hosts/shared/determinate.nix`**: Determinate Systems Nix configuration (replaces traditional nix settings)
+- **`hosts/shared/fonts.nix`**: Font configuration shared across systems
 
 ### Entry Points (All follow two-layer import rule)
 - **`home/features/default.nix`**: Imports all feature modules
@@ -159,17 +165,48 @@ hosts/zoidberg/default.nix → home/zoidberg.nix → home/default.nix → home/f
 3. **Linux-specific**: Add to appropriate category in `home/features/linux/packages.nix`
 4. **New categories**: Follow the established pattern with emoji headers and comment blocks
 
+**⚠️ Package Placement Rules:**
+- **GUI Applications**: Always use Home Manager (`home/features/*/packages.nix`)
+- **System Tools**: Only use `environment.systemPackages` for system daemons, core CLI tools
+- **User Tools**: Prefer Home Manager for better user-specific configuration
+
 ### Adding System-Level Modules
 1. Create `modules/darwin/new-module.nix` or `modules/nixos/new-module.nix`
 2. Import in appropriate host configuration (`hosts/*/default.nix`)
 
+### System Update Architecture
+
+This configuration uses a **two-tier update model** with Determinate Systems Nix:
+
+#### Update Components
+1. **Determinate Systems Nix**: The underlying Nix installation and daemon
+2. **Flake Configuration**: Your dotfiles and package definitions
+3. **System Configuration**: Applied via nix-darwin (macOS) or NixOS (Linux)
+
+#### Update Flow
+```
+Determinate Systems → Flake Inputs → Configuration Validation → System Application → Health Verification
+```
+
+#### Operational Procedures
+- **Complete procedures**: See [System Updates](../README.md#3-system-updates) in README.md
+- **Automated script**: `./scripts/update-system.sh` handles the full workflow
+- **Manual steps**: Available in README.md for troubleshooting scenarios
+
+#### Architecture Benefits
+- **Safe Updates**: Health checks before and after operations
+- **Rollback Capability**: Nix generations allow instant rollbacks
+- **Separation of Concerns**: System updates vs. configuration changes are distinct
+- **Platform Agnostic**: Same workflow applies to macOS and Linux
+
 ## 🛠️ Utility Scripts
 
 The `scripts/` directory contains development and maintenance tools:
-- **`hot-benchmark.sh`**: AI model performance benchmarking tool for comparing ollama models with OpenCommit
-- Future utility scripts for configuration management, testing, and automation
 
-These scripts are not part of the Nix configuration but provide helpful tools for managing and testing the dotfiles setup.
+- **`update-system.sh`**: Implements the comprehensive system update workflow (see [System Updates](../README.md#3-system-updates) in README.md)
+- **`hot-benchmark.sh`**: AI model performance benchmarking tool for comparing ollama models with OpenCommit
+
+These scripts are not part of the Nix configuration but provide helpful automation for managing and testing the dotfiles setup. For detailed usage instructions, see the README.md.
 
 ## 🔒 Secrets Management
 
@@ -207,10 +244,25 @@ nix flake check
 nix build .#darwinConfigurations.zoidberg.system --dry-run
 ```
 
-### Apply Changes
+### Determinate Systems Management
 ```bash
-sudo darwin-rebuild switch --flake ~/.config/nix-dotfiles/ --show-trace
+# Check daemon status
+sudo determinate-nixd status
+
+# Upgrade Nix version
+sudo determinate-nixd upgrade
+
+# Check current version
+determinate-nixd version
+
+# Restart daemon if needed
+sudo launchctl kickstart -k system/org.nixos.nix-daemon
 ```
+
+### Configuration Files
+- **Determinate config**: `hosts/shared/determinate.nix` (your dotfiles)
+- **System config**: `/etc/nix/nix.conf` (managed by Determinate, read-only)
+- **Custom config**: `/etc/nix/nix.custom.conf` (for additional settings)
 
 ---
 

@@ -17,9 +17,20 @@ A cross-platform Nix configuration for macOS (nix-darwin) and Linux (NixOS) with
 ## 📋 Requirements
 
 ### Nix Installation
-Install Nix using the Determinate Systems installer (recommended):
+You need to install Nix, but we are not using their official installer. Instead, we are using the Determinate Systems Nix Installer. You can download it [here](https://install.determinate.systems/determinate-pkg/stable/Universal)!
+
+**Important**: Determinate Systems provides two separate operations:
+- **Configuration Application**: Use `sudo darwin-rebuild switch` to apply your dotfiles changes
+- **System Upgrades**: Use `sudo determinate-nixd upgrade` to upgrade the Determinate Nix system itself
+
+To update your Determinate Nix system to the latest release:
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
+sudo determinate-nixd upgrade
+```
+
+To apply your configuration changes:
+```bash
+sudo darwin-rebuild switch --flake ~/.config/nix-dotfiles --show-trace
 ```
 
 ### Platform-Specific Requirements
@@ -44,12 +55,13 @@ SOPS (Secrets OPerationS) encrypts secrets using age keys for secure storage in 
 
 2. **Generate age key pair**:
    ```bash
-   # Generate a new age key
-   age-keygen -o ~/.config/sops/age/keys.txt
-   
-   # On macOS, use the appropriate path:
+   # macOS (follows Apple's Application Support directory convention)
    mkdir -p "~/Library/Application Support/sops/age"
    age-keygen -o "~/Library/Application Support/sops/age/keys.txt"
+   
+   # Linux (follows XDG Base Directory specification)
+   mkdir -p ~/.config/sops/age
+   age-keygen -o ~/.config/sops/age/keys.txt
    ```
 
 3. **Note your public key**:
@@ -171,16 +183,70 @@ nix run nix-darwin -- switch --flake ~/.config/nix-dotfiles
 sudo nixos-rebuild switch --flake ~/.config/nix-dotfiles/
 ```
 
-### 3. Apply Future Changes
+### 3. System Updates
 
-#### macOS
+Use the comprehensive update workflow to keep your system current:
+
+#### Complete System Update (Recommended)
 ```bash
-darwin-rebuild switch --flake ~/.config/nix-dotfiles/ --show-trace
+# Run the complete update workflow
+./scripts/update-system.sh
+
+# Or follow the manual steps below:
 ```
 
-#### Linux
+#### Manual Update Workflow
+
+**Step 1: Check System Health**
 ```bash
-sudo nixos-rebuild switch --flake ~/.config/nix-dotfiles/
+# Check Determinate Systems daemon status
+sudo determinate-nixd status
+
+# Verify current configuration is valid
+nix flake check
+```
+
+**Step 2: Update Determinate Systems (if needed)**
+```bash
+# Upgrade Determinate Nix to latest version
+sudo determinate-nixd upgrade
+
+# Verify upgrade completed successfully
+sudo determinate-nixd status
+```
+
+**Step 3: Update Configuration**
+```bash
+# Update flake inputs to latest versions
+nix flake update
+
+# Validate updated configuration
+nix flake check
+```
+
+**Step 4: Apply Changes**
+```bash
+# macOS: Apply configuration changes
+sudo darwin-rebuild switch --flake ~/.config/nix-dotfiles/ --show-trace
+
+# Linux: Apply configuration changes  
+sudo nixos-rebuild switch --flake ~/.config/nix-dotfiles/ --show-trace
+```
+
+**Step 5: Verify System Health**
+```bash
+# Confirm Determinate Systems is healthy
+sudo determinate-nixd status
+
+# Test new functionality
+# ... test your applications and tools
+```
+
+#### Quick Updates (Configuration Only)
+```bash
+# When you only need to apply configuration changes:
+sudo darwin-rebuild switch --flake ~/.config/nix-dotfiles/ --show-trace  # macOS
+sudo nixos-rebuild switch --flake ~/.config/nix-dotfiles/ --show-trace   # Linux
 ```
 
 ## 🤖 AI Tools Quick Start
@@ -232,8 +298,8 @@ ollama pull qwen2.5-coder:7b  # Download coding model
 Latest benchmark results for OpenCommit AI models (updated automatically):
 
 <!-- BENCHMARK_RESULTS_START -->
-**Last Updated:** 2025-06-23 23:47:32  
-**Models Tested:** 5  
+**Last Updated:** 2025-07-09 16:18:27  
+**Models Tested:** 3  
 **Test Environment:** Darwin arm64
 
 ### 🏆 Top Performers
@@ -241,25 +307,23 @@ Latest benchmark results for OpenCommit AI models (updated automatically):
 #### Simple Files (Fastest)
 | Rank | Model | Time | Performance |
 |------|-------|------|-------------|
-| 1 | `llama3.2:3b` | 1.86s | ⚡ Excellent |
-| 2 | `qwen2.5-coder:1.5b` | 4.15s | ✅ Average |
-| 3 | `llama3.2:1b` | 4.39s | ✅ Average |
+| 1 | `qwen3:8b` | 1.73s | ⚡ Excellent |
+| 2 | `qwen3:14b` | 2.93s | 🚀 Good |
+| 3 | `qwen3:32b-q4_K_M` | 13.36s | ✅ Average |
 
 #### Complex Files (Fastest)
 | Rank | Model | Time | Performance |
 |------|-------|------|-------------|
-| 1 | `llama3.2:3b` | 3.66s | 🚀 Good |
-| 2 | `qwen2.5-coder:1.5b` | 4.86s | 🚀 Good |
-| 3 | `llama3.2:1b` | 5.03s | 🚀 Good |
+| 1 | `qwen3:8b` | 2.66s | 🚀 Good |
+| 2 | `qwen3:14b` | 4.23s | ✅ Average |
+| 3 | `qwen3:32b-q4_K_M` | 14.79s | ✅ Average |
 
 ### 📈 All Models Summary
-| Model | Simple (s) | Complex (s) | Hot (s) | Avg (s) |
-|-------|------------|-------------|---------|---------|
-| `llama3.2:1b` | 4.39 | 5.03 | 4.46 | 4.63 |
-| `llama3.2:3b` | 1.86 | 3.66 | 1.73 | 2.42 |
-| `qwen2.5-coder:1.5b` | 4.15 | 4.86 | 4.11 | 4.37 |
-| `qwen2.5-coder:3b` | 4.98 | 5.62 | 4.95 | 5.18 |
-| `qwen2.5-coder:7b` | 11.25 | 10.89 | 8.49 | 10.21 |
+| Model | Simple (s) | Complex (s) | Avg (s) |
+|-------|------------|-------------|---------|
+| `qwen3:8b` | 1.73 | 2.66 | 2.19 |
+| `qwen3:14b` | 2.93 | 4.23 | 3.58 |
+| `qwen3:32b-q4_K_M` | 13.36 | 14.79 | 14.07 |
 
 **📋 For detailed analysis and recommendations, see:** `results/benchmark-results-all.md`
 <!-- BENCHMARK_RESULTS_END -->
@@ -272,6 +336,50 @@ scripts/hot-benchmark.sh
 # Test specific models
 scripts/hot-benchmark.sh -m qwen2.5-coder:3b,llama3.2:3b
 ```
+
+## 🔧 Git Integration & Workflow
+
+**⚠️ CRITICAL: Nix is Git-aware - New files MUST be added before applying configuration!**
+
+Nix flakes ignore untracked files, so any new configuration files won't be included in your build until they're added to git. This is a safety feature but can be confusing for new users.
+
+### Pre-Apply Git Workflow
+
+Always follow this sequence before applying configuration changes:
+
+```bash
+# 1. Check git status first
+git status
+
+# 2. Add any new files (REQUIRED)
+git add .
+
+# 3. Validate configuration
+nix flake check
+
+# 4. Apply changes
+sudo darwin-rebuild switch --flake ~/.config/nix-dotfiles --show-trace
+```
+
+### Common Git-Related Issues
+
+- **New files ignored**: If you created new `.nix` files but they're not taking effect, check `git status` and add them
+- **Partial builds**: Configuration seems incomplete or missing features → likely untracked files
+- **"File not found" errors**: Nix references files that exist but aren't tracked by git
+
+### Git Status Check
+
+Make it a habit to check git status before every configuration change:
+
+```bash
+# Quick status check
+git status --porcelain
+
+# If you see untracked files, add them:
+git add .
+```
+
+**Remember**: Nix can only see what git can see. When in doubt, check `git status` first!
 
 ## 🏗️ Architecture
 
@@ -453,7 +561,8 @@ launchctl list | grep nix-daemon
 | **Shell Issues** | Terminal doesn't start properly | Use `/bin/bash`, then rollback |
 | **Missing Secrets** | SOPS decryption errors | Check age key location and permissions |
 | **Platform Detection** | Wrong packages installed | Verify `pkgs.stdenv.isDarwin` logic |
-| **Permission Errors** | `/nix/store` access denied | Restart nix-daemon: `sudo launchctl kickstart -k system/org.nixos.nix-daemon` |
+| **Determinate Daemon Issues** | Service not responding | Check with `sudo determinate-nixd status` |
+| **Permission Errors** | `/nix/store` access denied | Restart daemon: `sudo launchctl kickstart -k system/org.nixos.nix-daemon` |
 | **Generation Not Found** | Rollback fails | List generations first, use valid number |
 
 ### 🚨 Step-by-Step Recovery
@@ -467,7 +576,7 @@ nix flake check --show-trace
 nix build .#darwinConfigurations.zoidberg.system --show-trace
 
 # If successful, apply normally
-darwin-rebuild switch --flake . --show-trace
+sudo darwin-rebuild switch --flake . --show-trace
 ```
 
 #### 2. System Feels Broken After Apply
@@ -509,65 +618,99 @@ home-manager generations
 home-manager switch --flake .
 ```
 
-### 🔧 Diagnostic Commands
+### 🔧 Determinate Systems Troubleshooting
 
-#### Check System Health
+#### Daemon Management
 ```bash
-# Verify nix-daemon is running
-sudo launchctl list | grep nix-daemon
+# Check daemon status and configuration
+sudo determinate-nixd status
+
+# Check current version
+determinate-nixd version
+
+# Upgrade to latest version
+sudo determinate-nixd upgrade
+
+# Restart daemon if needed
+sudo launchctl kickstart -k system/org.nixos.nix-daemon
+```
+
+#### Configuration Issues
+```bash
+# Check Determinate Systems configuration
+cat /etc/nix/nix.conf                    # Managed by Determinate (read-only)
+cat /etc/nix/nix.custom.conf             # Your custom settings (if any)
+
+# View your dotfiles Determinate config
+cat hosts/shared/determinate.nix
+
+# Test configuration validity
+nix eval .#darwinConfigurations.zoidberg.system.config.system.stateVersion
+```
+
+#### Service Diagnostics
+```bash
+# Check if daemon is running
+launchctl list | grep nix-daemon
 
 # Check nix store integrity
 nix store verify --all
 
-# Test flake evaluation
-nix eval .#darwinConfigurations.zoidberg.system.config.system.stateVersion
+# View daemon logs (if available)
+sudo launchctl print system/org.nixos.nix-daemon
 ```
 
-#### Debug Configuration
+### 🆘 Recovery Options
+
+#### Safe Recovery (Recommended)
 ```bash
-# Validate flake syntax
-nix flake check --show-trace
+# 1. Rollback system generation
+sudo nix-env --rollback --profile /nix/var/nix/profiles/system
 
-# Show detailed build information
-nix build .#darwinConfigurations.zoidberg.system --print-build-logs
+# 2. If daemon issues, restart Determinate service
+sudo launchctl kickstart -k system/org.nixos.nix-daemon
 
-# Check Home Manager configuration
-home-manager build --flake .
+# 3. Check daemon status
+sudo determinate-nixd status
 ```
 
-### 🆘 Last Resort Options
-
-If everything fails (extremely unlikely):
-
-#### 1. Nuclear Option - Remove nix-darwin
+#### Advanced Recovery (If needed)
 ```bash
-# Stop nix-daemon
-sudo launchctl unload /Library/LaunchDaemons/org.nixos.nix-daemon.plist
+# Reset Determinate authentication (if auth issues)
+sudo determinate-nixd auth reset
 
-# Remove nix-darwin (system remains intact)
-sudo rm -rf /etc/nix/nix.conf
-sudo rm -rf /run/current-system
-```
-
-#### 2. Fresh Start
-```bash
-# Reinstall Nix (if needed)
+# Reinstall Determinate Nix (preserves configurations)
+# Download latest from: https://install.determinate.systems/determinate-pkg/stable/Universal
+# Or use command line:
 curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
+```
 
-# Re-clone and apply configuration
-git clone <repo> ~/.config/nix-dotfiles
-cd ~/.config/nix-dotfiles
-./install.sh
+### 📊 Health Check Commands
+
+```bash
+# Complete system health check
+echo "=== Determinate Systems Status ===" && \
+sudo determinate-nixd status && \
+echo -e "\n=== Nix Store Health ===" && \
+nix store verify --all && \
+echo -e "\n=== Configuration Validity ===" && \
+nix flake check --show-trace && \
+echo -e "\n=== Current Generation ===" && \
+sudo nix-env --list-generations --profile /nix/var/nix/profiles/system | tail -3
 ```
 
 ### 📞 Getting Help
 
 - **Configuration Errors**: Use `--show-trace` for detailed error messages
 - **Architecture Questions**: Review [ARCHITECTURE.md](./ARCHITECTURE.md)
-- **Module Issues**: Test individual modules by importing them separately
-- **Platform Problems**: Check `uname -a` and verify platform detection logic
+- **Determinate Issues**: Check daemon status with `sudo determinate-nixd status`
+- **Platform Problems**: Verify platform detection logic with `uname -a`
 
-Remember: **Nix is designed for safe experimentation**. Don't hesitate to try changes - you can always roll back!
+**Remember**: 
+- **Determinate Systems manages** `/etc/nix/nix.conf` - never modify it manually
+- **Use** `/etc/nix/nix.custom.conf` for custom Nix configuration
+- **Your dotfiles config** is in `hosts/shared/determinate.nix`
+- **Nix is designed for safe experimentation** - you can always roll back!
 
 ## 📚 Resources
 

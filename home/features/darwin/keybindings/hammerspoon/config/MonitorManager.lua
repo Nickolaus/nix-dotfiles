@@ -1,284 +1,865 @@
--- MonitorManager.lua
--- AeroSpace layout management for multi-monitor setups
--- Handles LG HDR 4K portrait display with proper screen detection
+-- ============================================================================
+-- MonitorManager.lua - WORKSPACE STATE MANAGEMENT
+-- Handles workspace persistence across monitor changes and sleep/resume events
+-- ============================================================================
 
 local MonitorManager = {}
 
--- AeroSpace binary path
+-- ============================================================================
+-- AI AGENT DOCUMENTATION - CURRENT IMPLEMENTATION
+-- ============================================================================
+
+--[[
+===============================================================================
+                           IMPLEMENTED FEATURES
+===============================================================================
+
+✅ WORKSPACE STATE PERSISTENCE:
+- Automatically saves workspace assignments across all monitors
+- Detects monitor connect/disconnect events (dock/undock)
+- Detects system sleep/resume events
+- Restores workspace state after monitor or sleep changes
+
+✅ CURRENT KEYBINDING:
+- Alt+T: Layout toggle (handled by AeroSpace directly)
+- Command: "exec-and-forget /run/current-system/sw/bin/aerospace layout tiles horizontal vertical"
+- Location: modules/darwin/aerospace/default.nix
+
+✅ EVENT HANDLING:
+- Monitor changes: hs.screen.watcher for dock/undock detection
+- Sleep/resume: hs.caffeinate.watcher for sleep state detection
+- State persistence: JSON file storage in ~/.cache/hammerspoon/
+
+✅ ROBUSTNESS FEATURES:
+- Error handling for failed AeroSpace commands
+- Race condition prevention with operation queuing
+- State validation before restoration
+- Resource cleanup and timeout handling
+- Configurable delays and retry logic
+
+✅ CURRENT IMPLEMENTATION SCOPE:
+This MonitorManager handles:
+1. Monitor setup change detection
+2. System sleep/resume detection  
+3. Workspace state capture and restoration
+4. Persistent storage across sessions
+5. Error recovery and logging
+
+NOT IMPLEMENTED (still available via AeroSpace):
+- Layout toggle (Alt+T uses AeroSpace directly)
+- Manual layout switching (use AeroSpace modes)
+- Per-workspace layout memory (use AeroSpace's built-in state)
+
+===============================================================================
+                        WHAT STILL NEEDS REIMPLEMENTATION
+===============================================================================
+
+❌ NOT YET IMPLEMENTED:
+- Per-workspace layout memory beyond current session
+- Automatic layout switching based on monitor configuration
+- Custom layout logic beyond AeroSpace's built-in options
+- Visual feedback about current layout state
+- Manual layout functions (setHorizontal, setVertical, etc.)
+
+If you need these features, see REIMPLEMENTATION GUIDE below.
+
+===============================================================================
+                             TECHNICAL DETAILS
+===============================================================================
+
+AEROSPACE COMMANDS USED:
+- `aerospace list-workspaces --focused` - Get current workspace
+- `aerospace list-monitors` - Get monitor information
+- `aerospace list-workspaces --monitor X --visible` - Get visible workspace per monitor
+- `aerospace workspace X` - Switch to workspace X
+
+STORAGE:
+- File: ~/.cache/hammerspoon/workspace-state.json
+- Format: { savedState: {monitor: workspace}, currentFocusedWorkspace: number, timestamp: number, monitorCount: number }
+
+EVENT WATCHERS:
+- hs.screen.watcher - Monitor connect/disconnect
+- hs.caffeinate.watcher - System sleep/resume
+
+TIMING & SAFETY:
+- Configurable delays for system stabilization
+- Operation queuing to prevent race conditions
+- Timeout handling for stuck operations
+- State validation before restoration
+- Resource cleanup for file operations
+
+===============================================================================
+                         AEROSPACE INTEGRATION
+===============================================================================
+
+CURRENT KEYBINDINGS (from aerospace/default.nix):
+# Main Mode
+- Alt+T: Layout toggle
+- Alt+1-5: Workspaces 1-5  
+- Alt+F1-F4: Workspaces 6-9
+- Alt+Shift+P/N: Previous/Next workspace
+- Alt+Shift+1-5/F1-F4: Move window to workspace + follow
+- Alt+Arrow: Focus window (with wrap-around)
+- Alt+Shift+Arrow: Move window
+- Alt+Cmd+Arrow: Focus monitor
+- Alt+Shift+Cmd+Arrow: Move window to monitor
+
+WORKSPACE TO MONITOR ASSIGNMENTS:
+- Workspaces 1-5: "main" monitor
+- Workspaces 6-7: "LG HDR 4K" monitor (fallback to main)
+- Workspaces 8-9: "built-in" monitor (fallback to main)
+
+===============================================================================
+                           REIMPLEMENTATION GUIDE
+===============================================================================
+
+TO ADD MANUAL LAYOUT FUNCTIONS:
+1. Add layout state tracking
+2. Add manual toggle functions
+3. Update aerospace keybinding to call Lua instead of direct command
+
+TO ADD PER-WORKSPACE LAYOUT MEMORY:
+1. Extend state storage to include layout per workspace
+2. Add layout application on workspace switch
+3. Integrate with existing state persistence
+
+TO ADD AUTOMATIC LAYOUT SWITCHING:
+1. Add monitor detection logic
+2. Add layout rules based on monitor setup
+3. Integrate with existing monitor change handling
+
+See implementation examples in the STEP sections below.
+
+===============================================================================
+--]]
+
+-- ============================================================================
+-- CONFIGURATION & STATE
+-- ============================================================================
+
 local AEROSPACE = "/run/current-system/sw/bin/aerospace"
+local STATE_FILE = os.getenv("HOME") .. "/.cache/hammerspoon/workspace-state.json"
+local STATE_DIR = os.getenv("HOME") .. "/.cache/hammerspoon"
 
--- Monitor name to detect
-local LG_HDR_4K_NAME = "LG HDR 4K"
+-- Configuration constants
+local CONFIG = {
+    MONITOR_CHANGE_DELAY = 3,      -- Seconds to wait after monitor changes
+    SLEEP_RESUME_DELAY = 1,        -- Seconds to wait after sleep resume
+    FOCUS_RESTORE_DELAY = 0.3,     -- Seconds to wait before restoring focus
+    AEROSPACE_TIMEOUT = 10,        -- Seconds to timeout AeroSpace commands
+    MAX_RETRIES = 3,               -- Maximum retries for failed operations
+    RETRY_DELAY = 0.5,             -- Seconds between retries
+}
 
--- Debug function to log with timestamp
-local function log(message)
-    local timestamp = os.date("%H:%M:%S")
-    hs.console.printStyledtext(string.format("[%s] %s", timestamp, message))
+-- State storage
+local workspaceState = {
+    savedState = {},                -- Monitor -> Workspace mapping
+    currentFocusedWorkspace = nil   -- Currently focused workspace
+}
+
+-- Event watchers and control
+local screenWatcher = nil
+local caffeineWatcher = nil
+local lastScreenCount = 0
+local isRestoring = false
+local operationQueue = {}
+local currentOperation = nil
+
+-- ============================================================================
+-- UTILITY FUNCTIONS
+-- ============================================================================
+
+local function debugLog(message, level)
+    level = level or "INFO"
+    print(os.date("%Y-%m-%d %H:%M:%S") .. " MonitorManager [" .. level .. "]: " .. message)
 end
 
--- Check if LG HDR 4K monitor is connected using proper screen detection
-local function isLGConnected()
-    -- Use screenPositions for better detection
-    local screenPositions = hs.screen.screenPositions()
-    
-    for screen, position in pairs(screenPositions) do
-        local name = screen:name()
-        if name and string.find(name, LG_HDR_4K_NAME) then
-            log(string.format("🖥️  LG HDR 4K found: %s at position {x=%d, y=%d}", 
-                name, position.x, position.y))
-            return true
-        end
+local function errorLog(message)
+    debugLog(message, "ERROR")
+end
+
+local function warnLog(message)
+    debugLog(message, "WARN")
+end
+
+-- Ensure state directory exists
+local function ensureStateDirectory()
+    local result = hs.execute("mkdir -p " .. STATE_DIR)
+    if not result then
+        errorLog("Failed to create state directory: " .. STATE_DIR)
+        return false
+    end
+    return true
+end
+
+-- Validate workspace number
+local function isValidWorkspace(workspace)
+    return workspace and type(workspace) == "number" and workspace >= 1 and workspace <= 9
+end
+
+-- Safe file operations with cleanup
+local function safeFileWrite(filepath, content)
+    if not ensureStateDirectory() then
+        return false
     end
     
-    return false
+    local file, err = io.open(filepath, "w")
+    if not file then
+        errorLog("Failed to open file for writing: " .. filepath .. " - " .. (err or "unknown error"))
+        return false
+    end
+    
+    local success, writeErr = pcall(function()
+        file:write(content)
+    end)
+    
+    file:close()
+    
+    if not success then
+        errorLog("Failed to write file: " .. filepath .. " - " .. (writeErr or "unknown error"))
+        return false
+    end
+    
+    return true
 end
 
--- Get current workspace and monitor information
-local function getCurrentWorkspaceInfo(callback)
+local function safeFileRead(filepath)
+    local file, err = io.open(filepath, "r")
+    if not file then
+        return nil, err
+    end
+    
+    local content
+    local success, readErr = pcall(function()
+        content = file:read("*all")
+    end)
+    
+    file:close()
+    
+    if not success then
+        return nil, readErr
+    end
+    
+    return content
+end
+
+-- Operation queue management
+local function queueOperation(operation)
+    table.insert(operationQueue, operation)
+    if not currentOperation then
+        processNextOperation()
+    end
+end
+
+local function processNextOperation()
+    if #operationQueue == 0 then
+        currentOperation = nil
+        return
+    end
+    
+    currentOperation = table.remove(operationQueue, 1)
+    currentOperation()
+end
+
+local function finishOperation()
+    currentOperation = nil
+    hs.timer.doAfter(0.1, processNextOperation)
+end
+
+-- Aerospace command wrapper with timeout and error handling
+local function runAerospaceCommand(args, callback, retryCount)
+    retryCount = retryCount or 0
+    
+    local timeoutTimer = hs.timer.doAfter(CONFIG.AEROSPACE_TIMEOUT, function()
+        errorLog("AeroSpace command timed out: " .. table.concat(args, " "))
+        if callback then callback(false, nil, "timeout") end
+    end)
+    
     hs.task.new(AEROSPACE, function(exitCode, stdout, stderr)
+        timeoutTimer:stop()
+        
         if exitCode == 0 then
-            local workspace = stdout:gsub("%s+", "")
-            local workspaceNum = tonumber(workspace)
+            if callback then callback(true, stdout, nil) end
+        else
+            local errorMsg = "AeroSpace command failed (exit " .. exitCode .. "): " .. table.concat(args, " ")
+            if stderr and stderr ~= "" then
+                errorMsg = errorMsg .. " - " .. stderr
+            end
             
-            -- Also get monitor info
-            hs.task.new(AEROSPACE, function(exitCode2, stdout2, stderr2)
-                local monitorInfo = {}
-                if exitCode2 == 0 then
+            if retryCount < CONFIG.MAX_RETRIES then
+                warnLog(errorMsg .. " - retrying (" .. (retryCount + 1) .. "/" .. CONFIG.MAX_RETRIES .. ")")
+                hs.timer.doAfter(CONFIG.RETRY_DELAY, function()
+                    runAerospaceCommand(args, callback, retryCount + 1)
+                end)
+            else
+                errorLog(errorMsg .. " - max retries exceeded")
+                if callback then callback(false, nil, errorMsg) end
+            end
+        end
+    end, args):start()
+end
+
+-- ============================================================================
+-- WORKSPACE STATE MANAGEMENT
+-- ============================================================================
+
+-- Capture current workspace state across all monitors
+local function captureWorkspaceState(callback)
+    local captureOperation = function()
+        workspaceState.savedState = {}
+        debugLog("Capturing workspace state...")
+        
+        -- Get focused workspace first
+        runAerospaceCommand({"list-workspaces", "--focused"}, function(success, stdout, error)
+            if success and stdout then
+                local focusedWs = tonumber(stdout:match("%d+"))
+                if isValidWorkspace(focusedWs) then
+                    workspaceState.currentFocusedWorkspace = focusedWs
+                    debugLog("Focused workspace: " .. focusedWs)
+                else
+                    warnLog("Invalid focused workspace: " .. (stdout or "nil"))
+                end
+            else
+                errorLog("Failed to get focused workspace: " .. (error or "unknown"))
+            end
+            
+            -- Get monitor information
+            runAerospaceCommand({"list-monitors"}, function(success2, stdout2, error2)
+                if not success2 then
+                    errorLog("Failed to get monitor list: " .. (error2 or "unknown"))
+                    finishOperation()
+                    if callback then callback() end
+                    return
+                end
+                
+                local monitors = {}
+                if stdout2 then
                     for line in stdout2:gmatch("[^\r\n]+") do
-                        -- Parse monitor list output
-                        if line:match("Monitor") then
-                            table.insert(monitorInfo, line)
+                        local monitorId, monitorName = line:match("^(%d+)%s+(.+)$")
+                        if monitorId and monitorName then
+                            monitors[tonumber(monitorId)] = monitorName:gsub("^%s*(.-)%s*$", "%1")
                         end
                     end
                 end
                 
-                callback(workspaceNum, monitorInfo)
-            end, {"list-monitors"}):start()
-        else
-            callback(nil, {})
-        end
-    end, {"list-workspaces", "--focused"}):start()
+                local monitorCount = 0
+                for _ in pairs(monitors) do
+                    monitorCount = monitorCount + 1
+                end
+                
+                if monitorCount == 0 then
+                    warnLog("No monitors found")
+                    finishOperation()
+                    if callback then callback() end
+                    return
+                end
+                
+                debugLog("Processing " .. monitorCount .. " monitors")
+                local processedCount = 0
+                
+                for monitorId, monitorName in pairs(monitors) do
+                    runAerospaceCommand({"list-workspaces", "--monitor", tostring(monitorId), "--visible"}, 
+                        function(success3, stdout3, error3)
+                            processedCount = processedCount + 1
+                            
+                            if success3 and stdout3 then
+                                for line in stdout3:gmatch("[^\r\n]+") do
+                                    local wsId = line:match("^(%d+)")
+                                    if wsId then
+                                        local workspace = tonumber(wsId)
+                                        if isValidWorkspace(workspace) then
+                                            workspaceState.savedState[monitorName] = workspace
+                                            debugLog("Monitor '" .. monitorName .. "' -> Workspace " .. workspace)
+                                            break
+                                        end
+                                    end
+                                end
+                            else
+                                warnLog("Failed to get workspaces for monitor " .. monitorName .. ": " .. (error3 or "unknown"))
+                            end
+                            
+                            if processedCount >= monitorCount then
+                                finishOperation()
+                                if callback then callback() end
+                            end
+                        end)
+                end
+            end)
+        end)
+    end
+    
+    queueOperation(captureOperation)
 end
 
--- Apply layout based on workspace and monitor configuration
-local function applyLayoutToWorkspace(workspaceNum, isLGConnected)
-    if not workspaceNum then 
-        log("❌ Cannot apply layout: invalid workspace")
+-- Restore workspace state to monitors
+local function restoreWorkspaceState(callback)
+    local restoreOperation = function()
+        if not workspaceState.savedState or not next(workspaceState.savedState) then
+            debugLog("No workspace state to restore")
+            finishOperation()
+            if callback then callback() end
+            return
+        end
+        
+        debugLog("Restoring workspace state...")
+        isRestoring = true
+        
+        -- Validate workspaces before restoring
+        local validRestores = {}
+        for monitorName, workspace in pairs(workspaceState.savedState) do
+            if isValidWorkspace(workspace) then
+                validRestores[monitorName] = workspace
+            else
+                warnLog("Skipping invalid workspace " .. tostring(workspace) .. " for monitor " .. monitorName)
+            end
+        end
+        
+        if next(validRestores) == nil then
+            warnLog("No valid workspaces to restore")
+            isRestoring = false
+            finishOperation()
+            if callback then callback() end
+            return
+        end
+        
+        for monitorName, workspace in pairs(validRestores) do
+            debugLog("Restoring workspace " .. workspace .. " to monitor '" .. monitorName .. "'")
+            runAerospaceCommand({"workspace", tostring(workspace)}, function(success, stdout, error)
+                if not success then
+                    errorLog("Failed to restore workspace " .. workspace .. ": " .. (error or "unknown"))
+                end
+                
+                -- Restore the originally focused workspace
+                if isValidWorkspace(workspaceState.currentFocusedWorkspace) then
+                    hs.timer.doAfter(CONFIG.FOCUS_RESTORE_DELAY, function()
+                        debugLog("Restoring focus to workspace " .. workspaceState.currentFocusedWorkspace)
+                        runAerospaceCommand({"workspace", tostring(workspaceState.currentFocusedWorkspace)}, 
+                            function(success2, stdout2, error2)
+                                if not success2 then
+                                    errorLog("Failed to restore focus: " .. (error2 or "unknown"))
+                                end
+                                isRestoring = false
+                                finishOperation()
+                                if callback then callback() end
+                            end)
+                    end)
+                else
+                    isRestoring = false
+                    finishOperation()
+                    if callback then callback() end
+                end
+            end)
+        end
+    end
+    
+    queueOperation(restoreOperation)
+end
+
+-- Save state to disk
+local function saveStateToDisk()
+    local stateData = {
+        savedState = workspaceState.savedState,
+        currentFocusedWorkspace = workspaceState.currentFocusedWorkspace,
+        timestamp = os.time(),
+        monitorCount = #hs.screen.allScreens()
+    }
+    
+    local jsonData = hs.json.encode(stateData)
+    if jsonData then
+        if safeFileWrite(STATE_FILE, jsonData) then
+            debugLog("Workspace state saved to disk")
+        else
+            errorLog("Failed to save workspace state to disk")
+        end
+    else
+        errorLog("Failed to encode workspace state to JSON")
+    end
+end
+
+-- Load state from disk
+local function loadStateFromDisk()
+    local jsonData, readErr = safeFileRead(STATE_FILE)
+    if not jsonData then
+        if readErr then
+            debugLog("No state file found: " .. readErr)
+        end
+        return false
+    end
+    
+    local stateData = hs.json.decode(jsonData)
+    if not stateData then
+        errorLog("Failed to decode state file JSON")
+        return false
+    end
+    
+    local currentMonitorCount = #hs.screen.allScreens()
+    
+    if stateData.monitorCount == currentMonitorCount then
+        workspaceState.savedState = stateData.savedState or {}
+        workspaceState.currentFocusedWorkspace = stateData.currentFocusedWorkspace
+        debugLog("Workspace state loaded from disk")
+        return true
+    else
+        debugLog(string.format("State not loaded: monitor count changed (%d -> %d)",
+                 stateData.monitorCount or 0, currentMonitorCount))
+        return false
+    end
+end
+
+-- ============================================================================
+-- EVENT HANDLERS
+-- ============================================================================
+
+-- Handle monitor changes (dock/undock)
+local function onScreenChange()
+    if isRestoring then 
+        debugLog("Skipping screen change (currently restoring)")
         return 
     end
     
-    -- Determine if this workspace should use stacking (portrait) layout
-    local shouldStack = isLGConnected and (workspaceNum >= 6 and workspaceNum <= 8)
+    local currentScreenCount = #hs.screen.allScreens()
     
-    -- AeroSpace layout parameters
-    -- For side-by-side: "tiles horizontal vertical"
-    -- For stacking: "tiles vertical horizontal"
-    local primary = shouldStack and "vertical" or "horizontal"
-    local secondary = shouldStack and "horizontal" or "vertical"
-    
-    -- Create the layout command
-    local layoutCmd = string.format("%s layout --workspace %d tiles %s %s", 
-        AEROSPACE, workspaceNum, primary, secondary)
-    
-    log(string.format("🔧 Applying to workspace %d: %s %s", 
-        workspaceNum, primary, secondary))
-    
-    hs.task.new("/bin/sh", function(exitCode, stdout, stderr)
-        local status = exitCode == 0 and "✅" or "❌"
-        local layoutType = shouldStack and "STACKING" or "SIDE-BY-SIDE"
-        local reason = isLGConnected and 
-            (shouldStack and "(LG portrait mode)" or "(regular layout)") or 
-            "(no LG detected)"
-        
-        log(string.format("%s Workspace %d: %s %s", 
-            status, workspaceNum, layoutType, reason))
-            
-        if exitCode ~= 0 and stderr and stderr ~= "" then
-            log(string.format("❌ Layout error: %s", stderr))
-        end
-    end, {"-c", layoutCmd}):start()
-end
-
--- Apply layouts to all relevant workspaces
-local function applyAllLayouts()
-    getCurrentWorkspaceInfo(function(currentWorkspace, monitorInfo)
-        local lgConnected = isLGConnected()
-        
-        log(string.format("🔄 Layout update - LG connected: %s, Current workspace: %s", 
-            tostring(lgConnected), tostring(currentWorkspace or "unknown")))
-        
-        if #monitorInfo > 0 then
-            log("📺 Monitors detected by AeroSpace:")
-            for _, info in ipairs(monitorInfo) do
-                log("   " .. info)
-            end
-        end
-        
-        -- Apply layout to current workspace first
-        if currentWorkspace then
-            applyLayoutToWorkspace(currentWorkspace, lgConnected)
-        end
-        
-        -- If LG is connected, also ensure workspaces 6-8 have correct layout
-        -- If LG is disconnected, ensure workspaces 6-8 revert to side-by-side
-        if lgConnected or (currentWorkspace and currentWorkspace >= 6 and currentWorkspace <= 8) then
-            for ws = 6, 8 do
-                if ws ~= currentWorkspace then
-                    hs.timer.doAfter(0.5 * (ws - 5), function()
-                        applyLayoutToWorkspace(ws, lgConnected)
-                    end)
-                end
-            end
-        end
-    end)
-end
-
--- Monitor change detection with improved logic
-local screenWatcher = nil
-local lastChangeTime = 0
-local CHANGE_COOLDOWN = 3
-local lastScreenCount = 0
-local lastLGState = false
-
--- Get simplified screen configuration
-local function getScreenConfig()
-    local screens = hs.screen.allScreens()
-    local count = #screens
-    local lgConnected = isLGConnected()
-    
-    return count, lgConnected
-end
-
-local function onScreenChange()
-    local now = os.time()
-    if (now - lastChangeTime) < CHANGE_COOLDOWN then return end
-    
-    local currentScreenCount, currentLGState = getScreenConfig()
-    
-    -- Only trigger if there's a meaningful change
-    if currentScreenCount ~= lastScreenCount or currentLGState ~= lastLGState then
+    if currentScreenCount ~= lastScreenCount then
+        local previousScreenCount = lastScreenCount
         lastScreenCount = currentScreenCount
-        lastLGState = currentLGState
-        lastChangeTime = now
         
-        log(string.format("🔄 Screen change detected: %d screens, LG: %s", 
-            currentScreenCount, tostring(currentLGState)))
+        debugLog(string.format("Monitor change detected: %d -> %d monitors", 
+                 previousScreenCount, currentScreenCount))
         
-        -- Apply layouts after a brief delay to let the system settle
-        hs.timer.doAfter(2, function()
-            log("🔧 Applying layouts after screen change...")
-            applyAllLayouts()
+        -- Delay for system stabilization
+        hs.timer.doAfter(CONFIG.MONITOR_CHANGE_DELAY, function()
+            if currentScreenCount > previousScreenCount then
+                -- Monitor connected - try to restore previous state
+                local stateLoaded = loadStateFromDisk()
+                if stateLoaded then
+                    debugLog("Restoring workspace state after monitor connect")
+                    restoreWorkspaceState(function()
+                        saveStateToDisk()
+                    end)
+                else
+                    debugLog("No valid state to restore after monitor connect")
+                end
+            else
+                -- Monitor disconnected - capture current state for next connect
+                debugLog("Capturing workspace state after monitor disconnect")
+                captureWorkspaceState(function()
+                    saveStateToDisk()
+                end)
+            end
         end)
     end
 end
 
--- Public API
+-- Handle sleep/resume events
+local function onCaffeineChange(eventType)
+    if eventType == hs.caffeinate.watcher.systemWillSleep then
+        debugLog("System going to sleep - capturing workspace state")
+        captureWorkspaceState(function()
+            saveStateToDisk()
+        end)
+    elseif eventType == hs.caffeinate.watcher.systemDidWake then
+        debugLog("System woke up - restoring workspace state")
+        hs.timer.doAfter(CONFIG.SLEEP_RESUME_DELAY, function()
+            local stateLoaded = loadStateFromDisk()
+            if stateLoaded then
+                restoreWorkspaceState(function()
+                    debugLog("Workspace state restored after wake")
+                end)
+            else
+                debugLog("No valid state to restore after wake")
+            end
+        end)
+    end
+end
+
+-- ============================================================================
+-- PUBLIC API
+-- ============================================================================
+
+-- Start the MonitorManager
 function MonitorManager.start()
-    -- Stop any existing watcher
     MonitorManager.stop()
     
-    -- Initialize state tracking
-    lastScreenCount, lastLGState = getScreenConfig()
+    debugLog("Starting MonitorManager with workspace state persistence")
     
-    -- Create and start screen watcher
+    -- Initialize state
+    lastScreenCount = #hs.screen.allScreens()
+    
+    -- Start watchers
     screenWatcher = hs.screen.watcher.new(onScreenChange)
     screenWatcher:start()
     
-    log("🚀 MonitorManager started")
-    log(string.format("📺 Initial state: %d screens, LG: %s", 
-        lastScreenCount, tostring(lastLGState)))
+    caffeineWatcher = hs.caffeinate.watcher.new(onCaffeineChange)
+    caffeineWatcher:start()
     
-    -- Apply initial layout
-    hs.timer.doAfter(1, function()
-        log("🔧 Applying initial layouts...")
-        applyAllLayouts()
+    -- Try to load previous state on startup
+    hs.timer.doAfter(2, function()
+        local stateLoaded = loadStateFromDisk()
+        if stateLoaded then
+            debugLog("Loading workspace state on startup")
+            restoreWorkspaceState()
+        else
+            debugLog("No previous workspace state found")
+        end
     end)
+    
+    debugLog("MonitorManager started - monitoring for dock/undock and sleep/resume")
 end
 
+-- Stop the MonitorManager
 function MonitorManager.stop()
     if screenWatcher then
         screenWatcher:stop()
         screenWatcher = nil
-        log("🛑 MonitorManager stopped")
+    end
+    
+    if caffeineWatcher then
+        caffeineWatcher:stop()
+        caffeineWatcher = nil
+    end
+    
+    -- Clear operation queue
+    operationQueue = {}
+    currentOperation = nil
+    isRestoring = false
+    debugLog("MonitorManager stopped")
+end
+
+-- Manual state management
+function MonitorManager.saveState()
+    debugLog("Manual state save requested")
+    captureWorkspaceState(function()
+        saveStateToDisk()
+        debugLog("Manual state save completed")
+    end)
+end
+
+function MonitorManager.restoreState()
+    debugLog("Manual state restore requested")
+    local stateLoaded = loadStateFromDisk()
+    if stateLoaded then
+        restoreWorkspaceState(function()
+            debugLog("Manual state restore completed")
+        end)
     else
-        log("ℹ️  MonitorManager was not running")
+        debugLog("No valid state to restore")
     end
 end
 
--- Manual layout fix
-function MonitorManager.fix()
-    log("🔧 Manual layout fix requested")
-    applyAllLayouts()
+function MonitorManager.clearState()
+    workspaceState.savedState = {}
+    workspaceState.currentFocusedWorkspace = nil
+    os.remove(STATE_FILE)
+    operationQueue = {}
+    currentOperation = nil
+    debugLog("Workspace state cleared")
+end
+
+-- Configuration management
+function MonitorManager.getConfig()
+    return CONFIG
+end
+
+function MonitorManager.updateConfig(newConfig)
+    for key, value in pairs(newConfig) do
+        if CONFIG[key] ~= nil then
+            CONFIG[key] = value
+            debugLog("Updated config " .. key .. " = " .. tostring(value))
+        else
+            warnLog("Unknown config key: " .. key)
+        end
+    end
 end
 
 -- Debug information
 function MonitorManager.debug()
-    log("🔍 MonitorManager Debug Info:")
+    debugLog("=== MonitorManager Status ===")
+    debugLog(string.format("Monitors: %d, Restoring: %s", #hs.screen.allScreens(), tostring(isRestoring)))
+    debugLog(string.format("Screen watcher: %s, Caffeine watcher: %s",
+             screenWatcher and "active" or "inactive",
+             caffeineWatcher and "active" or "inactive"))
+    debugLog(string.format("Operation queue: %d pending, current: %s", 
+             #operationQueue, currentOperation and "running" or "none"))
     
-    -- Screen information using proper Hammerspoon APIs
-    local screenPositions = hs.screen.screenPositions()
-    local count = 0
-    
-    for screen, position in pairs(screenPositions) do
-        count = count + 1
-        local name = screen:name() or "Unknown"
-        local frame = screen:frame()
-        log(string.format("   Screen %d: %s at {x=%d, y=%d} size=%dx%d", 
-            count, name, position.x, position.y, frame.w, frame.h))
+    if next(workspaceState.savedState) then
+        debugLog("Current workspace state:")
+        for monitor, workspace in pairs(workspaceState.savedState) do
+            debugLog(string.format("  %s: Workspace %d", monitor, workspace))
+        end
+        if workspaceState.currentFocusedWorkspace then
+            debugLog(string.format("Focused workspace: %d", workspaceState.currentFocusedWorkspace))
+        end
+    else
+        debugLog("No workspace state in memory")
     end
     
-    log(string.format("📊 Total screens: %d", count))
-    log(string.format("🖥️  LG HDR 4K connected: %s", tostring(isLGConnected())))
+    -- Check state file
+    local jsonData = safeFileRead(STATE_FILE)
+    if jsonData then
+        debugLog(string.format("State file exists: %s (%d bytes)", STATE_FILE, #jsonData))
+    else
+        debugLog("No state file on disk")
+    end
     
-    -- Current workspace info
-    getCurrentWorkspaceInfo(function(workspace, monitorInfo)
-        if workspace then
-            local lgConnected = isLGConnected()
-            local shouldStack = lgConnected and (workspace >= 6 and workspace <= 8)
-            log(string.format("📍 Current workspace: %d", workspace))
-            log(string.format("🎯 Expected layout: %s", 
-                shouldStack and "STACKING (vertical)" or "SIDE-BY-SIDE (horizontal)"))
-        end
-        
-        if #monitorInfo > 0 then
-            log("🖥️  AeroSpace monitor info:")
-            for _, info in ipairs(monitorInfo) do
-                log("   " .. info)
+    -- Show configuration
+    debugLog("Configuration:")
+    for key, value in pairs(CONFIG) do
+        debugLog(string.format("  %s: %s", key, tostring(value)))
+    end
+end
+
+-- Health check
+function MonitorManager.healthCheck()
+    debugLog("Running health check...")
+    
+    -- Test AeroSpace connectivity
+    runAerospaceCommand({"list-workspaces", "--focused"}, function(success, stdout, error)
+        if success then
+            debugLog("AeroSpace connectivity: OK")
+            if stdout then
+                local workspace = stdout:match("%d+")
+                debugLog("Currently focused workspace: " .. (workspace or "unknown"))
             end
+        else
+            errorLog("AeroSpace connectivity: FAILED - " .. (error or "unknown"))
+        end
+    end)
+    
+    -- Test file system access
+    if ensureStateDirectory() then
+        debugLog("State directory access: OK")
+    else
+        errorLog("State directory access: FAILED")
+    end
+    
+    -- Test JSON operations
+    local testData = {test = "data", number = 42}
+    local jsonData = hs.json.encode(testData)
+    if jsonData then
+        local decoded = hs.json.decode(jsonData)
+        if decoded and decoded.test == "data" then
+            debugLog("JSON operations: OK")
+        else
+            errorLog("JSON decode: FAILED")
+        end
+    else
+        errorLog("JSON encode: FAILED")
+    end
+end
+
+-- ============================================================================
+-- REIMPLEMENTATION TEMPLATES (for AI agents)
+-- ============================================================================
+
+--[[
+STEP 2: ADD MANUAL LAYOUT FUNCTIONS (if needed)
+```lua
+local currentLayout = "tiles horizontal"
+
+function MonitorManager.toggle()
+    local nextLayout = (currentLayout == "tiles horizontal") and "tiles vertical" or "tiles horizontal"
+    runAerospaceCommand({"layout", nextLayout}, function(success, stdout, error)
+        if success then
+            currentLayout = nextLayout
+            debugLog("Layout toggled to " .. currentLayout)
+        else
+            errorLog("Failed to toggle layout: " .. (error or "unknown"))
         end
     end)
 end
 
--- Check system configuration
-function MonitorManager.checkConfig()
-    log("🔍 System Configuration Check:")
-    
-    -- Check if "Displays have separate Spaces" is enabled
-    hs.task.new("/usr/bin/defaults", function(exitCode, stdout, stderr)
-        if exitCode == 0 then
-            local value = stdout:gsub("%s+", "")
-            local enabled = (value == "0" or value == "false")
-            
-            if enabled then
-                log("✅ 'Displays have separate Spaces' is DISABLED (recommended for AeroSpace)")
-            else
-                log("⚠️  'Displays have separate Spaces' is ENABLED")
-                log("   Consider disabling for better AeroSpace stability:")
-                log("   defaults write com.apple.spaces spans-displays -bool true && killall SystemUIServer")
-            end
+function MonitorManager.setHorizontal()
+    runAerospaceCommand({"layout", "tiles horizontal"}, function(success, stdout, error)
+        if success then
+            currentLayout = "tiles horizontal"
+            debugLog("Layout set to horizontal")
         else
-            log("❓ Could not check 'Displays have separate Spaces' setting")
+            errorLog("Failed to set horizontal layout: " .. (error or "unknown"))
         end
-    end, {"read", "com.apple.spaces", "spans-displays"}):start()
-    
-    -- Check AeroSpace binary
-    hs.task.new("/bin/sh", function(exitCode, stdout, stderr)
-        if exitCode == 0 then
-            log("✅ AeroSpace binary found: " .. AEROSPACE)
-        else
-            log("❌ AeroSpace binary not found at: " .. AEROSPACE)
-        end
-    end, {"-c", "test -x " .. AEROSPACE}):start()
+    end)
 end
+
+function MonitorManager.setVertical()
+    runAerospaceCommand({"layout", "tiles vertical"}, function(success, stdout, error)
+        if success then
+            currentLayout = "tiles vertical"
+            debugLog("Layout set to vertical")
+        else
+            errorLog("Failed to set vertical layout: " .. (error or "unknown"))
+        end
+    end)
+end
+```
+
+STEP 3: ADD PER-WORKSPACE LAYOUT MEMORY (if needed)
+```lua
+local workspaceLayouts = {}
+
+local function saveWorkspaceLayout(workspace, layout)
+    if isValidWorkspace(workspace) then
+        workspaceLayouts[workspace] = layout
+        -- Integrate with existing state persistence
+        local stateData = {
+            savedState = workspaceState.savedState,
+            currentFocusedWorkspace = workspaceState.currentFocusedWorkspace,
+            workspaceLayouts = workspaceLayouts,
+            timestamp = os.time(),
+            monitorCount = #hs.screen.allScreens()
+        }
+        -- Save to disk...
+    end
+end
+
+local function restoreWorkspaceLayout(workspace)
+    local layout = workspaceLayouts[workspace] or "tiles horizontal"
+    runAerospaceCommand({"layout", layout}, function(success, stdout, error)
+        if success then
+            debugLog("Restored layout " .. layout .. " for workspace " .. workspace)
+        else
+            errorLog("Failed to restore layout for workspace " .. workspace .. ": " .. (error or "unknown"))
+        end
+    end)
+end
+```
+
+STEP 4: ADD AUTOMATIC LAYOUT SWITCHING (if needed)
+```lua
+local function getMonitorSignature()
+    local screens = hs.screen.allScreens()
+    local signature = {}
+    for i, screen in ipairs(screens) do
+        table.insert(signature, screen:name() or ("unknown-" .. i))
+    end
+    table.sort(signature)
+    return table.concat(signature, "|")
+end
+
+local function applyLayoutsBasedOnMonitor()
+    local signature = getMonitorSignature()
+    local lgConnected = string.find(signature, "LG HDR 4K") ~= nil
+    
+    -- Apply different layouts based on monitor setup
+    if lgConnected then
+        -- Home office setup logic
+        for ws = 6, 7 do
+            runAerospaceCommand({"workspace", tostring(ws)}, function(success)
+                if success then
+                    runAerospaceCommand({"layout", "tiles vertical"}, function() end)
+                end
+            end)
+        end
+    else
+        -- Office setup logic
+        for ws = 1, 9 do
+            runAerospaceCommand({"workspace", tostring(ws)}, function(success)
+                if success then
+                    runAerospaceCommand({"layout", "tiles horizontal"}, function() end)
+                end
+            end)
+        end
+    end
+end
+```
+--]]
 
 return MonitorManager 
