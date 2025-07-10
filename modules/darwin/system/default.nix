@@ -25,12 +25,12 @@
     swapLeftCommandAndLeftAlt = remapKeys;
 
     # use https://hidutil-generator.netlify.app/ and convert hex to decimal
-    userKeyMapping = [
-      {
-        HIDKeyboardModifierMappingSrc = 30064771300;
-        HIDKeyboardModifierMappingDst = 30064771302;
-      }
-    ];
+    # userKeyMapping = [
+    #   {
+    #     HIDKeyboardModifierMappingSrc = 30064771300;
+    #     HIDKeyboardModifierMappingDst = 30064771302;
+    #   }
+    # ];
   };
 
   system.defaults = {
