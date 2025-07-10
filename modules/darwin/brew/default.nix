@@ -24,18 +24,19 @@
 
     # CLI tools not available or problematic in Nix
     brews = [
-      "docker-credential-helper"
-      "argocd"
-      "mysql-client"
-      "television"
+      "docker-credential-helper"  # Docker credential helper for secure storage of Docker credentials
+      "argocd"                   # Declarative continuous delivery tool for Kubernetes
+      "mysql-client"             # MySQL client for interacting with MySQL databases
+      "television"               # Terminal-based TV streaming application
     ];
 
     # GUI applications and system integrations
     casks = [
-      "orbstack"            # Container management (better than Nix version)
-      "hammerspoon"         # macOS automation (requires system access)
-      "gitify"              # GitHub notifications (GUI app)
-      "sourcetree"          # Git GUI client (not available in nixpkgs)
+      "orbstack"            # Container management tool with better performance than the Nix version
+      "hammerspoon"         # Automation tool for macOS, requires system access
+      "gitify"              # GitHub notifications app for macOS
+      "sourcetree"          # Git GUI client, not available in nixpkgs
+      "babeledit"           # Localization editor for translating apps and websites
     ];
   };
 }
