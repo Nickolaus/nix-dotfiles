@@ -24,13 +24,20 @@
     enableKeyMapping = true;
     swapLeftCommandAndLeftAlt = remapKeys;
 
-    # use https://hidutil-generator.netlify.app/ and convert hex to decimal
-    # userKeyMapping = [
-    #   {
-    #     HIDKeyboardModifierMappingSrc = 30064771300;
-    #     HIDKeyboardModifierMappingDst = 30064771302;
-    #   }
-    # ];
+    # Windows keyboard layout alignment:
+    # On Windows keyboards: [Ctrl] [Win] [Alt] [Space] [Alt] [Win] [Menu] [Ctrl]
+    # On Mac we want:      [Ctrl] [Cmd] [Opt] [Space] [Opt] [Cmd] [Menu] [Ctrl]
+    # 
+    # This mapping swaps Option ↔ Command so that:
+    # - Physical Windows key acts as Mac Command (⌘) for system shortcuts
+    # - Physical Alt key acts as Mac Option (⌥) for special characters
+    # - Result: Alt+Tab = Option+Tab (app switching), Win+C = Command+C (copy)
+    userKeyMapping = [
+      {
+        HIDKeyboardModifierMappingSrc = 30064771300; # Left Option (Alt key on Windows keyboard)
+        HIDKeyboardModifierMappingDst = 30064771302; # Left Command (becomes ⌘)
+      }
+    ];
   };
 
   system.defaults = {
@@ -40,7 +47,6 @@
     finder.AppleShowAllExtensions = true;
     finder._FXShowPosixPathInTitle = true;
     finder.FXEnableExtensionChangeWarning = false;
-    NSGlobalDomain."com.apple.swipescrolldirection" = false;
   };
 
   system.defaults.CustomUserPreferences = {

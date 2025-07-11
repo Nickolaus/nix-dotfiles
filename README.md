@@ -438,11 +438,43 @@ Add to appropriate category:
 2. Click "Edit" to change layout
 3. Add "German - Standard" layout if using German keyboard
 
-### Key Remapping (External Keyboards)
-1. Go to "System Settings > Keyboard > Keyboard Shortcuts..."
-2. Switch to "Modifier Keys" tab
-3. Select your external keyboard
-4. Swap Control ↔ Command keys
+### Key Remapping (Per-Keyboard Configuration)
+
+This configuration uses a **hybrid approach**: nix-darwin provides basic Option ↔ Command swap for Windows keyboard compatibility, while System Settings handles per-keyboard customization for optimal workflow.
+
+#### Automatic Configuration (nix-darwin)
+The configuration automatically swaps Option ↔ Command via `userKeyMapping` to align Windows keyboards with Mac expectations:
+- **Physical Alt key** (Windows) → **Option key** (Mac)
+- **Physical Windows key** → **Command key** (Mac)
+
+#### Manual System Settings Configuration
+For optimal per-keyboard behavior, configure modifier keys manually:
+
+**Path:** System Settings > Keyboard > Keyboard Shortcuts > Modifier Keys
+
+##### Internal MacBook Keyboard
+- **Control** → **Command** (⌘) - enables Ctrl+C/V for copy/paste
+- **Command** → **Control** - makes Cmd key useful for terminal
+- **Option** → **Option** (unchanged) - preserves AeroSpace shortcuts (Alt+1, Alt+2, etc.)
+- **Caps Lock** → **Caps Lock** (unchanged)
+
+**Result:** Simple Control ↔ Command swap while preserving AeroSpace workspace shortcuts
+
+##### External Windows Keyboard (CHERRY/Generic)
+- **Control** → **Command** (⌘) - enables Ctrl+C/V for copy/paste  
+- **Option** → **Control** - useful for terminal commands
+- **Command** → **Option** (⌥) - enables AeroSpace shortcuts via Windows key
+- **Caps Lock** → **Caps Lock** (unchanged)
+
+**Result:** Full Windows-to-Mac key mapping with consistent shortcuts across both keyboards
+
+#### Verification
+Test your setup:
+```bash
+# Internal keyboard: Ctrl+C, Option+2 (workspace switch)
+# External keyboard: Ctrl+C, Win+2 (workspace switch)
+# Both keyboards: Consistent copy/paste behavior
+```
 
 ### Shell Configuration
 Change default shell to the Nix-managed version:
