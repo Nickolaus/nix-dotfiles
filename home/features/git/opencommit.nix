@@ -186,7 +186,7 @@
       esac
     '')
     
-    # Jira integration
+    # Jira integration - Simple context-based approach
     (writeShellScriptBin "oco-jira-commit" ''
       #!/usr/bin/env bash
       
@@ -203,6 +203,8 @@
       
       if [[ -n "$jira_ticket" ]]; then
         echo "🎫 Found ticket: $jira_ticket"
+        echo "🤖 Running OpenCommit with Jira context..."
+        echo ""
         
         # Quick pre-check
         if ! curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
@@ -211,43 +213,11 @@
           exit 1
         fi
         
-        # Generate message and add Jira prefix
-        echo "🤖 Generating commit message..."
+        # Use OpenCommit's command-line template feature directly
+        echo "🤖 Running OpenCommit with Jira template..."
         
-        # Let opencommit run normally and commit, then amend with Jira prefix
-        echo "Running opencommit (will commit, then we'll amend with Jira prefix)..."
-        
-        if timeout 60s opencommit; then
-          # Get the commit message that was just created
-          last_msg=$(git log -1 --pretty=format:"%s")
-          
-          # Create new message with Jira prefix
-          full_msg="$jira_ticket: $last_msg"
-          
-          echo ""
-          echo "📝 Original message: $last_msg"
-          echo "📝 New message: $full_msg"
-          echo ""
-          read -p "🚀 Amend commit with Jira prefix? (y/N): " -n 1 -r
-          echo
-          
-          if [[ $REPLY =~ ^[Yy]$ ]]; then
-            git commit --amend -m "$full_msg"
-            echo "✅ Amended commit with Jira prefix!"
-          else
-            echo "ℹ️  Commit kept as-is without Jira prefix"
-          fi
-        else
-          exit_code=$?
-          echo ""
-          if [ $exit_code -eq 124 ]; then
-            echo "❌ Timeout: OpenCommit took too long (>60s)"
-            echo "💡 Try a faster model: oco-model fast"
-          else
-            echo "❌ Failed to generate message (exit code: $exit_code)"
-            echo "💡 Check: oco-check"
-          fi
-        fi
+        # Use the documented command-line template syntax: oco 'PROJ-123 - $msg'
+        opencommit "$jira_ticket - \$msg"
       else
         echo "❌ No Jira ticket in branch: $branch"
         echo ""
