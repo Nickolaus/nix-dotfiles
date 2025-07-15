@@ -251,28 +251,34 @@ sudo nixos-rebuild switch --flake ~/.config/nix-dotfiles/ --show-trace   # Linux
 
 ## 🤖 AI Tools Quick Start
 
-After installation, you have local AI-powered development tools ready to use:
+After installation, you have powerful AI-powered development tools with **tri-provider support**:
 
-### OpenCommit - AI Commit Messages
+### OpenCommit - AI Commit Messages (3 Providers!)
 ```bash
-# Generate AI-powered commit messages (no OpenAI API key needed!)
+# Generate AI-powered commit messages with your preferred provider
 git add .
-oco                    # Generate and commit with local AI
+oco                    # Generate and commit with current provider
 
 # Preview messages without committing
 oco --dry-run         # See what message would be generated
 
-# Check status and configuration
-oco-check             # Validate AI setup and service status
-oco-model             # List and switch between model presets
+# Provider Management (Tri-Provider System)
+oco-local             # Switch to Ollama (local, private, free)
+oco-cloud             # Switch to OpenAI (cloud, premium quality)
+oco-claude            # Switch to Claude (advanced reasoning)
+oco-provider status   # Show detailed provider information
 
-# Conventional commit types
+# Health checks and configuration
+oco-check             # Validate setup and service status
+oco-provider          # Full provider management interface
+
+# Conventional commit types (works with any provider)
 oco-feat              # Generate feat: commit
 oco-fix               # Generate fix: commit
 oco-docs              # Generate docs: commit
 ```
 
-### Ollama - Local LLM Server
+### Ollama - Local LLM Server (Provider 1: Local & Private)
 ```bash
 # Check if local AI server is running
 ollama-health         # Service status and available models
@@ -287,9 +293,34 @@ ollama list           # Show downloaded models
 ollama pull qwen2.5-coder:7b  # Download coding model
 ```
 
-### Model Selection
-- **qwen2.5-coder:3b** (~2GB): Fast responses, optimized for commit messages
-- **qwen2.5-coder:7b** (~4GB): Advanced coding assistance, better for complex tasks
+### OpenAI & Claude - Cloud Providers (Providers 2 & 3: Premium Quality)
+```bash
+# SOPS-Encrypted API Key Management (Automatic!)
+# 1. Add your API keys to encrypted secrets:
+sops home/features/secrets/secrets.yaml
+
+# Add these keys:
+# openai_api_key: sk-proj-your-openai-key
+# claude_api_key: sk-ant-your-claude-key
+
+# 2. API keys are automatically loaded when switching providers:
+oco-cloud             # Auto-loads OpenAI key from encrypted secrets
+oco-claude            # Auto-loads Claude key from encrypted secrets
+
+# No manual configuration needed - everything is automated!
+```
+
+### Provider Comparison
+| Provider | Speed | Quality | Cost | Privacy | Best For |
+|----------|-------|---------|------|---------|----------|
+| **Ollama** | ⚡ 2-3s | 🎯 Very Good | 🆓 Free | 🔒 100% Private | Daily commits, experimentation |
+| **OpenAI** | ⚡ 2s | 🌟 Excellent | 💰 ~$0.01/commit | ☁️ Cloud API | Production, complex changes |
+| **Claude** | ⚡ 7s | 🧠 Advanced | 💰 ~$0.02/commit | ☁️ Cloud API | Complex reasoning, refactoring |
+
+### Model Selection by Provider
+- **Ollama**: `qwen2.5-coder:3b` (~2GB), `gemma3:4b` (~2.5GB)
+- **OpenAI**: `gpt-4o-mini` (cost-effective), `gpt-4o` (premium)  
+- **Claude**: `claude-3-5-haiku` (fast), `claude-3-5-sonnet` (advanced)
 
 **🔧 For detailed AI tools usage, see [TOOLS_CHEATSHEET.md](./TOOLS_CHEATSHEET.md#-ai--llm-tools)**
 

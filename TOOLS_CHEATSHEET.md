@@ -129,44 +129,52 @@ git show HEAD         # Shows last commit with delta formatting
 
 ## 🤖 AI & LLM Tools
 
-### OpenCommit - AI-Powered Commit Messages
+### OpenCommit - AI-Powered Commit Messages (Tri-Provider System)
 
-**Generate intelligent commit messages using local LLM (ollama) instead of OpenAI.**
+**Generate intelligent commit messages using your choice of three AI providers: local Ollama, cloud OpenAI, or advanced Claude.**
 
-#### Quick Start
+#### Quick Start - Any Provider
 ```bash
 # Stage your changes and generate commit message
 git add .
-oco                   # Generate and commit with AI
+oco                   # Generate and commit with current provider
 
 # Dry run (preview without committing)
 oco --dry-run        # See what message would be generated
 ```
 
-#### Available Commands
+#### Provider Management (Core Feature)
 ```bash
-# Main commands
+# Switch between providers
+oco-local            # Switch to Ollama (local, private, free)
+oco-cloud            # Switch to OpenAI (cloud, premium quality)  
+oco-claude           # Switch to Claude (advanced reasoning)
+oco-provider         # Full provider management interface
+
+# Provider status and health
+oco-check            # Comprehensive health check for current provider
+oco-provider status  # Detailed provider information and diagnostics
+
+# Setup commands
+oco-provider setup   # Interactive API key configuration (OpenAI/Claude)
+```
+
+#### Core OpenCommit Commands
+```bash
+# Main commands (work with any provider)
 oco                   # Generate commit message (alias: opencommit)
 oc                    # Short alias for opencommit
 
-# Git hook integration
+# Git hook integration  
 oco-hook-enable       # Enable automatic commit message generation
 oco-hook-disable      # Disable git hook integration
 
-# Configuration and health checks
-oco-check            # Validate configuration and service status
+# Configuration and diagnostics
 oco-config           # View/edit opencommit settings
 oco-status           # Show current configuration
-
-# Model management
-oco-model            # List available model presets
-oco-model fast       # Switch to fast model (llama3.2:3b)
-oco-model detailed   # Switch to detailed model (llama3.2:8b)
-oco-model coding     # Switch to coding model (codellama:7b)
-oco-model creative   # Switch to creative model
 ```
 
-#### Conventional Commit Types
+#### Conventional Commit Types (Work with All Providers)
 ```bash
 # Generate commits with specific types
 oco-feat             # feat: commit message
@@ -178,11 +186,81 @@ oco-test             # test: commit message
 oco-chore            # chore: commit message
 ```
 
-#### Configuration (Auto-configured!)
-Your opencommit is pre-configured to use local ollama:
-- **API URL**: `http://127.0.0.1:11434/v1` (local ollama)
-- **Model**: `llama3.2:3b` (fast, efficient for commit messages)
-- **Format**: Conventional commits with emojis
+#### Provider-Specific Features
+
+##### 🏠 Ollama (Local Provider)
+```bash
+# Switch to local provider
+oco-local
+
+# Configuration:
+# - API URL: http://127.0.0.1:11434/v1 (local ollama)
+# - Default Model: qwen2.5-coder:3b (optimized for code commits)
+# - Alternative: gemma3:4b (balanced performance)
+# - Cost: 100% Free
+# - Privacy: 100% Local (never leaves your machine)
+# - Speed: 2-3 seconds
+```
+
+##### ☁️ OpenAI (Cloud Provider)
+```bash
+# Switch to OpenAI provider
+oco-cloud
+
+# Configuration:
+# - API URL: https://api.openai.com/v1
+# - Default Model: gpt-4o-mini (cost-effective)
+# - Alternative: gpt-4o (premium quality)
+# - Cost: ~$0.01 per commit message
+# - Privacy: Data sent to OpenAI
+# - Speed: ~2 seconds
+# - API Key: Auto-loaded from SOPS encrypted secrets
+```
+
+##### 🧠 Claude (Advanced Provider)
+```bash
+# Switch to Claude provider 
+oco-claude
+
+# Configuration:
+# - API URL: https://api.anthropic.com/v1
+# - Default Model: claude-3-5-haiku-20241022 (fast)
+# - Alternative: claude-3-5-sonnet (advanced reasoning)
+# - Cost: ~$0.02 per commit message
+# - Privacy: Data sent to Anthropic
+# - Speed: ~7 seconds
+# - API Key: Auto-loaded from SOPS encrypted secrets
+```
+
+#### SOPS Secret Management (Automatic!)
+```bash
+# API keys are automatically loaded from encrypted secrets
+# No manual configuration required!
+
+# To add/update API keys:
+sops home/features/secrets/secrets.yaml
+
+# Add these entries:
+# openai_api_key: sk-proj-your-openai-key-here
+# claude_api_key: sk-ant-your-claude-key-here
+
+# Keys are automatically loaded when switching providers
+oco-cloud    # Loads OpenAI key from secrets
+oco-claude   # Loads Claude key from secrets
+```
+
+#### Performance Comparison
+| Provider | Speed | Quality | Cost | Privacy | Best Use Case |
+|----------|-------|---------|------|---------|---------------|
+| **Ollama** | 2-3s | Very Good | Free | 100% Local | Daily commits, experimentation |
+| **OpenAI** | 2s | Excellent | $0.01/commit | Cloud | Production commits, team projects |
+| **Claude** | 7s | Advanced | $0.02/commit | Cloud | Complex refactoring, detailed analysis |
+
+#### Optimized Configuration 
+Your opencommit system is pre-optimized with:
+- **Input Tokens**: 32,768 (4x increase for multi-file context)
+- **Output Tokens**: 300 (prevents truncation)
+- **Format**: Conventional commits with clear descriptions
 - **Language**: English
 - **Behavior**: No auto-push, concise messages
 
