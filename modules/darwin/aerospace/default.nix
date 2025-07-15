@@ -118,9 +118,8 @@
         cmd-shift-a = "exec-and-forget /etc/profiles/per-user/C.Hessel/bin/flameshot full -c";
 
         # Disable unwanted cmd+letter bindings that conflict with apps
-        cmd-b = []; # Disable default workspace B binding
-        cmd-l = []; # Disable default workspace L binding
-        cmd-r = []; # Disable default workspace R binding
+        # cmd-b = []; # Disable default workspace B binding
+        # cmd-l = []; # Disable default workspace L binding
 
         # Mode switching
         alt-r = "mode resize";
