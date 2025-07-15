@@ -14,6 +14,15 @@
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_ONE_LINE_COMMIT=true
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_PROMPT_MODULE=conventional-commit
     
+    # Configure OpenAI API key from secrets (if available)
+    if [[ -f "$HOME/.config/opencommit/openai_api_key" ]]; then
+      openai_key=$(cat "$HOME/.config/opencommit/openai_api_key" 2>/dev/null | tr -d '\n')
+      if [[ -n "$openai_key" && "$openai_key" == sk-* ]]; then
+        $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_OPENAI_API_KEY="$openai_key"
+        echo "✅ OpenAI API key configured from secrets"
+      fi
+    fi
+    
     # Only set default model if not already configured
     if ! ${pkgs.opencommit}/bin/opencommit config get OCO_MODEL >/dev/null 2>&1; then
       $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_MODEL=tavernari/git-commit-message:latest
@@ -42,6 +51,11 @@
     "oco-test" = "opencommit --context='test: testing changes'";
     "oco-chore" = "opencommit --context='chore: maintenance task'";
     
+    # Provider management
+    "oco-local" = "oco-provider ollama";
+    "oco-cloud" = "oco-provider openai";
+    "oco-setup" = "oco-provider setup";
+    
     # Configuration
     "oco-config" = "opencommit config";
     "oco-status" = "opencommit config get";
@@ -49,30 +63,64 @@
   
   # Essential scripts only
   home.packages = with pkgs; [
-    # Simple health check
+    # Enhanced health check with provider awareness
     (writeShellScriptBin "oco-check" ''
       #!/usr/bin/env bash
       
       echo "🔍 OpenCommit Health Check"
       echo ""
       
-      # Check ollama service
-      if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-        echo "✅ Ollama: Running"
+      # Check current provider
+      current_url=$(opencommit config get OCO_API_URL 2>/dev/null | grep "OCO_API_URL=" | cut -d'=' -f2 || echo "not set")
+      current_model=$(opencommit config get OCO_MODEL 2>/dev/null | grep "OCO_MODEL=" | cut -d'=' -f2 || echo "not set")
+      
+      if [[ "$current_url" == *"11434"* ]]; then
+        echo "📍 Provider: Ollama (Local)"
+        echo "🤖 Model: $current_model"
+        echo ""
         
-        # Check model
-        model=$(opencommit config get OCO_MODEL 2>/dev/null | grep "OCO_MODEL=" | cut -d'=' -f2 || echo "qwen3:8b")
-        if curl -s http://127.0.0.1:11434/api/tags | ${jq}/bin/jq -r '.models[]?.name' | grep -q "^$model$"; then
-          echo "✅ Model: $model available"
+        # Check ollama service
+        if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+          echo "✅ Ollama: Running"
+          
+          # Check if current model exists
+          if curl -s http://127.0.0.1:11434/api/tags | ${jq}/bin/jq -r '.models[]?.name' | grep -q "^$current_model$"; then
+            echo "✅ Model: $current_model available"
+          else
+            echo "⚠️  Model: $current_model not found"
+            echo "💡 Run: ollama pull $current_model"
+          fi
         else
-          echo "⚠️  Model: $model not found"
-          echo "💡 Run: ollama pull $model"
+          echo "❌ Ollama: Not running"
+          echo "💡 Run: launchctl start org.nixos.ollama"
+        fi
+      elif [[ "$current_url" == *"openai"* ]]; then
+        echo "📍 Provider: OpenAI (Cloud)"
+        echo "🤖 Model: $current_model"
+        echo ""
+        
+        # Check API key
+        api_key=$(opencommit config get OCO_API_KEY 2>/dev/null | grep "OCO_API_KEY=" | cut -d'=' -f2)
+        if [[ -n "$api_key" && "$api_key" != "undefined" ]]; then
+          echo "✅ OpenAI: API key configured"
+          echo "🔑 Key: ''${api_key:0:8}...''${api_key: -4}"
+          echo "💰 Usage: Charged to your OpenAI account"
+        else
+          echo "❌ OpenAI: API key not configured"
+          echo "💡 Run: oco-provider setup"
         fi
       else
-        echo "❌ Ollama: Not running"
-        echo "💡 Run: launchctl start org.nixos.ollama"
+        echo "📍 Provider: Unknown ($current_url)"
+        echo "💡 Run: oco-provider to configure"
       fi
       
+      echo ""
+      echo "🔧 Provider Management:"
+      echo "   oco-local    - Switch to Ollama"
+      echo "   oco-cloud    - Switch to OpenAI"
+      echo "   oco-provider - Full provider management"
+      
+      echo ""
       # Check git repo
       if git rev-parse --git-dir >/dev/null 2>&1; then
         echo "✅ Git: Repository detected"
@@ -182,6 +230,156 @@
             echo "Aliases: default (→ m)"
             echo "Commands: reset status"
           fi
+          ;;
+      esac
+    '')
+    
+    # Provider switching (Ollama ↔ OpenAI)
+    (writeShellScriptBin "oco-provider" ''
+      #!/usr/bin/env bash
+      
+      if [ $# -eq 0 ]; then
+        current_url=$(opencommit config get OCO_API_URL 2>/dev/null | grep "OCO_API_URL=" | cut -d'=' -f2 || echo "not set")
+        current_key=$(opencommit config get OCO_API_KEY 2>/dev/null | grep "OCO_API_KEY=" | cut -d'=' -f2 || echo "not set")
+        
+        echo "🔗 OpenCommit Provider Management"
+        echo ""
+        
+        if [[ "$current_url" == *"11434"* ]]; then
+          echo "📍 Current provider: Ollama (Local)"
+          echo "🔗 API URL: $current_url"
+          echo "🔑 API Key: $current_key"
+          
+          # Check ollama status
+          if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+            echo "✅ Status: Ollama running"
+          else
+            echo "❌ Status: Ollama not running"
+          fi
+        elif [[ "$current_url" == *"openai"* ]] || [[ "$current_url" == *"api.openai.com"* ]]; then
+          echo "📍 Current provider: OpenAI (Cloud)"
+          echo "🔗 API URL: $current_url"
+          echo "🔑 API Key: ''${current_key:0:8}...''${current_key: -4} (masked)"
+          echo "✅ Status: Ready (API key configured)"
+        else
+          echo "📍 Current provider: Unknown"
+          echo "🔗 API URL: $current_url"
+        fi
+        
+        echo ""
+        echo "Available commands:"
+        echo "  oco-provider ollama   - Switch to local Ollama"
+        echo "  oco-provider openai   - Switch to OpenAI"
+        echo "  oco-provider status   - Show detailed status"
+        echo "  oco-provider setup    - Setup OpenAI API key"
+        exit 0
+      fi
+      
+      case "$1" in
+        "ollama")
+          echo "🔄 Switching to Ollama provider..."
+          opencommit config set OCO_API_URL="http://127.0.0.1:11434/v1"
+          opencommit config set OCO_API_KEY="ollama"
+          
+          # Check if ollama is running
+          if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+            echo "✅ Switched to Ollama (local models)"
+            echo "💡 Current model: $(opencommit config get OCO_MODEL 2>/dev/null | cut -d'=' -f2)"
+          else
+            echo "⚠️  Switched to Ollama, but service not running"
+            echo "💡 Start with: launchctl start org.nixos.ollama"
+          fi
+          ;;
+                 "openai")
+           echo "🔄 Switching to OpenAI provider..."
+           
+           # Check if API key is set (either from config or secrets)
+           api_key=$(opencommit config get OCO_OPENAI_API_KEY 2>/dev/null | grep "OCO_OPENAI_API_KEY=" | cut -d'=' -f2)
+           
+           # If not in config, try to load from secrets
+           if [[ -z "$api_key" || "$api_key" == "undefined" ]]; then
+             if [[ -f "$HOME/.config/opencommit/openai_api_key" ]]; then
+               secret_key=$(cat "$HOME/.config/opencommit/openai_api_key" 2>/dev/null | tr -d '\n')
+               if [[ -n "$secret_key" && "$secret_key" == sk-* ]]; then
+                 opencommit config set OCO_OPENAI_API_KEY="$secret_key"
+                 api_key="$secret_key"
+                 echo "✅ Loaded OpenAI API key from secrets"
+               fi
+             fi
+           fi
+           
+           # Final check
+           if [[ -z "$api_key" || "$api_key" == "undefined" ]]; then
+             echo "❌ OpenAI API key not configured"
+             echo "💡 Add to secrets: sops home/features/secrets/secrets.yaml"
+             echo "💡 Or run setup: oco-provider setup"
+             echo "💡 Or set manually: opencommit config set OCO_OPENAI_API_KEY=your_key_here"
+             exit 1
+           fi
+          
+          opencommit config set OCO_API_URL="https://api.openai.com/v1"
+          opencommit config set OCO_API_KEY="$api_key"
+          opencommit config set OCO_MODEL="gpt-4o-mini"  # Default to cost-effective model
+          
+          echo "✅ Switched to OpenAI"
+          echo "💡 Default model: gpt-4o-mini (cost-effective)"
+          echo "💡 Upgrade model: opencommit config set OCO_MODEL=gpt-4o"
+          ;;
+        "status")
+          echo "🔍 Detailed Provider Status"
+          echo ""
+          
+          # Current configuration
+          url=$(opencommit config get OCO_API_URL 2>/dev/null | cut -d'=' -f2)
+          key=$(opencommit config get OCO_API_KEY 2>/dev/null | cut -d'=' -f2)
+          model=$(opencommit config get OCO_MODEL 2>/dev/null | cut -d'=' -f2)
+          
+          echo "📋 Current Configuration:"
+          echo "   URL: $url"
+          echo "   Model: $model"
+          
+          if [[ "$url" == *"11434"* ]]; then
+            echo "   Provider: Ollama"
+            echo ""
+            echo "🏠 Ollama Status:"
+            if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+              echo "   ✅ Service running"
+              echo "   📦 Available models:"
+              curl -s http://127.0.0.1:11434/api/tags | ${jq}/bin/jq -r '.models[]?.name' | sed 's/^/      /'
+            else
+              echo "   ❌ Service not running"
+            fi
+          else
+            echo "   Provider: OpenAI"
+            echo "   Key: ''${key:0:8}...''${key: -4}"
+            echo ""
+            echo "☁️  OpenAI Status:"
+            echo "   ✅ Ready for API calls"
+            echo "   💰 Usage charged to your OpenAI account"
+          fi
+          ;;
+        "setup")
+          echo "🔧 OpenAI API Key Setup"
+          echo ""
+          echo "To get your OpenAI API key:"
+          echo "1. Visit: https://platform.openai.com/account/api-keys"
+          echo "2. Create a new secret key"
+          echo "3. Copy the key (starts with sk-...)"
+          echo ""
+          read -p "🔑 Enter your OpenAI API key: " -r api_key
+          
+          if [[ -n "$api_key" && "$api_key" == sk-* ]]; then
+            opencommit config set OCO_OPENAI_API_KEY="$api_key"
+            echo "✅ OpenAI API key configured!"
+            echo "💡 Switch to OpenAI: oco-provider openai"
+          else
+            echo "❌ Invalid API key format (should start with sk-)"
+            echo "💡 Try again: oco-provider setup"
+          fi
+          ;;
+        *)
+          echo "❌ Unknown command: $1"
+          echo "💡 Run: oco-provider (without arguments for help)"
           ;;
       esac
     '')

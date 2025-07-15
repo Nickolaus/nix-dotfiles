@@ -17,6 +17,12 @@
       format = "yaml";
       mode = "0600";
     };
+
+    secrets.openai_api_key = {
+      path = "${config.home.homeDirectory}/.config/opencommit/openai_api_key";
+      format = "yaml";
+      mode = "0600";
+    };
   };
 
 }
