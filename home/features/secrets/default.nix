@@ -23,6 +23,12 @@
       format = "yaml";
       mode = "0600";
     };
+
+    secrets.claude_api_key = {
+      path = "${config.home.homeDirectory}/.config/opencommit/claude_api_key";
+      format = "yaml";
+      mode = "0600";
+    };
   };
 
 }

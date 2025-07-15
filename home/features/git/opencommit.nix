@@ -14,14 +14,7 @@
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_ONE_LINE_COMMIT=true
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_PROMPT_MODULE=conventional-commit
     
-    # Configure OpenAI API key from secrets (if available)
-    if [[ -f "$HOME/.config/opencommit/openai_api_key" ]]; then
-      openai_key=$(cat "$HOME/.config/opencommit/openai_api_key" 2>/dev/null | tr -d '\n')
-      if [[ -n "$openai_key" && "$openai_key" == sk-* ]]; then
-        $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_OPENAI_API_KEY="$openai_key"
-        echo "✅ OpenAI API key configured from secrets"
-      fi
-    fi
+
     
     # Only set default model if not already configured
     if ! ${pkgs.opencommit}/bin/opencommit config get OCO_MODEL >/dev/null 2>&1; then
@@ -54,6 +47,7 @@
     # Provider management
     "oco-local" = "oco-provider ollama";
     "oco-cloud" = "oco-provider openai";
+    "oco-claude" = "oco-provider claude";
     "oco-setup" = "oco-provider setup";
     
     # Configuration
@@ -109,6 +103,21 @@
           echo "❌ OpenAI: API key not configured"
           echo "💡 Run: oco-provider setup"
         fi
+      elif [[ "$current_url" == *"anthropic"* ]]; then
+        echo "📍 Provider: Claude (Anthropic)"
+        echo "🤖 Model: $current_model"
+        echo ""
+        
+        # Check API key
+        api_key=$(opencommit config get OCO_API_KEY 2>/dev/null | grep "OCO_API_KEY=" | cut -d'=' -f2)
+        if [[ -n "$api_key" && "$api_key" != "undefined" ]]; then
+          echo "✅ Claude: API key configured"
+          echo "🔑 Key: ''${api_key:0:8}...''${api_key: -4}"
+          echo "💰 Usage: Charged to your Anthropic account"
+        else
+          echo "❌ Claude: API key not configured"
+          echo "💡 Run: oco-provider setup"
+        fi
       else
         echo "📍 Provider: Unknown ($current_url)"
         echo "💡 Run: oco-provider to configure"
@@ -118,6 +127,7 @@
       echo "🔧 Provider Management:"
       echo "   oco-local    - Switch to Ollama"
       echo "   oco-cloud    - Switch to OpenAI"
+      echo "   oco-claude   - Switch to Claude"
       echo "   oco-provider - Full provider management"
       
       echo ""
@@ -270,6 +280,7 @@
         echo "Available commands:"
         echo "  oco-provider ollama   - Switch to local Ollama"
         echo "  oco-provider openai   - Switch to OpenAI"
+        echo "  oco-provider claude   - Switch to Claude (Anthropic)"
         echo "  oco-provider status   - Show detailed status"
         echo "  oco-provider setup    - Setup OpenAI API key"
         exit 0
@@ -325,6 +336,37 @@
           echo "💡 Default model: gpt-4o-mini (cost-effective)"
           echo "💡 Upgrade model: opencommit config set OCO_MODEL=gpt-4o"
           ;;
+        "claude")
+          echo "🔄 Switching to Claude provider..."
+          
+          # Check if Claude API key is available in secrets
+          claude_key=""
+          if [[ -f "$HOME/.config/opencommit/claude_api_key" ]]; then
+            claude_key=$(cat "$HOME/.config/opencommit/claude_api_key" 2>/dev/null | tr -d '\n')
+            if [[ -n "$claude_key" && "$claude_key" == sk-ant-* ]]; then
+              echo "✅ Loaded Claude API key from secrets"
+            else
+              claude_key=""
+            fi
+          fi
+          
+          # Final check
+          if [[ -z "$claude_key" ]]; then
+            echo "❌ Claude API key not configured"
+            echo "💡 Add to secrets: sops home/features/secrets/secrets.yaml"
+            echo "💡 Key format: sk-ant-..."
+            echo "💡 Get key from: https://console.anthropic.com/"
+            exit 1
+          fi
+          
+          opencommit config set OCO_API_URL="https://api.anthropic.com/v1"
+          opencommit config set OCO_API_KEY="$claude_key"
+          opencommit config set OCO_MODEL="claude-3-5-haiku-20241022"  # Default to cost-effective model
+          
+          echo "✅ Switched to Claude"
+          echo "💡 Default model: claude-3-5-haiku-20241022 (cost-effective)"
+          echo "💡 Upgrade model: opencommit config set OCO_MODEL=claude-3-5-sonnet-20241022"
+          ;;
         "status")
           echo "🔍 Detailed Provider Status"
           echo ""
@@ -349,13 +391,23 @@
             else
               echo "   ❌ Service not running"
             fi
-          else
+          elif [[ "$url" == *"openai"* ]]; then
             echo "   Provider: OpenAI"
             echo "   Key: ''${key:0:8}...''${key: -4}"
             echo ""
             echo "☁️  OpenAI Status:"
             echo "   ✅ Ready for API calls"
             echo "   💰 Usage charged to your OpenAI account"
+          elif [[ "$url" == *"anthropic"* ]]; then
+            echo "   Provider: Claude (Anthropic)"
+            echo "   Key: ''${key:0:8}...''${key: -4}"
+            echo ""
+            echo "🧠 Claude Status:"
+            echo "   ✅ Ready for API calls"
+            echo "   💰 Usage charged to your Anthropic account"
+          else
+            echo "   Provider: Unknown"
+            echo "   URL: $url"
           fi
           ;;
         "setup")
