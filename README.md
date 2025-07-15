@@ -20,16 +20,14 @@
 ![Secrets Management](https://img.shields.io/badge/Secrets_Managed-FF6B6B?style=for-the-badge&logo=vault&logoColor=white)
 
 <!-- AI & Automation -->
-![AI Commits](https://img.shields.io/badge/AI_Commits-4ECDC4?style=for-the-badge&logo=robot&logoColor=white)
-![Multiple Providers](https://img.shields.io/badge/Multiple_Providers-4ECDC4?style=for-the-badge&logo=openai&logoColor=white)
-![Local LLM](https://img.shields.io/badge/Local_LLM-4ECDC4?style=for-the-badge&logo=meta&logoColor=white)
+![OpenCommit](https://img.shields.io/badge/OpenCommit-Integrated-4ECDC4?style=for-the-badge&logo=git&logoColor=white)
 
 <!-- Repository Stats -->
 ![License MIT](https://img.shields.io/github/license/Nickolaus/nix-dotfiles?style=for-the-badge&color=green)
 ![Last Commit](https://img.shields.io/github/last-commit/Nickolaus/nix-dotfiles?style=for-the-badge&color=blue)
 ![Contributors](https://img.shields.io/github/contributors/Nickolaus/nix-dotfiles?style=for-the-badge&color=orange)
 ![Repo Size](https://img.shields.io/github/repo-size/Nickolaus/nix-dotfiles?style=for-the-badge&color=purple)
-![Lines of Code](https://img.shields.io/tokei/lines/github/Nickolaus/nix-dotfiles?style=for-the-badge&color=red)
+
 
 <!-- Development Tools -->
 ![Fish Shell](https://img.shields.io/badge/Fish_Shell-00D4AA?style=for-the-badge&logo=gnu-bash&logoColor=white)
@@ -42,15 +40,9 @@
 ![Hammerspoon](https://img.shields.io/badge/Hammerspoon-FF8C00?style=for-the-badge&logo=lua&logoColor=white)
 ![Homebrew](https://img.shields.io/badge/Homebrew_Integrated-FBB040?style=for-the-badge&logo=homebrew&logoColor=black)
 
-<!-- AI Providers -->
-![Ollama](https://img.shields.io/badge/Ollama-Local-2ECC71?style=for-the-badge&logo=meta&logoColor=white)
-![OpenAI](https://img.shields.io/badge/OpenAI-Cloud-412991?style=for-the-badge&logo=openai&logoColor=white)
-![Claude](https://img.shields.io/badge/Claude-Advanced-FF9500?style=for-the-badge&logo=anthropic&logoColor=white)
 
-<!-- Quality & Maintenance -->
+<!-- Configuration -->
 ![Flake Check](https://img.shields.io/badge/Flake_Check-Passing-brightgreen?style=for-the-badge&logo=checkmark&logoColor=white)
-![Auto Updates](https://img.shields.io/badge/Auto_Updates-Enabled-blue?style=for-the-badge&logo=dependabot&logoColor=white)
-![Documentation](https://img.shields.io/badge/Documentation-Complete-success?style=for-the-badge&logo=gitbook&logoColor=white)
 
 </div>
 
@@ -58,7 +50,7 @@
 
 **A cross-platform Nix configuration for macOS (nix-darwin) and Linux (NixOS) with Home Manager integration.**
 
-### 🚀 **Key Features**: AI Commit Messages • SOPS Encryption • Cross-Platform • Modern Tools
+### **Key Features**: Automated Commits • Encrypted Secrets • Cross-Platform • Development Tools
 
 ## ✨ Features
 
@@ -68,7 +60,7 @@
 - 🔒 **Secrets Management**: SOPS-encrypted secrets with age
 - 📦 **Package Management**: Organized cross-platform and platform-specific packages
 - 🛠️ **Development Tools**: Go, PHP, Neovim, tmux, and more
-- 🤖 **AI Commit Messages**: Multiple provider support (local, cloud) via opencommit
+- 🤖 **Automated Commits**: AI-generated commit messages via opencommit
 - 🎨 **Modern Terminal**: WezTerm with custom configuration
 - ⌨️ **Automation**: Hammerspoon-based macOS window management and shortcuts
 
