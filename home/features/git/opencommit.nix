@@ -291,11 +291,13 @@
           echo "🔄 Switching to Ollama provider..."
           opencommit config set OCO_API_URL="http://127.0.0.1:11434/v1"
           opencommit config set OCO_API_KEY="ollama"
+          opencommit config set OCO_MODEL="tavernari/git-commit-message:latest"  # Default to commit-optimized model
           
           # Check if ollama is running
           if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
             echo "✅ Switched to Ollama (local models)"
-            echo "💡 Current model: $(opencommit config get OCO_MODEL 2>/dev/null | cut -d'=' -f2)"
+            echo "💡 Default model: tavernari/git-commit-message:latest (commit-optimized)"
+            echo "💡 Alternative models: llama3.2:latest, gemma3:4b"
           else
             echo "⚠️  Switched to Ollama, but service not running"
             echo "💡 Start with: launchctl start org.nixos.ollama"
