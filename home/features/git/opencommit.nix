@@ -5,8 +5,8 @@
     # Configure OpenCommit for local ollama usage with conventional commits
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_API_URL=http://127.0.0.1:11434/v1
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_API_KEY=ollama
-    $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_TOKENS_MAX_INPUT=8192
-    $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_TOKENS_MAX_OUTPUT=200
+    $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_TOKENS_MAX_INPUT=32768
+    $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_TOKENS_MAX_OUTPUT=300
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_DESCRIPTION=false
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_EMOJI=false
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_LANGUAGE=en
@@ -16,13 +16,13 @@
     
     # Only set default model if not already configured
     if ! ${pkgs.opencommit}/bin/opencommit config get OCO_MODEL >/dev/null 2>&1; then
-      $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_MODEL=qwen3:8b
+      $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_MODEL=tavernari/git-commit-message:latest
     fi
   '';
   
   # Environment variables for dynamic model switching
   home.sessionVariables = {
-    OCO_DEFAULT_MODEL = "qwen3:8b";
+    OCO_DEFAULT_MODEL = "tavernari/git-commit-message:latest";
   };
   
   # Simple aliases for opencommit usage
@@ -91,25 +91,39 @@
       #!/usr/bin/env bash
       
       declare -A models=(
-        ["fast"]="qwen3:8b"
-        ["default"]="qwen3:8b"
-        ["detailed"]="qwen3:14b"
-        ["advanced"]="qwen3:32b-q4_K_M"
-        ["creative"]="llama3.2:3b"
+        # Model sizes from smallest/fastest to largest/slowest
+        ["xs"]="mistral:7b"                                     # 1.31s - Extra small, fastest
+        ["s"]="llama3.2:latest"                                 # 1.91s - Small, fast
+        ["m"]="tavernari/git-commit-message:latest"             # 1.96s - Medium, specialized (DEFAULT)
+        ["l"]="gemma3:4b"                                       # 4.47s - Large, balanced
+        ["xl"]="devstral:24b"                                   # 5.04s - Extra large, code-focused
+        ["xxl"]="gemma3:12b"                                    # 10.26s - Extra extra large, detailed
+        ["xxxl"]="gemma3:27b"                                   # 17.29s - Maximum size, comprehensive
       )
       
       if [ $# -eq 0 ]; then
         current=$(opencommit config get OCO_MODEL 2>/dev/null | grep "OCO_MODEL=" | cut -d'=' -f2 || echo "''${OCO_DEFAULT_MODEL:-not set}")
         echo "🤖 Current model: $current"
-        echo "🏠 Default model: ''${OCO_DEFAULT_MODEL:-qwen3:8b}"
+        echo "🏠 Default model: ''${OCO_DEFAULT_MODEL:-tavernari/git-commit-message:latest}"
         echo ""
-        echo "Available presets:"
-        for preset in "''${!models[@]}"; do
-          echo "  $preset: ''${models[$preset]}"
-        done
+        echo "Available model sizes (benchmark results):"
         echo ""
-        echo "Commands:"
-        echo "  oco-model <preset>  - Switch to preset model"
+        echo "⚡ Fast Models (< 2s):"
+        echo "  xs: mistral:7b (1.31s) - Extra small, fastest"
+        echo "  s: llama3.2:latest (1.91s) - Small, fast"
+        echo "  m: tavernari/git-commit-message:latest (1.96s) - Medium, specialized ⭐ DEFAULT"
+        echo ""
+        echo "✅ Medium Models (2-6s):"
+        echo "  l: gemma3:4b (4.47s) - Large, balanced"
+        echo "  xl: devstral:24b (5.04s) - Extra large, code-focused"
+        echo ""
+        echo "🐌 Large Models (>10s) - High capability, slow response:"
+        echo "  xxl: gemma3:12b (10.26s) - Extra extra large, detailed"
+        echo "  xxxl: gemma3:27b (17.29s) - Maximum size, comprehensive"
+        echo ""
+        echo "Usage:"
+        echo "  oco-model <size>    - Switch to model size (xs/s/m/l/xl/xxl/xxxl)"
+        echo "  oco-model default   - Switch to default model (alias for 'm')"
         echo "  oco-model reset     - Reset to default model"
         echo "  oco-model status    - Show current configuration"
         exit 0
@@ -117,7 +131,7 @@
       
       case "$1" in
         "reset")
-          default_model="''${OCO_DEFAULT_MODEL:-qwen3:8b}"
+          default_model="''${OCO_DEFAULT_MODEL:-tavernari/git-commit-message:latest}"
           echo "🔄 Resetting to default model: $default_model"
           opencommit config set OCO_MODEL="$default_model"
           echo "✅ Reset to default model"
@@ -125,7 +139,7 @@
         "status")
           current=$(opencommit config get OCO_MODEL 2>/dev/null | grep "OCO_MODEL=" | cut -d'=' -f2 || echo "not set")
           echo "🤖 Current model: $current"
-          echo "🏠 Default model: ''${OCO_DEFAULT_MODEL:-qwen3:8b}"
+          echo "🏠 Default model: ''${OCO_DEFAULT_MODEL:-tavernari/git-commit-message:latest}"
           
           # Check if model is available
           if curl -s http://127.0.0.1:11434/api/tags | ${jq}/bin/jq -r '.models[]?.name' | grep -q "^$current$"; then
@@ -137,6 +151,14 @@
           ;;
         *)
           preset="$1"
+          
+          # Handle aliases
+          case "$preset" in
+            "default")
+              preset="m"
+              ;;
+          esac
+          
           if [[ -n "''${models[$preset]}" ]]; then
             model="''${models[$preset]}"
             echo "🔄 Switching to $preset model: $model"
@@ -156,7 +178,9 @@
             echo "💡 This setting persists across system rebuilds"
           else
             echo "❌ Unknown preset: $preset"
-            echo "Available: ''${!models[*]} reset status"
+            echo "Available sizes: xs s m l xl xxl xxxl"
+            echo "Aliases: default (→ m)"
+            echo "Commands: reset status"
           fi
           ;;
       esac
@@ -253,7 +277,7 @@
       fi
       
       # Check/pull model
-      model="qwen3:8b"
+      model="tavernari/git-commit-message:latest"
       if ! curl -s http://127.0.0.1:11434/api/tags | ${jq}/bin/jq -r '.models[]?.name' | grep -q "^$model$"; then
         echo "📦 Pulling model: $model"
         ollama pull "$model" || exit 1

@@ -298,8 +298,8 @@ ollama pull qwen2.5-coder:7b  # Download coding model
 Latest benchmark results for OpenCommit AI models (updated automatically):
 
 <!-- BENCHMARK_RESULTS_START -->
-**Last Updated:** 2025-07-09 16:18:27  
-**Models Tested:** 3  
+**Last Updated:** 2025-07-15 10:49:00  
+**Models Tested:** 7  
 **Test Environment:** Darwin arm64
 
 ### 🏆 Top Performers
@@ -307,23 +307,27 @@ Latest benchmark results for OpenCommit AI models (updated automatically):
 #### Simple Files (Fastest)
 | Rank | Model | Time | Performance |
 |------|-------|------|-------------|
-| 1 | `qwen3:8b` | 1.73s | ⚡ Excellent |
-| 2 | `qwen3:14b` | 2.93s | 🚀 Good |
-| 3 | `qwen3:32b-q4_K_M` | 13.36s | ✅ Average |
+| 1 | `llama3.2:latest` | 1.72s (⭐ Excellent) | ⚡ Excellent |
+| 2 | `gemma3:4b` | 1.73s (⭐ Excellent) | ⚡ Excellent |
+| 3 | `mistral:7b` | 2.07s (⚠️ Basic) | 🚀 Good |
 
 #### Complex Files (Fastest)
 | Rank | Model | Time | Performance |
 |------|-------|------|-------------|
-| 1 | `qwen3:8b` | 2.66s | 🚀 Good |
-| 2 | `qwen3:14b` | 4.23s | ✅ Average |
-| 3 | `qwen3:32b-q4_K_M` | 14.79s | ✅ Average |
+| 1 | `mistral:7b` | 2.27s (⚠️ Basic) | 🚀 Good |
+| 2 | `llama3.2:latest` | 2.48s (⭐ Excellent) | 🚀 Good |
+| 3 | `gemma3:4b` | 2.97s (⭐ Excellent) | 🚀 Good |
 
 ### 📈 All Models Summary
-| Model | Simple (s) | Complex (s) | Avg (s) |
-|-------|------------|-------------|---------|
-| `qwen3:8b` | 1.73 | 2.66 | 2.19 |
-| `qwen3:14b` | 2.93 | 4.23 | 3.58 |
-| `qwen3:32b-q4_K_M` | 13.36 | 14.79 | 14.07 |
+| Model | Simple (s) | Simple Quality | Complex (s) | Complex Quality | Avg (s) | Avg Quality |
+|-------|------------|----------------|-------------|-----------------|---------|-------------|
+| `llama3.2:latest` | 1.72 | ⭐ | 2.48 | ⭐ | 2.10 | ⭐ |
+| `mistral:7b` | 2.07 | ⚠️ | 2.27 | ⚠️ | 2.17 | ⚠️ |
+| `gemma3:4b` | 1.73 | ⭐ | 2.97 | ⭐ | 2.35 | ⭐ |
+| `tavernari/git-commit-message:latest` | 3.32 | ⭐ | 3.51 | ⚠️ | 3.41 | ⭐ |
+| `devstral:24b` | 3.83 | ⭐ | 4.31 | ⚠️ | 4.07 | ⭐ |
+| `gemma3:12b` | 2.81 | ⭐ | 6.30 | ⭐ | 4.55 | ⭐ |
+| `gemma3:27b` | 4.53 | ⭐ | 12.56 | ⭐ | 8.54 | ⭐ |
 
 **📋 For detailed analysis and recommendations, see:** `results/benchmark-results-all.md`
 <!-- BENCHMARK_RESULTS_END -->

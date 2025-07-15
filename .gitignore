@@ -1,2 +1,3 @@
 result
-results/
+# Benchmark report at root
+benchmark-results.md

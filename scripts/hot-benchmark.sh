@@ -219,7 +219,196 @@ warmup_model() {
     fi
 }
 
-# Benchmark a specific model
+# Enhanced Conventional Commit Quality Scoring
+# 
+# COMPREHENSIVE VALIDATION: Follows GitHub standards, conventional commit spec,
+# and OpenCommit configuration requirements.
+#
+# Scoring (0-5):
+# - 0: ❌ Broken - Invalid format, critical errors
+# - 1: ⚠️ Poor - Basic format but major style issues
+# - 2: 🔶 Basic - Valid conventional commit, some issues
+# - 3: ✅ Good - Clean conventional commit, proper format
+# - 4: ⭐ Very Good - Excellent commit with semantic quality
+# - 5: 🏆 Perfect - Flawless commit message
+# 
+# VALIDATION RULES:
+# - Whitespace: No leading/trailing spaces (critical)
+# - Capitalization: Lowercase after colon ("feat:" not "Feat:")
+# - Punctuation: No trailing periods or exclamation marks
+# - Length: 50-72 characters optimal for GitHub display
+# - Mood: Imperative mood ("add" not "adds" or "added")
+# - Semantics: Meaningful verbs, specific descriptions
+score_commit_quality() {
+    local commit_output="$1"
+    local score=0
+    local commit_count=0
+    local valid_commits=0
+    
+    # Valid conventional commit types
+    local valid_types="feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert"
+    
+    # Extract potential commit messages (more permissive extraction first)
+    local commit_messages
+    commit_messages=$(echo "$commit_output" | grep -E "^\s*[a-z]+(\(.+\))?: .+" || echo "")
+    
+    if [ -z "$commit_messages" ]; then
+        return 0  # No commit-like messages found
+    fi
+    
+    # Count total commits found
+    commit_count=$(echo "$commit_messages" | wc -l | tr -d ' ')
+    
+    # Analyze each commit message
+    while IFS= read -r commit_line; do
+        [ -z "$commit_line" ] && continue
+        
+        # Check for whitespace issues (these should LOWER quality, not be ignored)
+        local has_leading_space=false
+        local has_trailing_space=false
+        
+        if echo "$commit_line" | grep -qE "^[[:space:]]"; then
+            has_leading_space=true
+        fi
+        
+        if echo "$commit_line" | grep -qE "[[:space:]]$"; then
+            has_trailing_space=true
+        fi
+        
+        # Clean version for format checking (but we'll penalize the whitespace)
+        local clean_line
+        clean_line=$(echo "$commit_line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        
+        # Check conventional format: type(scope): description or type: description
+        if echo "$clean_line" | grep -qE "^($valid_types)(\(.+\))?: .{5,}"; then
+            ((valid_commits++))
+            local commit_score=2  # Base score for valid conventional format
+            
+            # CRITICAL PENALTIES (can make score 0)
+            local critical_issues=0
+            
+            # Whitespace issues (critical)
+            if [ "$has_leading_space" = true ]; then
+                ((critical_issues++))
+            fi
+            if [ "$has_trailing_space" = true ]; then
+                ((critical_issues++))
+            fi
+            
+            # Phase 1 Enhanced Validation
+            
+            # 1. Capitalization check - first letter after colon should be lowercase
+            local desc_start
+            desc_start=$(echo "$clean_line" | sed -E "s/^($valid_types)(\(.+\))?: (.)/\3/")
+            if echo "$desc_start" | grep -qE "^[A-Z]"; then
+                ((critical_issues++))  # Wrong capitalization
+            fi
+            
+            # 2. Trailing punctuation check - no periods, exclamation marks
+            if echo "$clean_line" | grep -qE "[.!]$"; then
+                ((critical_issues++))  # Trailing punctuation
+            fi
+            
+            # 3. Subject length validation (GitHub optimal: 50-72 chars)
+            local total_length=${#clean_line}
+            local length_score=0
+            if [ "$total_length" -ge 50 ] && [ "$total_length" -le 72 ]; then
+                ((length_score++))  # Optimal length
+            elif [ "$total_length" -le 50 ]; then
+                # Short but acceptable, no penalty
+                length_score=0
+            elif [ "$total_length" -gt 100 ]; then
+                ((critical_issues++))  # Too long, critical issue
+            fi
+            
+            # If critical issues exist, cap at score 1
+            if [ "$critical_issues" -gt 0 ]; then
+                commit_score=1
+            else
+                # No critical issues - award additional points
+                
+                # Scope usage bonus
+                if echo "$clean_line" | grep -qE "^($valid_types)\(.+\): .+"; then
+                    ((commit_score++))  # +1 for scoped commits
+                fi
+                
+                # Length optimization bonus
+                commit_score=$((commit_score + length_score))
+                
+                # Phase 2 Semantic Quality Checks
+                local desc_part
+                desc_part=$(echo "$clean_line" | sed -E "s/^($valid_types)(\(.+\))?: //")
+                
+                # Imperative mood check (basic detection)
+                if echo "$desc_part" | grep -qE "^(add|fix|update|remove|create|delete|implement|refactor|optimize|improve)"; then
+                    ((commit_score++))  # Good imperative verb
+                elif echo "$desc_part" | grep -qE "^(adds|fixes|updates|removes|creates|deletes|implements|refactors|optimizes|improves)"; then
+                    # Wrong mood, but not critical - no bonus
+                    commit_score=$((commit_score))
+                elif echo "$desc_part" | grep -qE "^(added|fixed|updated|removed|created|deleted|implemented|refactored|optimized|improved)"; then
+                    # Past tense - minor penalty
+                    commit_score=$((commit_score > 2 ? commit_score - 1 : commit_score))
+                fi
+                
+                # Avoid filler words penalty
+                if echo "$desc_part" | grep -qE "(just|simply|basically|some|stuff|things|changes)"; then
+                    commit_score=$((commit_score > 2 ? commit_score - 1 : commit_score))
+                fi
+                
+                # Specificity bonus - check for meaningful content
+                if echo "$desc_part" | grep -qE "(auth|user|api|config|test|error|bug|feature|component|service|database|cache|validation)"; then
+                    ((commit_score++))  # Specific technical terms
+                fi
+            fi
+            
+            # Cap score at 5, minimum at 0
+            if [ "$commit_score" -gt 5 ]; then
+                commit_score=5
+            elif [ "$commit_score" -lt 0 ]; then
+                commit_score=0
+            fi
+            
+            # Add commit score to total
+            score=$((score + commit_score))
+        fi
+    done <<< "$commit_messages"
+    
+    # Base score adjustments
+    if [ "$valid_commits" -eq 0 ]; then
+        score=0
+    elif [ "$valid_commits" -eq "$commit_count" ] && [ "$commit_count" -gt 1 ]; then
+        ((score++))  # Bonus for multiple valid commits
+    fi
+    
+    # Ensure score doesn't go below 0 or above 5
+    if [ "$score" -lt 0 ]; then
+        score=0
+    elif [ "$score" -gt 5 ]; then
+        score=5
+    fi
+    
+    echo "$score"
+}
+
+# Get enhanced quality rating description
+get_quality_rating() {
+    local score="$1"
+    # Handle decimal scores by rounding
+    local rounded_score
+    rounded_score=$(printf "%.0f" "$score")
+    
+    case "$rounded_score" in
+        0) echo "❌ Broken" ;;
+        1) echo "⚠️ Poor" ;;
+        2) echo "🔶 Basic" ;;
+        3) echo "✅ Good" ;;
+        4) echo "⭐ Very Good" ;;
+        5) echo "🏆 Perfect" ;;
+        *) echo "❓ Unknown" ;;
+    esac
+}
+
+# Benchmark a specific model with OpenCommit
 benchmark_model() {
     local model="$1"
     local test_file="$2"
@@ -227,9 +416,19 @@ benchmark_model() {
     
     log "Testing ${PURPLE}$model${NC} on ${BLUE}$test_type${NC} file..." >&2
     
-    # Model availability already verified at startup - proceed with benchmark
+    # Switch to the model using oco-model
+    if ! oco-model "$(get_model_size_from_name "$model")" >/dev/null 2>&1; then
+        warn "Failed to switch to model $model - using direct OCO_MODEL config" >&2
+        # Fallback: set model directly
+        opencommit config set OCO_MODEL="$model" >/dev/null 2>&1 || {
+            error "Failed to configure model $model" >&2
+            echo "ERROR,ERROR"
+            return 1
+        }
+    fi
     
     local total_time=0
+    local total_quality=0
     local successful_runs=0
     
     for i in $(seq 1 $ITERATIONS); do
@@ -240,26 +439,41 @@ benchmark_model() {
         # Create git staged changes for testing
         git add "$test_file" 2>/dev/null || true
         
-        # Time the model's response (simulate opencommit usage)
+        # Time the OpenCommit dry run
         local start_time=$(date +%s.%N)
         
-        # Use direct ollama test with disabled thinking mode for faster response
-        # Note: Bypassing OpenCommit to ensure --think=false flag is applied
-        ollama run "$model" --think=false "Generate a conventional commit message for these changes: $(head -10 "$test_file")" > /dev/null 2>&1
+        # Use real OpenCommit with dry-run and auto-confirm
+        local oco_output
+        oco_output=$(oco --dry-run --yes 2>&1)
+        local oco_exit_code=$?
         
         local end_time=$(date +%s.%N)
         local duration=$(echo "$end_time - $start_time" | bc -l)
         
-        if [ "$?" -eq 0 ]; then
+        if [ "$oco_exit_code" -eq 0 ] && [ -n "$oco_output" ]; then
             total_time=$(echo "$total_time + $duration" | bc -l)
+            
+            # Score commit quality
+            local quality_score
+            quality_score=$(score_commit_quality "$oco_output")
+            total_quality=$((total_quality + quality_score))
+            
             ((successful_runs++))
             
             if [ "$VERBOSE" = true ]; then
-                printf "    Time: %.2fs\n" "$duration" >&2
+                local quality_rating
+                quality_rating=$(get_quality_rating "$quality_score")
+                printf "    Time: %.2fs, Quality: %s\n" "$duration" "$quality_rating" >&2
             fi
         else
-            warn "Run $i failed for $model" >&2
+            warn "Run $i failed for $model (exit code: $oco_exit_code)" >&2
+            if [ "$VERBOSE" = true ]; then
+                warn "Output: $oco_output" >&2
+            fi
         fi
+        
+        # Unstage files for next iteration
+        git reset HEAD "$test_file" >/dev/null 2>&1 || true
         
         # Small delay between runs
         sleep 1
@@ -267,13 +481,29 @@ benchmark_model() {
     
     if [ "$successful_runs" -gt 0 ]; then
         local avg_time=$(echo "scale=2; $total_time / $successful_runs" | bc -l)
-        printf "%.2f" "$avg_time"
+        local avg_quality=$(echo "scale=1; $total_quality / $successful_runs" | bc -l)
+        printf "%.2f,%.1f" "$avg_time" "$avg_quality"
         return 0
     else
         error "All runs failed for $model on $test_type" >&2
-        echo "ERROR"
+        echo "ERROR,ERROR"
         return 1
     fi
+}
+
+# Map model names to oco-model size codes
+get_model_size_from_name() {
+    local model="$1"
+    case "$model" in
+        "mistral:7b") echo "xs" ;;
+        "llama3.2:latest") echo "s" ;;
+        "tavernari/git-commit-message:latest") echo "m" ;;
+        "gemma3:4b") echo "l" ;;
+        "devstral:24b") echo "xl" ;;
+        "gemma3:12b") echo "xxl" ;;
+        "gemma3:27b") echo "xxxl" ;;
+        *) echo "" ;;  # Unknown model - will fallback to direct config
+    esac
 }
 
 # Performance rating based on time
@@ -326,15 +556,18 @@ EOF
     
     # Sort models by average performance
     {
-        echo "| Model | Simple (s) | Complex (s) | Avg (s) | Rating |"
-        echo "|-------|------------|-------------|---------|--------|"
+        echo "| Model | Simple (s) | Simple Quality | Complex (s) | Complex Quality | Avg (s) | Avg Quality | Rating |"
+        echo "|-------|------------|----------------|-------------|-----------------|---------|-------------|--------|"
         
-        while IFS=',' read -r model simple complex avg; do
+        while IFS=',' read -r model simple_time simple_quality complex_time complex_quality avg_time avg_quality; do
             [ "$model" = "Model" ] && continue  # Skip header
-            local rating=$(get_performance_rating "$avg")
-            printf "| \`%s\` | %.2f | %.2f | %.2f | %s |\n" \
-                "$model" "$simple" "$complex" "$avg" "$rating"
-        done < "$RESULTS_DIR/raw_results.csv" | sort -t'|' -k5 -n
+            local rating=$(get_performance_rating "$avg_time")
+            local simple_quality_rating=$(get_quality_rating $(printf "%.0f" "$simple_quality"))
+            local complex_quality_rating=$(get_quality_rating $(printf "%.0f" "$complex_quality"))
+            local avg_quality_rating=$(get_quality_rating $(printf "%.0f" "$avg_quality"))
+            printf "| \`%s\` | %.2f | %s | %.2f | %s | %.2f | %s | %s |\n" \
+                "$model" "$simple_time" "$simple_quality_rating" "$complex_time" "$complex_quality_rating" "$avg_time" "$avg_quality_rating" "$rating"
+        done < "$RESULTS_DIR/raw_results.csv" | sort -t'|' -k6 -n
     } >> "$results_file"
     
     cat >> "$results_file" << 'EOF'
@@ -342,21 +575,31 @@ EOF
 ## Recommendations
 
 ### For OpenCommit Usage:
-- **Best Overall**: Models with < 4s average response time
-- **Quick Commits**: Use models rated ⚡ Excellent for rapid development
-- **Complex Projects**: Models with good complex file performance
+- **Best Overall**: Models with < 4s average response time AND ✅ Good or ⭐ Excellent quality
+- **Quick Commits**: Use models rated ⚡ Excellent performance with ✅+ quality for rapid development
+- **Complex Projects**: Models with ⭐ Excellent quality scores for detailed conventional commits
+- **Quality Priority**: Choose models with ⭐ Excellent quality even if slightly slower
 
 ### Model Selection Guide:
-- **Smaller models (1b-8b)**: Faster responses, good for commit messages
-- **Medium models (7b-14b)**: Better code understanding with reasonable speed
-- **Large models (32b+)**: Maximum capability for complex tasks but slower
+- **Performance Tiers**: ⚡ Excellent (< 2s), 🚀 Good (2-4s), ✅ Average (4-6s), 🐌 Slow (>10s)
+- **Quality Tiers**: ⭐ Excellent (3/3), ✅ Good (2/3), ⚠️ Basic (1/3), ❌ Poor (0/3)
+- **Balanced Choice**: Models with both good performance and quality ratings
+- **Speed vs Quality**: Faster models may sacrifice conventional commit format quality
+
+### Quality Scoring Criteria:
+- **Conventional Format**: Proper `type(scope): description` structure
+- **Valid Types**: feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert
+- **Scope Usage**: Appropriate and helpful scope definitions
+- **Description Quality**: Clear, concise, and meaningful descriptions (10-100 chars)
+- **Multi-commit Breakdown**: Logical separation of different changes
 
 ## Technical Notes
 
-- **Hot Benchmarking**: Each model is warmed up with a simple query before performance testing
-- Tests measure true inference time (not cold-start time) for realistic usage patterns
-- Results may vary based on system resources and model cache status  
-- All measurements use the `--think=false` flag to disable verbose internal reasoning
+- **Hot Benchmarking**: Each model is warmed up before performance testing
+- **Real OpenCommit Testing**: Uses `oco --dry-run --yes` for authentic workflow testing
+- **Quality Analysis**: Automated scoring of conventional commit compliance (0-3 scale)
+- Tests measure true OpenCommit performance including prompt processing and response generation
+- Results may vary based on system resources and model cache status
 
 EOF
 }
@@ -385,11 +628,12 @@ update_readme() {
 |------|-------|------|-------------|
 EOF
 
-    # Add top 3 performers for simple files
+    # Add top 3 performers for simple files (CSV: Model,Simple_Time,Simple_Quality,Complex_Time,Complex_Quality,Avg_Time,Avg_Quality)
     tail -n +2 "$RESULTS_DIR/raw_results.csv" | sort -t',' -k2 -n | head -3 | \
     awk -F',' 'BEGIN{rank=1} {
         rating = ($2 < 2.0) ? "⚡ Excellent" : ($2 < 4.0) ? "🚀 Good" : "✅ Average"
-        printf "| %d | `%s` | %.2fs | %s |\n", rank++, $1, $2, rating
+        quality = ($3 == 0) ? "❌ Poor" : ($3 == 1) ? "⚠️ Basic" : ($3 == 2) ? "✅ Good" : "⭐ Excellent"
+        printf "| %d | `%s` | %.2fs (%s) | %s |\n", rank++, $1, $2, quality, rating
     }' >> "$temp_section"
     
     cat >> "$temp_section" << EOF
@@ -399,24 +643,28 @@ EOF
 |------|-------|------|-------------|
 EOF
 
-    # Add top 3 performers for complex files
-    tail -n +2 "$RESULTS_DIR/raw_results.csv" | sort -t',' -k3 -n | head -3 | \
+    # Add top 3 performers for complex files (column 4 is complex_time, column 5 is complex_quality)
+    tail -n +2 "$RESULTS_DIR/raw_results.csv" | sort -t',' -k4 -n | head -3 | \
     awk -F',' 'BEGIN{rank=1} {
-        rating = ($3 < 2.0) ? "⚡ Excellent" : ($3 < 4.0) ? "🚀 Good" : "✅ Average"
-        printf "| %d | `%s` | %.2fs | %s |\n", rank++, $1, $3, rating
+        rating = ($4 < 2.0) ? "⚡ Excellent" : ($4 < 4.0) ? "🚀 Good" : "✅ Average"
+        quality = ($5 == 0) ? "❌ Poor" : ($5 == 1) ? "⚠️ Basic" : ($5 == 2) ? "✅ Good" : "⭐ Excellent"
+        printf "| %d | `%s` | %.2fs (%s) | %s |\n", rank++, $1, $4, quality, rating
     }' >> "$temp_section"
     
     cat >> "$temp_section" << EOF
 
 ### 📈 All Models Summary
-| Model | Simple (s) | Complex (s) | Avg (s) |
-|-------|------------|-------------|---------|
+| Model | Simple (s) | Simple Quality | Complex (s) | Complex Quality | Avg (s) | Avg Quality |
+|-------|------------|----------------|-------------|-----------------|---------|-------------|
 EOF
 
-    # Add all models summary
-    tail -n +2 "$RESULTS_DIR/raw_results.csv" | sort -t',' -k4 -n | \
+    # Add all models summary (CSV: Model,Simple_Time,Simple_Quality,Complex_Time,Complex_Quality,Avg_Time,Avg_Quality)
+    tail -n +2 "$RESULTS_DIR/raw_results.csv" | sort -t',' -k6 -n | \
     awk -F',' '{
-        printf "| `%s` | %.2f | %.2f | %.2f |\n", $1, $2, $3, $4
+        simple_quality = ($3 == 0) ? "❌" : ($3 == 1) ? "⚠️" : ($3 == 2) ? "✅" : "⭐"
+        complex_quality = ($5 == 0) ? "❌" : ($5 == 1) ? "⚠️" : ($5 == 2) ? "✅" : "⭐"
+        avg_quality = ($7 == 0) ? "❌" : ($7 == 1) ? "⚠️" : ($7 == 2) ? "✅" : "⭐"
+        printf "| `%s` | %.2f | %s | %.2f | %s | %.2f | %s |\n", $1, $2, simple_quality, $4, complex_quality, $6, avg_quality
     }' >> "$temp_section"
     
     echo >> "$temp_section"
@@ -551,7 +799,7 @@ main() {
     
     # Initialize results file
     local raw_results="$RESULTS_DIR/raw_results.csv"
-    echo "Model,Simple,Complex,Average" > "$raw_results"
+    echo "Model,Simple_Time,Simple_Quality,Complex_Time,Complex_Quality,Avg_Time,Avg_Quality" > "$raw_results"
     
     # Benchmark each model
     local total_models=${#MODELS[@]}
@@ -565,19 +813,25 @@ main() {
         warmup_model "$model"
         
         # Step 2: Benchmark on warmed-up model  
-        local simple_time complex_time
+        local simple_result complex_result
         
-        simple_time=$(benchmark_model "$model" "$test_dir/simple.js" "simple")
-        complex_time=$(benchmark_model "$model" "$test_dir/complex.py" "complex")
+        simple_result=$(benchmark_model "$model" "$test_dir/simple.js" "simple")
+        complex_result=$(benchmark_model "$model" "$test_dir/complex.py" "complex")
         
-        # Calculate average
-        if [[ "$simple_time" != "ERROR" && "$complex_time" != "ERROR" ]]; then
+        # Parse results (format: "time,quality")
+        if [[ "$simple_result" != "ERROR,ERROR" && "$complex_result" != "ERROR,ERROR" ]]; then
+            local simple_time simple_quality complex_time complex_quality
+            IFS=',' read -r simple_time simple_quality <<< "$simple_result"
+            IFS=',' read -r complex_time complex_quality <<< "$complex_result"
+            
+            # Calculate averages
             local avg_time=$(echo "scale=2; ($simple_time + $complex_time) / 2" | bc -l)
+            local avg_quality=$(echo "scale=1; ($simple_quality + $complex_quality) / 2" | bc -l)
             
             # Save results
-            echo "$model,$simple_time,$complex_time,$avg_time" >> "$raw_results"
+            echo "$model,$simple_time,$simple_quality,$complex_time,$complex_quality,$avg_time,$avg_quality" >> "$raw_results"
             
-            success "Model $model completed - Avg: ${avg_time}s"
+            success "Model $model completed - Avg: ${avg_time}s, Quality: $(get_quality_rating $(printf "%.0f" "$avg_quality"))"
         else
             warn "Model $model had errors - skipping from results"
         fi
@@ -589,18 +843,17 @@ main() {
     done
     
     # Generate reports
-    generate_report "$RESULTS_DIR/benchmark-results-all.md"
+    generate_report "benchmark-results.md"
     
     if [ "$UPDATE_README" = true ]; then
         update_readme
     fi
     
-    # Cleanup
-    rm -rf "$test_dir"
+    # Cleanup - remove entire results directory
+    rm -rf "$RESULTS_DIR"
     
     success "Benchmarking completed!"
-    log "Results saved to: ${CYAN}$RESULTS_DIR/${NC}"
-    log "View detailed report: ${CYAN}$RESULTS_DIR/benchmark-results-all.md${NC}"
+    log "View detailed report: ${CYAN}benchmark-results.md${NC}"
     
     if [ "$UPDATE_README" = true ]; then
         log "README.md updated with latest results"
