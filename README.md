@@ -20,16 +20,16 @@
 ![Secrets Management](https://img.shields.io/badge/Secrets_Managed-FF6B6B?style=for-the-badge&logo=vault&logoColor=white)
 
 <!-- AI & Automation -->
-![AI Powered](https://img.shields.io/badge/AI_Powered_Commits-4ECDC4?style=for-the-badge&logo=brain&logoColor=white)
-![Tri Provider](https://img.shields.io/badge/Tri--Provider_AI-4ECDC4?style=for-the-badge&logo=openai&logoColor=white)
-![Local LLM](https://img.shields.io/badge/Local_LLM-4ECDC4?style=for-the-badge&logo=robot&logoColor=white)
+![AI Commits](https://img.shields.io/badge/AI_Commits-4ECDC4?style=for-the-badge&logo=robot&logoColor=white)
+![Multiple Providers](https://img.shields.io/badge/Multiple_Providers-4ECDC4?style=for-the-badge&logo=openai&logoColor=white)
+![Local LLM](https://img.shields.io/badge/Local_LLM-4ECDC4?style=for-the-badge&logo=meta&logoColor=white)
 
 <!-- Repository Stats -->
-![License MIT](https://img.shields.io/github/license/C-Hessel/nix-dotfiles?style=for-the-badge&color=green)
-![Last Commit](https://img.shields.io/github/last-commit/C-Hessel/nix-dotfiles?style=for-the-badge&color=blue)
-![Contributors](https://img.shields.io/github/contributors/C-Hessel/nix-dotfiles?style=for-the-badge&color=orange)
-![Repo Size](https://img.shields.io/github/repo-size/C-Hessel/nix-dotfiles?style=for-the-badge&color=purple)
-![Lines of Code](https://img.shields.io/tokei/lines/github/C-Hessel/nix-dotfiles?style=for-the-badge&color=red)
+![License MIT](https://img.shields.io/github/license/Nickolaus/nix-dotfiles?style=for-the-badge&color=green)
+![Last Commit](https://img.shields.io/github/last-commit/Nickolaus/nix-dotfiles?style=for-the-badge&color=blue)
+![Contributors](https://img.shields.io/github/contributors/Nickolaus/nix-dotfiles?style=for-the-badge&color=orange)
+![Repo Size](https://img.shields.io/github/repo-size/Nickolaus/nix-dotfiles?style=for-the-badge&color=purple)
+![Lines of Code](https://img.shields.io/tokei/lines/github/Nickolaus/nix-dotfiles?style=for-the-badge&color=red)
 
 <!-- Development Tools -->
 ![Fish Shell](https://img.shields.io/badge/Fish_Shell-00D4AA?style=for-the-badge&logo=gnu-bash&logoColor=white)
@@ -42,10 +42,10 @@
 ![Hammerspoon](https://img.shields.io/badge/Hammerspoon-FF8C00?style=for-the-badge&logo=lua&logoColor=white)
 ![Homebrew](https://img.shields.io/badge/Homebrew_Integrated-FBB040?style=for-the-badge&logo=homebrew&logoColor=black)
 
-<!-- AI Providers Detail -->
-![Ollama](https://img.shields.io/badge/Ollama-Local_Free-2ECC71?style=for-the-badge&logo=meta&logoColor=white)
-![OpenAI](https://img.shields.io/badge/OpenAI-gpt--4o--mini-412991?style=for-the-badge&logo=openai&logoColor=white)
-![Claude](https://img.shields.io/badge/Claude-3.5_Haiku-FF9500?style=for-the-badge&logo=anthropic&logoColor=white)
+<!-- AI Providers -->
+![Ollama](https://img.shields.io/badge/Ollama-Local-2ECC71?style=for-the-badge&logo=meta&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-Cloud-412991?style=for-the-badge&logo=openai&logoColor=white)
+![Claude](https://img.shields.io/badge/Claude-Advanced-FF9500?style=for-the-badge&logo=anthropic&logoColor=white)
 
 <!-- Quality & Maintenance -->
 ![Flake Check](https://img.shields.io/badge/Flake_Check-Passing-brightgreen?style=for-the-badge&logo=checkmark&logoColor=white)
@@ -58,7 +58,7 @@
 
 **A cross-platform Nix configuration for macOS (nix-darwin) and Linux (NixOS) with Home Manager integration.**
 
-### 🚀 **Key Features**: Tri-Provider AI • SOPS Encryption • Cross-Platform • Modern Tools
+### 🚀 **Key Features**: AI Commit Messages • SOPS Encryption • Cross-Platform • Modern Tools
 
 ## ✨ Features
 
@@ -68,7 +68,7 @@
 - 🔒 **Secrets Management**: SOPS-encrypted secrets with age
 - 📦 **Package Management**: Organized cross-platform and platform-specific packages
 - 🛠️ **Development Tools**: Go, PHP, Neovim, tmux, and more
-- 🤖 **AI-Powered Tools**: Local LLM with ollama + AI commit messages via opencommit
+- 🤖 **AI Commit Messages**: Multiple provider support (local, cloud) via opencommit
 - 🎨 **Modern Terminal**: WezTerm with custom configuration
 - ⌨️ **Automation**: Hammerspoon-based macOS window management and shortcuts
 
@@ -309,21 +309,21 @@ sudo nixos-rebuild switch --flake ~/.config/nix-dotfiles/ --show-trace   # Linux
 
 ## 🤖 AI Tools Quick Start
 
-After installation, you have powerful AI-powered development tools with **tri-provider support**:
+After installation, you have AI commit message tools with **multiple provider support**:
 
-### OpenCommit - AI Commit Messages (3 Providers!)
+### OpenCommit - AI Commit Messages
 ```bash
-# Generate AI-powered commit messages with your preferred provider
+# Generate AI commit messages with your preferred provider
 git add .
 oco                    # Generate and commit with current provider
 
 # Preview messages without committing
 oco --dry-run         # See what message would be generated
 
-# Provider Management (Tri-Provider System) - Auto-configures models!
-oco-local             # Switch to Ollama → tavernari/git-commit-message:latest
-oco-cloud             # Switch to OpenAI → gpt-4o-mini
-oco-claude            # Switch to Claude → claude-3-5-haiku-20241022
+# Provider Management (Multiple Provider System) - Auto-configures models!
+oco-local             # Switch to Ollama (local)
+oco-cloud             # Switch to OpenAI (cloud)
+oco-claude            # Switch to Claude (cloud)
 oco-provider status   # Show detailed provider information
 
 # Health checks and configuration
@@ -343,12 +343,12 @@ ollama-health         # Service status and available models
 ollama-setup          # Initial setup and model download
 
 # Interactive AI chat
-ollama run qwen2.5-coder:3b "Explain this code:"
-ollama run qwen2.5-coder:7b "Help me debug this function:"
+ollama run [model] "Explain this code:"
+ollama run [model] "Help me debug this function:"
 
 # Model management
 ollama list           # Show downloaded models
-ollama pull qwen2.5-coder:7b  # Download coding model
+ollama pull [model]   # Download model
 ```
 
 ### OpenAI & Claude - Cloud Providers (Providers 2 & 3: Premium Quality)
@@ -376,47 +376,30 @@ oco-claude            # Auto-loads Claude key from encrypted secrets
 | **Claude** | ⚡ 7s | 🧠 Advanced | 💰 ~$0.02/commit | ☁️ Cloud API | Complex reasoning, refactoring |
 
 ### Model Selection by Provider
-- **Ollama**: `tavernari/git-commit-message:latest` (~4GB, commit-optimized), `llama3.2:latest` (~2GB), `gemma3:4b` (~2.5GB)
-- **OpenAI**: `gpt-4o-mini` (cost-effective), `gpt-4o` (premium)  
-- **Claude**: `claude-3-5-haiku-20241022` (fast), `claude-3-5-sonnet-20241022` (advanced)
+- **Ollama**: Local models optimized for different tasks (coding, commits, general purpose)
+- **OpenAI**: Range from cost-effective to premium models  
+- **Claude**: Fast and advanced reasoning models available
 
 **🔧 For detailed AI tools usage, see [TOOLS_CHEATSHEET.md](./TOOLS_CHEATSHEET.md#-ai--llm-tools)**
 
 ## 📊 AI Model Performance
 
-Latest benchmark results for OpenCommit AI models (updated automatically):
+**Performance testing demonstrates provider capabilities:**
 
 <!-- BENCHMARK_RESULTS_START -->
-**Last Updated:** 2025-07-15 10:49:00  
-**Models Tested:** 7  
-**Test Environment:** Darwin arm64
+### 🏆 Provider Performance Overview
 
-### 🏆 Top Performers
+**Provider Performance Characteristics:**
+- **Ollama (Local)**: 2-4 second response times, no API costs
+- **OpenAI**: ~2 second response times, excellent quality  
+- **Claude**: ~7 second response times, advanced reasoning capabilities
 
-#### Simple Files (Fastest)
-| Rank | Model | Time | Performance |
-|------|-------|------|-------------|
-| 1 | `llama3.2:latest` | 1.72s (⭐ Excellent) | ⚡ Excellent |
-| 2 | `gemma3:4b` | 1.73s (⭐ Excellent) | ⚡ Excellent |
-| 3 | `mistral:7b` | 2.07s (⚠️ Basic) | 🚀 Good |
+### 📈 Benchmarking Tools
 
-#### Complex Files (Fastest)
-| Rank | Model | Time | Performance |
-|------|-------|------|-------------|
-| 1 | `mistral:7b` | 2.27s (⚠️ Basic) | 🚀 Good |
-| 2 | `llama3.2:latest` | 2.48s (⭐ Excellent) | 🚀 Good |
-| 3 | `gemma3:4b` | 2.97s (⭐ Excellent) | 🚀 Good |
-
-### 📈 All Models Summary
-| Model | Simple (s) | Simple Quality | Complex (s) | Complex Quality | Avg (s) | Avg Quality |
-|-------|------------|----------------|-------------|-----------------|---------|-------------|
-| `llama3.2:latest` | 1.72 | ⭐ | 2.48 | ⭐ | 2.10 | ⭐ |
-| `mistral:7b` | 2.07 | ⚠️ | 2.27 | ⚠️ | 2.17 | ⚠️ |
-| `gemma3:4b` | 1.73 | ⭐ | 2.97 | ⭐ | 2.35 | ⭐ |
-| `tavernari/git-commit-message:latest` | 3.32 | ⭐ | 3.51 | ⚠️ | 3.41 | ⭐ |
-| `devstral:24b` | 3.83 | ⭐ | 4.31 | ⚠️ | 4.07 | ⭐ |
-| `gemma3:12b` | 2.81 | ⭐ | 6.30 | ⭐ | 4.55 | ⭐ |
-| `gemma3:27b` | 4.53 | ⭐ | 12.56 | ⭐ | 8.54 | ⭐ |
+The configuration includes comprehensive benchmarking tools for testing different models and providers:
+- Use `scripts/hot-benchmark.sh` for automated performance testing
+- Compare models with `oco-model-switch` for optimal selection
+- Provider-specific optimization built into each configuration
 
 **📋 For detailed analysis and recommendations, see:** `results/benchmark-results-all.md`
 <!-- BENCHMARK_RESULTS_END -->
@@ -427,7 +410,7 @@ Latest benchmark results for OpenCommit AI models (updated automatically):
 scripts/hot-benchmark.sh
 
 # Test specific models
-scripts/hot-benchmark.sh -m qwen2.5-coder:3b,llama3.2:3b
+scripts/hot-benchmark.sh -m [model1],[model2]
 ```
 
 ## 🔧 Git Integration & Workflow
