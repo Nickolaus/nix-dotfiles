@@ -299,10 +299,10 @@ oco                    # Generate and commit with current provider
 # Preview messages without committing
 oco --dry-run         # See what message would be generated
 
-# Provider Management (Tri-Provider System)
-oco-local             # Switch to Ollama (local, private, free)
-oco-cloud             # Switch to OpenAI (cloud, premium quality)
-oco-claude            # Switch to Claude (advanced reasoning)
+# Provider Management (Tri-Provider System) - Auto-configures models!
+oco-local             # Switch to Ollama → tavernari/git-commit-message:latest
+oco-cloud             # Switch to OpenAI → gpt-4o-mini
+oco-claude            # Switch to Claude → claude-3-5-haiku-20241022
 oco-provider status   # Show detailed provider information
 
 # Health checks and configuration
@@ -355,9 +355,9 @@ oco-claude            # Auto-loads Claude key from encrypted secrets
 | **Claude** | ⚡ 7s | 🧠 Advanced | 💰 ~$0.02/commit | ☁️ Cloud API | Complex reasoning, refactoring |
 
 ### Model Selection by Provider
-- **Ollama**: `qwen2.5-coder:3b` (~2GB), `gemma3:4b` (~2.5GB)
+- **Ollama**: `tavernari/git-commit-message:latest` (~4GB, commit-optimized), `llama3.2:latest` (~2GB), `gemma3:4b` (~2.5GB)
 - **OpenAI**: `gpt-4o-mini` (cost-effective), `gpt-4o` (premium)  
-- **Claude**: `claude-3-5-haiku` (fast), `claude-3-5-sonnet` (advanced)
+- **Claude**: `claude-3-5-haiku-20241022` (fast), `claude-3-5-sonnet-20241022` (advanced)
 
 **🔧 For detailed AI tools usage, see [TOOLS_CHEATSHEET.md](./TOOLS_CHEATSHEET.md#-ai--llm-tools)**
 

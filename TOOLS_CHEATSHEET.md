@@ -145,10 +145,10 @@ oco --dry-run        # See what message would be generated
 
 #### Provider Management (Core Feature)
 ```bash
-# Switch between providers
-oco-local            # Switch to Ollama (local, private, free)
-oco-cloud            # Switch to OpenAI (cloud, premium quality)  
-oco-claude           # Switch to Claude (advanced reasoning)
+# Switch between providers (automatically sets optimal model!)
+oco-local            # Switch to Ollama → tavernari/git-commit-message:latest
+oco-cloud            # Switch to OpenAI → gpt-4o-mini  
+oco-claude           # Switch to Claude → claude-3-5-haiku-20241022
 oco-provider         # Full provider management interface
 
 # Provider status and health
@@ -158,6 +158,13 @@ oco-provider status  # Detailed provider information and diagnostics
 # Setup commands
 oco-provider setup   # Interactive API key configuration (OpenAI/Claude)
 ```
+
+#### 🎯 **Automatic Model Selection** (New!)
+When you switch providers, the system automatically configures the optimal model:
+- **No manual model configuration needed**
+- **Each provider gets its best-suited model**
+- **Prevents model compatibility issues**
+- **Seamless switching experience**
 
 #### Core OpenCommit Commands
 ```bash
@@ -191,21 +198,21 @@ oco-chore            # chore: commit message
 ##### 🏠 Ollama (Local Provider)
 ```bash
 # Switch to local provider
-oco-local
+oco-local                    # Automatically sets model: tavernari/git-commit-message:latest
 
 # Configuration:
 # - API URL: http://127.0.0.1:11434/v1 (local ollama)
-# - Default Model: qwen2.5-coder:3b (optimized for code commits)
-# - Alternative: gemma3:4b (balanced performance)
+# - Default Model: tavernari/git-commit-message:latest (commit-optimized)
+# - Alternative: llama3.2:latest, gemma3:4b (general purpose)
 # - Cost: 100% Free
 # - Privacy: 100% Local (never leaves your machine)
-# - Speed: 2-3 seconds
+# - Speed: 2-3 seconds (varies by model size)
 ```
 
 ##### ☁️ OpenAI (Cloud Provider)
 ```bash
 # Switch to OpenAI provider
-oco-cloud
+oco-cloud                    # Automatically sets model: gpt-4o-mini
 
 # Configuration:
 # - API URL: https://api.openai.com/v1
@@ -220,12 +227,12 @@ oco-cloud
 ##### 🧠 Claude (Advanced Provider)
 ```bash
 # Switch to Claude provider 
-oco-claude
+oco-claude                   # Automatically sets model: claude-3-5-haiku-20241022
 
 # Configuration:
 # - API URL: https://api.anthropic.com/v1
 # - Default Model: claude-3-5-haiku-20241022 (fast)
-# - Alternative: claude-3-5-sonnet (advanced reasoning)
+# - Alternative: claude-3-5-sonnet-20241022 (advanced reasoning)
 # - Cost: ~$0.02 per commit message
 # - Privacy: Data sent to Anthropic
 # - Speed: ~7 seconds
