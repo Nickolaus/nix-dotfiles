@@ -1,6 +1,43 @@
 # nix-dotfiles
 
-A cross-platform Nix configuration for macOS (nix-darwin) and Linux (NixOS) with Home Manager integration.
+<!-- Badges -->
+<div align="center">
+
+![Nix](https://img.shields.io/badge/Nix-5277C3.svg?style=for-the-badge&logo=NixOS&logoColor=white)
+![macOS](https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white)
+![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)
+![Home Manager](https://img.shields.io/badge/Home_Manager-41B883?style=for-the-badge&logo=homeassistant&logoColor=white)
+
+![AI Powered](https://img.shields.io/badge/AI_Powered-FF6B35?style=for-the-badge&logo=openai&logoColor=white)
+![SOPS](https://img.shields.io/badge/SOPS_Encrypted-FF0080?style=for-the-badge&logo=mozilla&logoColor=white)
+![Determinate Systems](https://img.shields.io/badge/Determinate_Systems-0969DA?style=for-the-badge&logo=nix&logoColor=white)
+
+![License](https://img.shields.io/github/license/C-Hessel/nix-dotfiles?style=for-the-badge)
+![Last Commit](https://img.shields.io/github/last-commit/C-Hessel/nix-dotfiles?style=for-the-badge)
+![Repo Size](https://img.shields.io/github/repo-size/C-Hessel/nix-dotfiles?style=for-the-badge)
+![Stars](https://img.shields.io/github/stars/C-Hessel/nix-dotfiles?style=for-the-badge)
+
+![OpenCommit](https://img.shields.io/badge/OpenCommit-Tri--Provider-4CAF50?style=for-the-badge&logo=git&logoColor=white)
+![Ollama](https://img.shields.io/badge/Ollama-Local_LLM-FF6B35?style=for-the-badge&logo=meta&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o-412991?style=for-the-badge&logo=openai&logoColor=white)
+![Claude](https://img.shields.io/badge/Claude-3.5_Haiku-FF9500?style=for-the-badge&logo=anthropic&logoColor=white)
+
+![Fish Shell](https://img.shields.io/badge/Fish_Shell-FF6B35?style=for-the-badge&logo=gnu-bash&logoColor=white)
+![Neovim](https://img.shields.io/badge/Neovim-57A143?style=for-the-badge&logo=neovim&logoColor=white)
+![tmux](https://img.shields.io/badge/tmux-1BB91F?style=for-the-badge&logo=tmux&logoColor=white)
+![WezTerm](https://img.shields.io/badge/WezTerm-4E49EE?style=for-the-badge&logo=windows-terminal&logoColor=white)
+
+![AeroSpace](https://img.shields.io/badge/AeroSpace-Window_Manager-FF69B4?style=for-the-badge&logo=rectangle&logoColor=white)
+![Hammerspoon](https://img.shields.io/badge/Hammerspoon-Automation-FF6B35?style=for-the-badge&logo=lua&logoColor=white)
+![Lazygit](https://img.shields.io/badge/Lazygit-TUI-F05032?style=for-the-badge&logo=git&logoColor=white)
+
+</div>
+
+---
+
+**A cross-platform Nix configuration for macOS (nix-darwin) and Linux (NixOS) with Home Manager integration.**
+
+### 🚀 **Key Features**: Tri-Provider AI • SOPS Encryption • Cross-Platform • Modern Tools
 
 ## ✨ Features
 
