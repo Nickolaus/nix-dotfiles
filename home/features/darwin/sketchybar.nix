@@ -92,7 +92,7 @@ lib.mkIf pkgs.stdenv.isDarwin {
       # Enhanced system monitoring with interactivity
       sketchybar --add item clock right \
                  --set clock update_freq=10 icon= script="$PLUGIN_DIR/clock.sh" \
-                           click_script="open -a 'Clock mini'" \
+                           click_script="open 'msteams://teams.microsoft.com/l/entity/ef56c0de-d29a-4bbf-a32c-043b63007997/calendar'" \
                  --add item network right \
                  --set network update_freq=5 script="$PLUGIN_DIR/network.sh" \
                            click_script="open /System/Library/PreferencePanes/Network.prefPane" \
@@ -427,7 +427,7 @@ lib.mkIf pkgs.stdenv.isDarwin {
       # the item invoking this script:
       # https://felixkratz.github.io/SketchyBar/config/events#events-and-scripting
 
-      sketchybar --set "$NAME" label="$(date '+%d/%m %H:%M')"
+      sketchybar --set "$NAME" label="$(date '+%d.%m %H:%M')"
     '';
     executable = true;
   };
