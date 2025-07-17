@@ -11,6 +11,7 @@
     ../../modules/darwin/aerospace
     ../../modules/darwin/brew
     ../../modules/darwin/system
+    ../../modules/darwin/sketchybar
   ];
 
   system.stateVersion = 5;

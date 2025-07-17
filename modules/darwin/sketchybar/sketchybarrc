@@ -1,0 +1,112 @@
+#!/bin/bash
+
+# SketchyBar Configuration
+# This configures a custom status bar for macOS that integrates with AeroSpace workspace management
+
+# Bar Appearance
+sketchybar --bar height=32 \
+                 blur_radius=30 \
+                 position=top \
+                 sticky=off \
+                 padding_left=10 \
+                 padding_right=10 \
+                 color=0xff24273a \
+                 topmost=window \
+                 margin=5 \
+                 corner_radius=9
+
+# Defaults
+sketchybar --default icon.font="SF Pro:Semibold:15.0" \
+                     icon.color=0xffffffff \
+                     label.font="SF Pro:Semibold:15.0" \
+                     label.color=0xffffffff \
+                     padding_left=5 \
+                     padding_right=5 \
+                     label.padding_left=4 \
+                     label.padding_right=10 \
+                     icon.padding_left=10 \
+                     icon.padding_right=4
+
+# Left Side - Workspace Indicators (integrates with AeroSpace)
+sketchybar --add item apple.logo left \
+           --set apple.logo icon= \
+                           background.color=0xff494d64 \
+                           background.corner_radius=6 \
+                           background.height=26 \
+                           click_script="aerospace workspace 1"
+
+# Workspace indicators for AeroSpace (workspaces 1-9 as configured)
+for i in {1..9}; do
+  sketchybar --add item space.$i left \
+             --set space.$i background.color=0xff24273a \
+                           background.corner_radius=6 \
+                           background.height=26 \
+                           background.drawing=off \
+                           label="$i" \
+                           icon.drawing=off \
+                           click_script="aerospace workspace $i" \
+                           script="$CONFIG_DIR/plugins/aerospace.sh"
+done
+
+# Left side separator  
+sketchybar --add item left_separator left \
+           --set left_separator icon= \
+                               icon.color=0xff494d64 \
+                               background.drawing=off
+
+# Center - Currently focused application
+sketchybar --add item front_app center \
+           --set front_app background.color=0xff494d64 \
+                           background.corner_radius=6 \
+                           background.height=26 \
+                           script="$CONFIG_DIR/plugins/front_app.sh" \
+           --subscribe front_app front_app_switched
+
+# Right Side - System Information
+# CPU Usage
+sketchybar --add item cpu right \
+           --set cpu update_freq=5 \
+                     script="$CONFIG_DIR/plugins/cpu.sh" \
+                     background.color=0xff494d64 \
+                     background.corner_radius=6 \
+                     background.height=26
+
+# Memory Usage  
+sketchybar --add item memory right \
+           --set memory update_freq=5 \
+                        script="$CONFIG_DIR/plugins/memory.sh" \
+                        background.color=0xff494d64 \
+                        background.corner_radius=6 \
+                        background.height=26
+
+# Battery
+sketchybar --add item battery right \
+           --set battery update_freq=10 \
+                         script="$CONFIG_DIR/plugins/battery.sh" \
+                         background.color=0xff494d64 \
+                         background.corner_radius=6 \
+                         background.height=26 \
+           --subscribe battery system_woke power_source_change
+
+# Clock
+sketchybar --add item clock right \
+           --set clock update_freq=1 \
+                       script="$CONFIG_DIR/plugins/clock.sh" \
+                       background.color=0xff494d64 \
+                       background.corner_radius=6 \
+                       background.height=26
+
+# Notification Center
+sketchybar --add item notification_center right \
+           --set notification_center icon= \
+                                    background.color=0xff494d64 \
+                                    background.corner_radius=6 \
+                                    background.height=26 \
+                                    click_script="open -b com.apple.notificationcenterui"
+
+# Events
+sketchybar --add event aerospace_workspace_change
+sketchybar --add event aerospace_focus_change
+
+# Update the bar
+sketchybar --update 

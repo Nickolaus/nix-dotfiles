@@ -33,6 +33,7 @@ lib.mkIf pkgs.stdenv.isDarwin {
     # ═══════════════════════════════════════════════════════════════════════════
     betterdisplay # Display management tool for macOS
     flameshot # Powerful screenshot software
+    sketchybar-app-font # Ligature-based symbol font for SketchyBar (supports Homebrew SketchyBar)
     # Add macOS-specific utilities here
     
     # ═══════════════════════════════════════════════════════════════════════════
