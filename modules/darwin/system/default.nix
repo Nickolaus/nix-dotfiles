@@ -18,6 +18,8 @@
     mru-spaces = false;
   };
 
+  # Menu bar configuration moved to SketchyBar module
+
   security.pam.services.sudo_local.touchIdAuth = true;
 
   system.keyboard = {

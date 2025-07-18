@@ -20,6 +20,7 @@
 
     taps = [
       "aws/tap"
+      "FelixKratz/formulae"  # SketchyBar - macOS status bar replacement
     ];
 
     # CLI tools not available or problematic in Nix
@@ -28,6 +29,7 @@
       "argocd"                   # Declarative continuous delivery tool for Kubernetes
       "mysql-client"             # MySQL client for interacting with MySQL databases
       "television"               # Terminal-based TV streaming application
+      "sketchybar"               # Highly customizable macOS status bar (requires system permissions)
     ];
 
     # GUI applications and system integrations

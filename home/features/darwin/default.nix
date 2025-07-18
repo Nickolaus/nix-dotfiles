@@ -1,8 +1,8 @@
-{ pkgs, lib, ... }:
-{
+{ ... }: {
   imports = [
     ./packages.nix
-    ./keybindings
     ./shell.nix
+    ./keybindings
+    ./sketchybar.nix
   ];
 } 

@@ -15,6 +15,11 @@
         "move-mouse window-lazy-center"
       ];
 
+      # SketchyBar integration - notify on workspace changes
+      exec-on-workspace-change = ["/bin/bash" "-c" 
+        "sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE"
+      ];
+
       automatically-unhide-macos-hidden-apps = false;
 
       accordion-padding = 30;
@@ -23,8 +28,14 @@
 
       gaps = {
         outer.bottom = 0;
-        outer.top = 0;
-                outer.left = 1;
+        # Per-monitor top gaps: Reserve 24px for SketchyBar on external displays, 0px on built-in (it handles this correctly)
+        outer.top = [
+          { monitor."built-in" = 0; }       # Built-in display: no gap (SketchyBar works correctly)
+          { monitor."main" = 24; }          # Main display: 24px gap for SketchyBar
+          { monitor."LG HDR 4K" = 24; }     # Portrait display: 24px gap for SketchyBar
+          24                                # Default: 24px gap for any other displays
+        ];
+        outer.left = 1;
         outer.right = 1;
         inner.horizontal = 3;
         inner.vertical = 3;
