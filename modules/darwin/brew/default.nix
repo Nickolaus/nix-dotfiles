@@ -30,6 +30,7 @@
       "mysql-client"             # MySQL client for interacting with MySQL databases
       "television"               # Terminal-based TV streaming application
       "sketchybar"               # Highly customizable macOS status bar (requires system permissions)
+      "switchaudio-osx"          # Command-line utility to switch audio devices (for SketchyBar volume control)
     ];
 
     # GUI applications and system integrations
