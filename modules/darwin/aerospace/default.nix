@@ -35,7 +35,7 @@
           { monitor."LG HDR 4K" = 24; }     # Portrait display: 24px gap for SketchyBar
           24                                # Default: 24px gap for any other displays
         ];
-        outer.left = 1;
+                outer.left = 1;
         outer.right = 1;
         inner.horizontal = 3;
         inner.vertical = 3;

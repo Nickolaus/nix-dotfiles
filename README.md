@@ -22,7 +22,7 @@
 <!-- AI & Automation -->
 ![OpenCommit](https://img.shields.io/badge/OpenCommit-Integrated-4ECDC4?style=for-the-badge&logo=git&logoColor=white)
 
-<!-- Repository Stats -->
+<!-- Repository Stats -->|
 ![License MIT](https://img.shields.io/github/license/Nickolaus/nix-dotfiles?style=for-the-badge&color=green)
 ![Last Commit](https://img.shields.io/github/last-commit/Nickolaus/nix-dotfiles?style=for-the-badge&color=blue)
 ![Contributors](https://img.shields.io/github/contributors/Nickolaus/nix-dotfiles?style=for-the-badge&color=orange)
