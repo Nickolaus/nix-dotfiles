@@ -40,6 +40,7 @@
       "gitify"              # GitHub notifications app for macOS
       "sourcetree"          # Git GUI client, not available in nixpkgs
       "babeledit"           # Localization editor for translating apps and websites
+      "steam"               # Gaming platform, not properly available in nixpkgs for Darwin
     ];
   };
 }
