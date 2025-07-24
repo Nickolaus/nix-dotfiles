@@ -42,6 +42,7 @@
       "babeledit"           # Localization editor for translating apps and websites
       "steam"               # Gaming platform, not properly available in nixpkgs for Darwin
       "logitech-options"    # Logitech Options+ software for MX mouse configuration and customization
+      "ddpm"                # Dell Display and Peripheral Manager for Dell monitors and webcams
     ];
   };
 }
