@@ -29,6 +29,11 @@
       format = "yaml";
       mode = "0600";
     };
-  };
 
+    secrets.github_token = {
+      path = "${config.home.homeDirectory}/.config/nix/github_token";
+      format = "yaml";
+      mode = "0600";
+    };
+  };
 }
