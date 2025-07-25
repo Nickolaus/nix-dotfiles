@@ -43,6 +43,7 @@
       "steam"               # Gaming platform, not properly available in nixpkgs for Darwin
       "logitech-options"    # Logitech Options+ software for MX mouse configuration and customization
       "ddpm"                # Dell Display and Peripheral Manager for Dell monitors and webcams
+      "fathom"              # AI meeting notetaker and analytics app, not available in nixpkgs
     ];
   };
 }
