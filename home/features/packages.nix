@@ -28,6 +28,7 @@
     ncdu
     broot                    # Interactive directory tree navigator
     lsof
+    upx                      # Binary compression tool
     coreutils
     pigz
     wget
@@ -73,6 +74,8 @@
     bun
     mise
     asdf-vm
+    go
+    gnumake
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🔧 DEVELOPMENT TOOLS & VERSION CONTROL

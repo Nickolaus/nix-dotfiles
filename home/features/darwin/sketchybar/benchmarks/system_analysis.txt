@@ -1,0 +1,19 @@
+=== System Resource Analysis ===
+Timestamp: Sun Jul 27 14:46:24 CEST 2025
+
+=== CPU INFO ===
+Apple M4 Pro
+CPU cores: 14
+
+=== MEMORY INFO ===
+Total memory: 48GB
+
+=== DISK INFO ===
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/disk3s1s1  927G  296G  631G  32% /
+
+=== CACHE INFO ===
+Cache directory size: 8.0K
+Cache files:
+-rw-r--r-- 1 C.Hessel staff 6 Jul 27 14:42 /Users/C.Hessel/.cache/sketchybar-go/memory_history
+-rw-r--r-- 1 C.Hessel staff 6 Jul 27 14:42 /Users/C.Hessel/.cache/sketchybar-go/cpu_history

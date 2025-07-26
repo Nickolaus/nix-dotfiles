@@ -1,0 +1,28 @@
+=== SketchyBar Go Plugins Performance Report ===
+Generated: Sun Jul 27 14:46:25 CEST 2025
+Test iterations: 10 per plugin
+
+=== INDIVIDUAL PLUGIN PERFORMANCE ===
+[0;34m[INFO][0m Profiling plugin: cpu |            |          |          |             
+[0;34m[INFO][0m Profiling plugin: memory |            |          |          |             
+[0;34m[INFO][0m Profiling plugin: network |            |          |          |             
+[0;34m[INFO][0m Profiling plugin: battery |            |          |          |             
+[0;34m[INFO][0m Profiling plugin: volume |            |          |          |             
+[0;34m[INFO][0m Profiling plugin: front_app |            |          |          |             
+[0;34m[INFO][0m Profiling plugin: notifications |            |          |          |             
+[0;34m[INFO][0m Profiling plugin: clock |            |          |          |             
+[0;34m[INFO][0m Profiling plugin: moon_phase |            |          |          |             
+[0;34m[INFO][0m Profiling plugin: weather |            |          |          |             
+[0;34m[INFO][0m Profiling plugin: spotify |            |          |          |             
+
+=== PERFORMANCE RECOMMENDATIONS ===
+✅ Excellent performers: cpu front_app clock moon_phase spotify
+⚠️  Plugins needing optimization: network notifications
+   Consider: caching, async operations, or algorithm improvements
+
+=== FILES GENERATED ===
+- Performance summary: performance_summary.txt
+- Performance data: performance_data.csv
+- Cache effectiveness: cache_effectiveness.txt
+- System analysis: system_analysis.txt
+- Individual profiles: {plugin}_profile.txt
