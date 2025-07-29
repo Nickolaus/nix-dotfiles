@@ -590,6 +590,71 @@ pgrep -fl aerospace
 MonitorManager.applyLayouts()
 ```
 
+### 🖱️ Mouse Gesture Automation (Logitech MX Master 3S)
+
+Configure your MX Master 3S gesture button to trigger workspace and window management using existing keyboard shortcuts.
+
+#### ✅ Recommended Setup
+
+**In Logitech Options+:**
+1. **Open Logitech Options+** and select your MX Master 3S
+2. **Go to "Buttons" or "Gestures" tab**
+3. **Configure the Gesture Button (thumb button):**
+
+| **Gesture** | **Action** | **Keystroke** | **Function** |
+|-------------|------------|---------------|--------------|
+| **← Left**  | Send Keys  | `Alt+Shift+P` | Previous workspace |
+| **→ Right** | Send Keys  | `Alt+Shift+N` | Next workspace |
+| **↑ Up**    | Send Keys  | `Cmd+Ctrl+F` | **Toggle Fullscreen** |
+| **↓ Down**  | Send Keys  | `Cmd+Shift+X` | **Flameshot** (screenshot selection) |
+| **Click Only** | Send Keys  | `Ctrl+↑` | **Mission Control** (window overview) |
+
+#### 🎯 Why This Setup Works Great
+
+**Perfect for any display orientation:**
+- **Left/Right**: Workspace navigation (direction-independent)
+- **Up**: Fullscreen toggle - works in all macOS apps, intuitive (up = bigger)
+- **Down**: Screenshot selection - incredibly useful for documentation/sharing
+- **Click**: Mission Control - quick window overview without accidental screenshots
+
+**No spatial confusion** with rotated displays - these are app-level and system-level actions.
+
+#### 🔄 Alternative Options (If You Prefer Different Actions)
+
+**Screenshot Alternatives:**
+- **Down**: `Cmd+Shift+A` → Full screen screenshot (instead of selection)
+- **Down**: `Cmd+Shift+4` → Native macOS screenshot selection
+
+**Window Management Alternatives:**
+- **Up**: `Alt+Shift+Space` → Toggle floating/tiling layout (Aerospace-specific)
+- **Down**: `Cmd+H` → Hide current app (more reversible than minimize)
+
+**Quick Access Alternatives:**
+- **Up**: `Alt+Enter` → Open new terminal
+- **Down**: `Alt+B` → Open Chrome browser
+
+**Click-Only Alternatives:**
+- **Click**: `Alt+Tab` → App switcher
+- **Click**: `F3` → Mission Control (alternative shortcut)
+
+#### 🚫 What NOT to Configure
+
+**Avoid conflicts by keeping Options+ simple:**
+- Don't use gesture button for "Default" mouse actions
+- Don't enable "Smart Actions" that might interfere
+- Use Options+ **only** for DPI, polling rate, and battery settings
+- Keep gesture detection **only** for the thumb button
+
+#### ✅ Why This Works
+
+1. **Display-agnostic**: No directional confusion with rotated/portrait monitors
+2. **Universal shortcuts**: `Cmd+Ctrl+F` and `Ctrl+↑` work system-wide in all apps
+3. **Intuitive mapping**: Up = bigger (fullscreen), Down = overview (Mission Control)
+4. **Reliable**: Uses standard HID keyboard events
+5. **Integrated**: Leverages existing Aerospace workspace shortcuts  
+6. **Conflict-free**: No event interception issues
+7. **Persistent**: Survives system updates and reboots
+
 ## 🧪 Testing
 
 ### Validate Configuration
