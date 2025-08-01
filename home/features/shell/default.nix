@@ -61,6 +61,9 @@
       "nsh" = "nix-shell";
       "nb" = "nix build";
       
+      # ☁️ AWS Profile Management
+      "awsw" = "aws-whoami";
+      
       # 🚀 Development
       "vim" = "nvim";
       "v" = "nvim";
@@ -196,20 +199,57 @@
       t = ''
         tmux attach -t "$(tmux ls -F '#{session_name}:#{window_name}' | fzf)"
       '';
+      # 🔄 AWS Profile Management Functions
       awsx = ''
-        if test -z $AWSX_PROFILES
-            set -gx AWS_PROFILES (aws configure list-profiles | string split0)
+        if test -z $AWS_PROFILES
+            set -gx AWS_PROFILES (aws configure list-profiles 2>/dev/null | string split \n)
         end
 
-        set -gx AWS_PROFILE (echo $AWS_PROFILES | fzf)
+        if test (count $AWS_PROFILES) -eq 0
+            echo "❌ No AWS profiles found. Configure profiles with 'aws configure sso'"
+            return 1
+        end
 
-        echo "Using profile: $AWS_PROFILE"
+        set selected_profile (printf '%s\n' $AWS_PROFILES | fzf --height=15 --prompt="🔧 Select AWS Profile: " --preview="echo 'Profile: {}'" --preview-window=up:2)
+        
+        if test -n "$selected_profile"
+            set -gx AWS_PROFILE "$selected_profile"
+            echo "✅ Using AWS profile: $AWS_PROFILE"
+            _aws_validate_session
+        else
+            echo "❌ No profile selected"
+            return 1
+        end
+      '';
+
+      # Show current AWS profile and identity
+      aws-whoami = ''
+        if test -n "$AWS_PROFILE"
+            echo "🔧 Current AWS Profile: $AWS_PROFILE"
+            echo "📋 Identity Information:"
+            aws sts get-caller-identity --output table 2>/dev/null || echo "❌ Unable to get identity (session may be expired)"
+        else
+            echo "❌ No AWS profile currently set. Use 'awsx' to select one."
+        end
+      '';
+
+      # Internal helper function for session validation
+      _aws_validate_session = ''
+        echo "🔍 Validating AWS session..."
         aws sts get-caller-identity &> /dev/null
         if test $status != 0
-            echo "AWS SSO Session expired. Logging in..."
-            aws sso login
+            echo "⚠️  AWS SSO session expired or invalid. Attempting to login..."
+            aws sso login --profile $AWS_PROFILE
+            if test $status -eq 0
+                echo "✅ Successfully authenticated!"
+                aws sts get-caller-identity --output table
+            else
+                echo "❌ Authentication failed for profile: $AWS_PROFILE"
+            end
         else
-            echo "Found valid SSO session, using it!"
+            echo "✅ Valid AWS session found!"
+            aws sts get-caller-identity --query "Account" --output text | read -l account_id
+            echo "📊 Account ID: $account_id"
         end
       '';
       
@@ -235,7 +275,12 @@
     enable = true;
 
     settings = {
-      aws.disabled = true;
+      aws = {
+        disabled = false;
+        format = "[$symbol($profile )($region )]($style)";
+        symbol = "☁️ ";
+        style = "bold yellow";
+      };
       gcloud.disabled = true;
       git_status.disabled = true;
       command_timeout = 1500;

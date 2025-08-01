@@ -95,6 +95,7 @@
     mkcert
     commitizen               # Interactive commit message builder
     opencommit              # AI-powered commit message generator
+    npm-check-updates       # Find newer versions of package dependencies
     ast-grep                 # Structural code search and rewriting
     
     # ═══════════════════════════════════════════════════════════════════════════
