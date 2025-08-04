@@ -26,6 +26,7 @@ lib.mkIf pkgs.stdenv.isLinux {
     # ═══════════════════════════════════════════════════════════════════════════
     # 🛠️ SYSTEM UTILITIES (Linux)
     # ═══════════════════════════════════════════════════════════════════════════
+    ksnip # Cross-platform screenshot tool with annotation features (Linux alternative to Lightshot)
     # VPN & Network Management tools would go here
     
     # ═══════════════════════════════════════════════════════════════════════════

@@ -606,7 +606,7 @@ Configure your MX Master 3S gesture button to trigger workspace and window manag
 | **← Left**  | Send Keys  | `Alt+Shift+P` | Previous workspace |
 | **→ Right** | Send Keys  | `Alt+Shift+N` | Next workspace |
 | **↑ Up**    | Send Keys  | `Cmd+Ctrl+F` | **Toggle Fullscreen** |
-| **↓ Down**  | Send Keys  | `Cmd+Shift+X` | **Flameshot** (screenshot selection) |
+| **↓ Down**  | Send Keys  | `Cmd+Shift+X` | **Shottr** (macOS) / **ksnip** (Linux) |
 | **Click Only** | Send Keys  | `Ctrl+↑` | **Mission Control** (window overview) |
 
 #### 🎯 Why This Setup Works Great

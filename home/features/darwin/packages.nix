@@ -33,7 +33,7 @@ lib.mkIf pkgs.stdenv.isDarwin {
     # 🛠️ SYSTEM UTILITIES (macOS)
     # ═══════════════════════════════════════════════════════════════════════════
     betterdisplay # Display management tool for macOS
-    flameshot # Powerful screenshot software
+    # Screenshot functionality: Use Lightshot via Homebrew (ksnip not available on Darwin)
     sketchybar-app-font # Ligature-based symbol font for SketchyBar (supports Homebrew SketchyBar)
     # Add macOS-specific utilities here
     

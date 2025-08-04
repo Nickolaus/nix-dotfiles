@@ -45,6 +45,7 @@
       "logi-options+"       # For hardware settings (DPI, etc.) - disable gesture features to avoid conflicts with Hammerspoon
       "ddpm"                # Dell Display and Peripheral Manager for Dell monitors and webcams
       "fathom"              # AI meeting notetaker and analytics app, not available in nixpkgs
+      "shottr"              # Lightweight screenshot tool with URL scheme API support
     ];
   };
 }
