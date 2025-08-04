@@ -36,6 +36,14 @@
         identitiesOnly = true;
       };
       
+      # Personal Home Assistant
+      "home-assistant" = {
+        hostname = "192.168.2.50";
+        user = "root";
+        identityFile = "~/.ssh/id_ed25519_personal";  # Personal key
+        identitiesOnly = true;
+      };
+      
       # Work GitHub (default - no special hostname needed)
       "github.com" = {
         hostname = "github.com";
