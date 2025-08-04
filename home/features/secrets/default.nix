@@ -13,7 +13,13 @@
     defaultSopsFile = ./secrets.yaml;
 
     secrets.ssh_key = {
-      path = "${config.home.homeDirectory}/.ssh/id_ed225519";
+      path = "${config.home.homeDirectory}/.ssh/id_ed25519";
+      format = "yaml";
+      mode = "0600";
+    };
+
+    secrets.ssh_key_personal = {
+      path = "${config.home.homeDirectory}/.ssh/id_ed25519_personal";
       format = "yaml";
       mode = "0600";
     };

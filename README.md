@@ -167,6 +167,15 @@ sops.secrets.api_key = {
 programs.some-app.apiKey = config.sops.secrets.api_key.path;
 ```
 
+**SSH key management example**:
+```bash
+# Work repositories (default)
+git clone git@github.com:company/repo.git
+
+# Personal repositories (explicit hostname)  
+git clone git@github.com-personal:user/repo.git
+```
+
 ##### Key Management
 
 **Backup your private key**:
