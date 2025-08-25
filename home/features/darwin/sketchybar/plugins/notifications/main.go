@@ -260,15 +260,24 @@ func (p *NotificationsPlugin) getNotificationCountOptimizedUnifiedLog(info *Noti
 	return nil
 }
 
-// getTimeBasedEstimate provides ultra-fast time-based estimate
+// getTimeBasedEstimate provides intelligent system-aware estimate
 func (p *NotificationsPlugin) getTimeBasedEstimate() int {
+	// First try to get actual notification count from Notification Center
+	if notifications, err := p.getRecentNotifications(); err == nil {
+		actualCount := len(notifications)
+		if actualCount > 0 {
+			return actualCount
+		}
+	}
+
+	// Fallback to time-based estimate only if no actual notifications found
 	hour := time.Now().Hour()
 	if hour >= 9 && hour <= 17 { // Work hours
-		return 3
+		return 0 // Show actual state during work hours
 	} else if hour >= 18 && hour <= 22 { // Evening
-		return 2
+		return 0 // Show actual state in evening
 	}
-	return 1 // Night/early morning
+	return 0 // Show actual state (no fake notifications)
 }
 
 // getNotificationCountFromAppBadges counts active app badges
@@ -468,6 +477,173 @@ func (p *NotificationsPlugin) HandleToggleAction() error {
 	return nil
 }
 
+// HandleShowAction shows pending notifications
+func (p *NotificationsPlugin) HandleShowAction() error {
+	p.logger.Info("Showing pending notifications")
+
+	// Get recent notifications via AppleScript
+	notifications, err := p.getRecentNotifications()
+	if err != nil {
+		p.logger.Warning("Failed to get recent notifications: %v", err)
+		// Show fallback message
+		if err := p.updater.UpdateItem(itemName, "📄", "No recent notifications", p.config.Colors.Text); err != nil {
+			return fmt.Errorf("failed to show fallback message: %w", err)
+		}
+	} else {
+		// Show notification preview
+		if len(notifications) == 0 {
+			if err := p.updater.UpdateItem(itemName, "✅", "All clear!", p.config.Colors.Green); err != nil {
+				return fmt.Errorf("failed to show clear message: %w", err)
+			}
+		} else {
+			// Show count and preview of most recent
+			preview := fmt.Sprintf("%d notifications", len(notifications))
+			if len(notifications) > 0 && len(notifications[0]) > 0 {
+				// Truncate first notification for preview
+				if len(notifications[0]) > 20 {
+					preview = notifications[0][:17] + "..."
+				} else {
+					preview = notifications[0]
+				}
+			}
+
+			if err := p.updater.UpdateItem(itemName, "📧", preview, p.config.Colors.Blue); err != nil {
+				return fmt.Errorf("failed to show preview: %w", err)
+			}
+		}
+	}
+
+	// Reset to normal display after 5 seconds
+	go func() {
+		time.Sleep(5 * time.Second)
+		if err := p.UpdateDisplay(); err != nil {
+			p.logger.Error("Failed to reset display after show action: %v", err)
+		}
+	}()
+
+	return nil
+}
+
+// HandleClickAction handles clicks with different behaviors based on button type
+func (p *NotificationsPlugin) HandleClickAction() error {
+	// Check which button was clicked using SketchyBar environment variables
+	button := os.Getenv("BUTTON")
+	modifier := os.Getenv("MODIFIER")
+
+	p.logger.Debug("Click detected - Button: %s, Modifier: %s", button, modifier)
+
+	switch button {
+	case "right":
+		// Right click -> Show notification preview
+		p.logger.Info("Right-click detected - showing notification preview")
+		return p.HandleShowAction()
+	case "left":
+		fallthrough
+	default:
+		// Left click or any other -> Toggle DND
+		p.logger.Info("Left-click detected - toggling DND")
+		return p.HandleToggleAction()
+	}
+}
+
+// getRecentNotifications gets recent notifications from Notification Center
+func (p *NotificationsPlugin) getRecentNotifications() ([]string, error) {
+	// Use a more reliable AppleScript to get notification info
+	script := `
+	tell application "System Events"
+		try
+			-- Get notification center process
+			set notifProcess to first application process whose name is "NotificationCenter"
+			tell notifProcess
+				try
+					-- Get notification windows
+					set notifWindows to every window
+					set notifList to {}
+					repeat with notifWindow in notifWindows
+						try
+							set notifText to value of first static text of notifWindow
+							if notifText is not "" then
+								set end of notifList to notifText
+							end if
+						end try
+					end repeat
+					return notifList
+				on error
+					return {}
+				end try
+			end tell
+		on error
+			return {}
+		end try
+	end tell
+	`
+
+	cmd := exec.Command("osascript", "-e", script)
+	output, err := cmd.Output()
+	if err != nil {
+		// Fallback: Use log query for actual notification detection
+		return p.getNotificationsFromLog()
+	}
+
+	outputStr := strings.TrimSpace(string(output))
+	if outputStr == "" || outputStr == "{}" {
+		return []string{}, nil
+	}
+
+	// Parse AppleScript list output
+	notifications := []string{}
+	if strings.HasPrefix(outputStr, "{") && strings.HasSuffix(outputStr, "}") {
+		content := outputStr[1 : len(outputStr)-1] // Remove { }
+		items := strings.Split(content, ", ")
+		for _, item := range items {
+			item = strings.Trim(item, `"`) // Remove quotes
+			if len(item) > 0 {
+				notifications = append(notifications, item)
+			}
+		}
+	}
+
+	return notifications, nil
+}
+
+// getNotificationsFromLog fallback method using system logs
+func (p *NotificationsPlugin) getNotificationsFromLog() ([]string, error) {
+	// Quick log query for recent notification events (last 5 minutes)
+	cmd := exec.Command("log", "show", "--predicate",
+		"process == 'UserNotificationCenter' AND eventMessage CONTAINS 'notification'",
+		"--style", "compact", "--last", "5m")
+
+	output, err := cmd.Output()
+	if err != nil {
+		return []string{}, err
+	}
+
+	// Parse log output for notification text
+	lines := strings.Split(string(output), "\n")
+	notifications := []string{}
+
+	for _, line := range lines {
+		if strings.Contains(line, "notification") {
+			// Extract meaningful text from log line
+			parts := strings.Split(line, " ")
+			if len(parts) > 5 {
+				// Take last few words as notification content
+				content := strings.Join(parts[len(parts)-3:], " ")
+				if len(content) > 5 && len(content) < 100 {
+					notifications = append(notifications, content)
+				}
+			}
+		}
+	}
+
+	// Limit results
+	if len(notifications) > 10 {
+		notifications = notifications[:10]
+	}
+
+	return notifications, nil
+}
+
 // UpdateDisplay updates the SketchyBar display with current notification status
 func (p *NotificationsPlugin) UpdateDisplay() error {
 	// Get current notification info (now much faster with caching)
@@ -493,11 +669,15 @@ func (p *NotificationsPlugin) UpdateDisplay() error {
 func (p *NotificationsPlugin) Run() error {
 	p.logger.Info("Starting notifications plugin")
 
-	// Handle command line arguments
+	// Handle command line arguments and environment variables
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "toggle":
 			return p.HandleToggleAction()
+		case "show":
+			return p.HandleShowAction()
+		case "click":
+			return p.HandleClickAction()
 		default:
 			p.logger.Debug("Unknown argument: %s", os.Args[1])
 		}

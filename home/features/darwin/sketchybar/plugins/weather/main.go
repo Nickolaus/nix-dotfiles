@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -104,12 +105,15 @@ func NewWeatherPlugin() (*WeatherPlugin, error) {
 		Timeout: apiTimeout,
 	}
 
+	// Detect location from system
+	location := detectSystemLocation(logger)
+
 	return &WeatherPlugin{
 		config:     cfg,
 		logger:     logger,
 		updater:    updater,
 		sysinfo:    sysinfo,
-		location:   "", // Empty = auto-detect
+		location:   location, // Auto-detected from system services
 		cache:      cache,
 		httpClient: httpClient,
 	}, nil
@@ -409,6 +413,509 @@ func (p *WeatherPlugin) Run() error {
 
 	// Regular weather update
 	return p.UpdateDisplay()
+}
+
+// detectSystemLocation detects location using system services
+func detectSystemLocation(logger *utils.Logger) string {
+	logger.Debug("Starting system location detection")
+
+	// Method 1: Try CoreLocationCLI for precise macOS location
+	if location := tryCoreLocationCLI(logger); location != "" {
+		logger.Info("Location detected via CoreLocationCLI: %s", location)
+		return location
+	}
+
+	// Method 2: Try Swift/Python Core Location (if available)
+	if location := tryMacOSLocation(logger); location != "" {
+		logger.Info("Location detected via macOS Core Location API: %s", location)
+		return location
+	}
+
+	// Method 3: Try IP-based geolocation (reliable fallback)
+	if location := tryIPGeolocation(logger); location != "" {
+		logger.Info("Location detected via IP geolocation: %s", location)
+		return location
+	}
+
+	// Method 4: Use timezone as last resort (broad area)
+	if location := getLocationFromTimezone(logger); location != "" {
+		logger.Info("Location detected via timezone (approximate): %s", location)
+		return location
+	}
+
+	// Fallback: empty string means wttr.in will try its own detection
+	logger.Warning("Could not detect location, using wttr.in auto-detection")
+	return ""
+}
+
+// tryCoreLocationCLI attempts to get location using CoreLocationCLI
+func tryCoreLocationCLI(logger *utils.Logger) string {
+	logger.Debug("Trying CoreLocationCLI for precise location")
+
+	// Try to run CoreLocationCLI with JSON output for structured parsing
+	cmd := exec.Command("CoreLocationCLI", "--json", "--timeout", "10")
+	output, err := cmd.Output()
+	if err != nil {
+		logger.Debug("CoreLocationCLI failed: %v", err)
+
+		// Try without JSON for a simple coordinate format
+		cmd = exec.Command("CoreLocationCLI", "--format", "%latitude,%longitude")
+		output, err = cmd.Output()
+		if err != nil {
+			logger.Debug("CoreLocationCLI simple format also failed: %v", err)
+			return ""
+		}
+	}
+
+	result := strings.TrimSpace(string(output))
+	if result == "" {
+		logger.Debug("CoreLocationCLI returned empty result")
+		return ""
+	}
+
+	logger.Debug("CoreLocationCLI raw output: %s", result)
+
+	// Check for error messages in the output
+	if strings.Contains(result, "Location services are disabled") ||
+		strings.Contains(result, "location access denied") ||
+		strings.Contains(result, "❌") {
+		logger.Debug("CoreLocationCLI: Location services disabled or access denied")
+		return ""
+	}
+
+	// If we have JSON output, parse it
+	if strings.HasPrefix(result, "{") {
+		return parseCoreLocationJSON(result, logger)
+	}
+
+	// If we have coordinates in "lat,lon" format, validate and return
+	if coords := parseCoordinates(result, logger); coords != "" {
+		return coords
+	}
+
+	logger.Debug("Unable to parse CoreLocationCLI output: %s", result)
+	return ""
+}
+
+// parseCoreLocationJSON parses JSON output from CoreLocationCLI
+func parseCoreLocationJSON(jsonOutput string, logger *utils.Logger) string {
+	// Simple JSON parsing without importing json package
+	if strings.Contains(jsonOutput, `"latitude"`) && strings.Contains(jsonOutput, `"longitude"`) {
+		lines := strings.Split(jsonOutput, ",")
+		var lat, lon string
+
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.Contains(line, `"latitude":`) {
+				parts := strings.Split(line, ":")
+				if len(parts) >= 2 {
+					lat = strings.Trim(strings.TrimSpace(parts[1]), ` ,"`)
+				}
+			}
+			if strings.Contains(line, `"longitude":`) {
+				parts := strings.Split(line, ":")
+				if len(parts) >= 2 {
+					lon = strings.Trim(strings.TrimSpace(parts[1]), ` ,"`)
+				}
+			}
+		}
+
+		if lat != "" && lon != "" {
+			coords := fmt.Sprintf("%s,%s", lat, lon)
+			logger.Debug("Parsed CoreLocationCLI coordinates: %s", coords)
+			return coords
+		}
+	}
+
+	return ""
+}
+
+// parseCoordinates validates and returns coordinate string
+func parseCoordinates(coords string, logger *utils.Logger) string {
+	// Check if it looks like "lat,lon" format
+	parts := strings.Split(coords, ",")
+	if len(parts) == 2 {
+		lat := strings.TrimSpace(parts[0])
+		lon := strings.TrimSpace(parts[1])
+
+		// Basic validation - should be numbers (with possible decimal points and minus signs)
+		if isValidCoordinate(lat) && isValidCoordinate(lon) {
+			result := fmt.Sprintf("%s,%s", lat, lon)
+			logger.Debug("Valid coordinates detected: %s", result)
+			return result
+		}
+	}
+
+	return ""
+}
+
+// isValidCoordinate checks if a string looks like a valid coordinate
+func isValidCoordinate(coord string) bool {
+	coord = strings.TrimSpace(coord)
+	if coord == "" {
+		return false
+	}
+
+	// Should contain only digits, decimal points, and optional minus sign
+	for i, char := range coord {
+		if char == '-' && i == 0 {
+			continue // minus sign at beginning is ok
+		}
+		if char == '.' {
+			continue // decimal point is ok
+		}
+		if char >= '0' && char <= '9' {
+			continue // digits are ok
+		}
+		return false
+	}
+
+	return true
+}
+
+// tryMacOSLocation attempts to get precise location via macOS Core Location
+func tryMacOSLocation(logger *utils.Logger) string {
+	// Method 1: Try Swift script with Core Location (most accurate)
+	if location := trySwiftLocation(logger); location != "" {
+		return location
+	}
+
+	// Method 2: Try Python with Core Location (if available)
+	if location := tryPythonLocation(logger); location != "" {
+		return location
+	}
+
+	// Method 3: Check if location services are enabled and try system location cache
+	if location := trySystemLocationCache(logger); location != "" {
+		return location
+	}
+
+	logger.Debug("macOS Core Location not accessible")
+	return ""
+}
+
+// trySwiftLocation uses a Swift script to access Core Location
+func trySwiftLocation(logger *utils.Logger) string {
+	// Create a temporary Swift script that uses Core Location
+	swiftScript := `
+import CoreLocation
+import Foundation
+
+class LocationDelegate: NSObject, CLLocationManagerDelegate {
+    let manager = CLLocationManager()
+    var completion: ((CLLocation?) -> Void)?
+    
+    override init() {
+        super.init()
+        manager.delegate = self
+    }
+    
+    func requestLocation(completion: @escaping (CLLocation?) -> Void) {
+        self.completion = completion
+        
+        guard CLLocationManager.locationServicesEnabled() else {
+            completion(nil)
+            return
+        }
+        
+        let status = manager.authorizationStatus
+        if status == .notDetermined {
+            manager.requestWhenInUseAuthorization()
+        } else if status == .authorizedWhenInUse || status == .authorizedAlways {
+            manager.requestLocation()
+        } else {
+            completion(nil)
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        completion?(locations.first)
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        completion?(nil)
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        if status == .authorizedWhenInUse || status == .authorizedAlways {
+            manager.requestLocation()
+        } else if status != .notDetermined {
+            completion?(nil)
+        }
+    }
+}
+
+let delegate = LocationDelegate()
+let semaphore = DispatchSemaphore(value: 0)
+
+delegate.requestLocation { location in
+    if let loc = location {
+        print("\(loc.coordinate.latitude),\(loc.coordinate.longitude)")
+    }
+    semaphore.signal()
+}
+
+_ = semaphore.wait(timeout: .now() + 10)
+`
+
+	// Write Swift script to temporary file
+	tmpDir := os.TempDir()
+	tmpFile := filepath.Join(tmpDir, "location.swift")
+
+	if err := os.WriteFile(tmpFile, []byte(swiftScript), 0644); err != nil {
+		logger.Debug("Failed to write Swift location script: %v", err)
+		return ""
+	}
+	defer os.Remove(tmpFile)
+
+	// Execute Swift script
+	cmd := exec.Command("swift", tmpFile)
+	output, err := cmd.Output()
+	if err != nil {
+		logger.Debug("Swift location script failed: %v", err)
+		return ""
+	}
+
+	result := strings.TrimSpace(string(output))
+	if result != "" && strings.Contains(result, ",") {
+		logger.Debug("Swift Core Location result: %s", result)
+		return result // Return coordinates for wttr.in
+	}
+
+	return ""
+}
+
+// tryPythonLocation tries using Python with CoreLocation
+func tryPythonLocation(logger *utils.Logger) string {
+	pythonScript := `
+try:
+    import CoreLocation
+    import Foundation
+    import time
+    
+    manager = CoreLocation.CLLocationManager.alloc().init()
+    
+    if not CoreLocation.CLLocationManager.locationServicesEnabled():
+        exit(1)
+    
+    # This won't work without proper app entitlements, but let's try
+    status = manager.authorizationStatus()
+    if status == 3 or status == 4:  # kCLAuthorizationStatusAuthorizedWhenInUse or Always
+        manager.requestLocation()
+        time.sleep(2)  # Wait briefly
+    
+except ImportError:
+    exit(1)
+except Exception:
+    exit(1)
+`
+
+	cmd := exec.Command("python3", "-c", pythonScript)
+	output, err := cmd.Output()
+	if err != nil {
+		logger.Debug("Python CoreLocation not available: %v", err)
+		return ""
+	}
+
+	result := strings.TrimSpace(string(output))
+	if result != "" {
+		logger.Debug("Python CoreLocation result: %s", result)
+		return result
+	}
+
+	return ""
+}
+
+// trySystemLocationCache attempts to get location from system cache/logs
+func trySystemLocationCache(logger *utils.Logger) string {
+	// Check if location services are enabled
+	cmd := exec.Command("defaults", "read", "/var/db/locationd/Library/Preferences/ByHost/com.apple.locationd", "LocationServicesEnabled")
+	output, err := cmd.Output()
+	if err != nil || strings.TrimSpace(string(output)) != "1" {
+		logger.Debug("Location services not enabled")
+		return ""
+	}
+
+	// Try to get approximate location from system logs (requires admin access usually)
+	// This is a long shot but might work
+	cmd = exec.Command("log", "show", "--predicate", "subsystem == 'com.apple.locationd'", "--info", "--debug", "--start", "2023-01-01", "|", "grep", "-i", "coordinate", "|", "tail", "-1")
+	output, err = cmd.Output()
+	if err == nil && len(output) > 0 {
+		result := strings.TrimSpace(string(output))
+		logger.Debug("System location log result: %s", result)
+		// Parse coordinates if found
+		// This is very system-dependent and may not work
+	}
+
+	return ""
+}
+
+// getLocationFromTimezone maps timezone to major city for weather
+func getLocationFromTimezone(logger *utils.Logger) string {
+	// Read the timezone symlink to get the timezone info
+	timezonePath, err := filepath.EvalSymlinks("/etc/localtime")
+	if err != nil {
+		logger.Debug("Failed to read timezone symlink: %v", err)
+		return ""
+	}
+
+	logger.Debug("Timezone path: %s", timezonePath)
+
+	// Extract timezone from path like /var/db/timezone/zoneinfo/Europe/Berlin
+	parts := strings.Split(timezonePath, "/")
+	if len(parts) < 2 {
+		return ""
+	}
+
+	// Get the last two parts (e.g., Europe/Berlin)
+	var timezone string
+	if len(parts) >= 2 {
+		timezone = parts[len(parts)-2] + "/" + parts[len(parts)-1]
+	}
+
+	logger.Debug("Detected timezone: %s", timezone)
+
+	// Map common timezones to major cities for accurate weather
+	timezoneMap := map[string]string{
+		"Europe/Berlin":       "Berlin",
+		"Europe/Amsterdam":    "Amsterdam",
+		"Europe/London":       "London",
+		"Europe/Paris":        "Paris",
+		"Europe/Rome":         "Rome",
+		"Europe/Madrid":       "Madrid",
+		"Europe/Vienna":       "Vienna",
+		"Europe/Zurich":       "Zurich",
+		"America/New_York":    "New York",
+		"America/Los_Angeles": "Los Angeles",
+		"America/Chicago":     "Chicago",
+		"Asia/Tokyo":          "Tokyo",
+		"Asia/Shanghai":       "Shanghai",
+		"Australia/Sydney":    "Sydney",
+	}
+
+	if city, exists := timezoneMap[timezone]; exists {
+		return city
+	}
+
+	// If exact match not found, try to use the city name from timezone
+	if len(parts) >= 1 {
+		cityName := parts[len(parts)-1]
+		// Clean up city name (remove underscores, etc.)
+		cityName = strings.ReplaceAll(cityName, "_", " ")
+		return cityName
+	}
+
+	return ""
+}
+
+// tryIPGeolocation attempts IP-based location detection using multiple services
+func tryIPGeolocation(logger *utils.Logger) string {
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	// List of IP geolocation services to try (in order of preference)
+	services := []struct {
+		name  string
+		url   string
+		parse func(body string) string
+	}{
+		{
+			name: "ipapi.co",
+			url:  "https://ipapi.co/json/",
+			parse: func(body string) string {
+				// Parse JSON response from ipapi.co
+				if strings.Contains(body, `"city"`) && strings.Contains(body, `"country_name"`) {
+					// Simple JSON parsing without importing json package
+					lines := strings.Split(body, ",")
+					var city string
+					for _, line := range lines {
+						if strings.Contains(line, `"city":`) {
+							city = strings.Trim(strings.Split(line, ":")[1], ` "`)
+						}
+						// We also have country info available but don't need it for city name
+						if strings.Contains(line, `"country_name":`) {
+							_ = strings.Trim(strings.Split(line, ":")[1], ` "`)
+						}
+					}
+					if city != "" && city != "null" {
+						return city
+					}
+				}
+				return ""
+			},
+		},
+		{
+			name: "ipinfo.io",
+			url:  "https://ipinfo.io/json",
+			parse: func(body string) string {
+				// Parse JSON response from ipinfo.io
+				if strings.Contains(body, `"city"`) {
+					lines := strings.Split(body, ",")
+					for _, line := range lines {
+						if strings.Contains(line, `"city":`) {
+							city := strings.Trim(strings.Split(line, ":")[1], ` "`)
+							if city != "" && city != "null" {
+								return city
+							}
+						}
+					}
+				}
+				return ""
+			},
+		},
+		{
+			name: "ip-api.com",
+			url:  "http://ip-api.com/line/?fields=city,country",
+			parse: func(body string) string {
+				lines := strings.Split(strings.TrimSpace(body), "\n")
+				if len(lines) >= 2 && lines[0] != "" && lines[0] != "null" {
+					city := strings.TrimSpace(lines[0])
+					return city
+				}
+				return ""
+			},
+		},
+		{
+			name: "ipapi.co-simple",
+			url:  "https://ipapi.co/city/",
+			parse: func(body string) string {
+				city := strings.TrimSpace(body)
+				if city != "" && city != "null" && city != "None" {
+					return city
+				}
+				return ""
+			},
+		},
+	}
+
+	// Try each service
+	for _, service := range services {
+		logger.Debug("Trying IP geolocation service: %s", service.name)
+
+		resp, err := client.Get(service.url)
+		if err != nil {
+			logger.Debug("IP geolocation service %s failed: %v", service.name, err)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			logger.Debug("Failed to read response from %s: %v", service.name, err)
+			continue
+		}
+
+		// Parse the response
+		city := service.parse(string(body))
+		if city != "" {
+			logger.Debug("IP geolocation success via %s: %s", service.name, city)
+			return city
+		}
+
+		logger.Debug("Service %s returned empty/invalid location", service.name)
+	}
+
+	logger.Debug("All IP geolocation services failed")
+	return ""
 }
 
 func main() {

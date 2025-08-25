@@ -105,74 +105,190 @@ lib.mkIf pkgs.stdenv.isDarwin {
                        blur_radius="$BAR_BLUR_RADIUS" \
                        color="''${BASE}ee"
 
-      ##### Dynamic Themed Defaults #####
-      # Default values for all widgets loaded from global config
+      ##### Modern Unified Design System #####
+      # 🎨 MODERN REDESIGN: Seamless, cohesive, minimalist approach
+      # Creating grouped sections instead of fragmented individual boxes
+      
+      # Base item defaults - clean and minimal
       default=(
-        padding_left="''${DEFAULT_PADDING:-5}"
-        padding_right="''${DEFAULT_PADDING:-5}"
-        icon.font="''${DEFAULT_ICON_FONT:-Hack Nerd Font:Bold:17.0}"
-        label.font="''${DEFAULT_LABEL_FONT:-Hack Nerd Font:Bold:14.0}"
-        icon.color="$TEXT"
-        label.color="$TEXT"
-        icon.padding_left=4
-        icon.padding_right=4
-        label.padding_left=4
-        label.padding_right=4
-        background.height=24
-        background.corner_radius="''${DEFAULT_CORNER_RADIUS:-8}"
-        background.border_width=1
-        background.border_color="$SURFACE0"
+        # 🌊 SEAMLESS: Minimal spacing for flow
+        padding_left=0
+        padding_right=0
+        
+        # 🎨 MODERN: Refined typography
+        icon.font="''${DEFAULT_ICON_FONT:-SF Pro Display:Semibold:15.0}"
+        label.font="''${DEFAULT_LABEL_FONT:-SF Pro Display:Medium:13.0}"
+        
+        # 🎯 PERFECT ALIGNMENT: Precise positioning
+        icon.y_offset=0
+        label.y_offset=0
+        
+        # 🌈 CLEAN COLORS: Subtle, harmonious
+        icon.color="''${TEXT}dd"
+        label.color="''${TEXT}ee"
+        
+        # 🚀 OPTIMIZED SPACING: Enhanced visual balance
+        icon.padding_left=8
+        icon.padding_right=8       # Increased for better icon-to-label gap
+        label.padding_left=0
+        label.padding_right=8
+        
+        # 🎨 INVISIBLE BACKGROUNDS: Let groups handle styling
+        background.drawing=off
+        background.height=30
       )
       sketchybar --default "''${default[@]}"
 
-      # Static workspace indicators removed - preparing for dynamic per-display system
+      # Notifications will be configured as part of the system group
 
-      ##### Adding Left Items #####
-      # Workspace icons, front app display, and media controls
-      sketchybar --add item chevron left \
-                 --set chevron icon= label.drawing=off \
-                 --add item front_app left \
-                 --set front_app icon.drawing=off script="$HOME/.local/bin/sketchybar/front_app" \
-                 --subscribe front_app front_app_switched
-
-      ##### Adding Right Items #####
-      # Logically organized: notifications | time & ambient | connectivity | system | power
-      sketchybar --add item notifications right \
-                 --set notifications update_freq=10 script="$HOME/.local/bin/sketchybar/notifications" \
-                           click_script="$HOME/.local/bin/sketchybar/notifications toggle" \
-                 --add item clock right \
-                 --set clock update_freq=10 icon= script="$HOME/.local/bin/sketchybar/clock" \
-                           click_script="$HOME/.local/bin/sketchybar/clock popup" \
-                 --add item moon_phase right \
-                 --set moon_phase update_freq=3600 script="$HOME/.local/bin/sketchybar/moon_phase" \
-                           click_script="open -a 'Calendar'" \
-                 --add item weather right \
-                 --set weather update_freq=1800 script="$HOME/.local/bin/sketchybar/weather" \
-                           click_script="$HOME/.local/bin/sketchybar/weather forecast" \
+      ##### Modern Grouped Items Configuration #####
+      # 🎨 Items organized into logical, visually cohesive groups
+      
+      # 🌊 LEFT GROUP: App Context & Media
+      sketchybar --add item front_app left \
+                 --set front_app icon.drawing=on \
+                                 label.color="''${TEXT}ee" \
+                                 label.padding_right=6 \
+                                 script="$HOME/.local/bin/sketchybar/front_app" \
+                 --subscribe front_app front_app_switched \
                  --add item spotify left \
-                 --set spotify update_freq=1 script="$HOME/.local/bin/sketchybar/spotify" \
-                           click_script="$HOME/.local/bin/sketchybar/spotify toggle" \
-                 --subscribe spotify media_change \
-                                                                    --add item network right \
-                                  --set network update_freq=5 script="$HOME/.local/bin/sketchybar/network" \
-                                        click_script="$HOME/.local/bin/sketchybar/network popup" \
+                 --set spotify update_freq=1 \
+                               icon.color="''${GREEN}dd" \
+                               label.color="''${TEXT}dd" \
+                               script="$HOME/.local/bin/sketchybar/spotify" \
+                               click_script="$HOME/.local/bin/sketchybar/spotify toggle" \
+                 --subscribe spotify media_change
+
+      # ⏰ TIME & AMBIENT GROUP
+      sketchybar --add item clock right \
+                 --set clock update_freq=10 \
+                             icon="󰥔" \
+                             icon.color="''${LAVENDER}dd" \
+                             label.color="''${TEXT}ee" \
+                             script="$HOME/.local/bin/sketchybar/clock" \
+                             click_script="$HOME/.local/bin/sketchybar/clock popup" \
+                 --add item moon_phase right \
+                 --set moon_phase update_freq=3600 \
+                                  icon.color="''${YELLOW}dd" \
+                                  label.color="''${TEXT}dd" \
+                                  script="$HOME/.local/bin/sketchybar/moon_phase" \
+                                  click_script="open -a 'Calendar'" \
+                 --add item weather right \
+                 --set weather update_freq=1800 \
+                               icon.color="''${SKY}dd" \
+                               label.color="''${TEXT}dd" \
+                               script="$HOME/.local/bin/sketchybar/weather" \
+                               click_script="$HOME/.local/bin/sketchybar/weather forecast"
+
+      # 🌐 CONNECTIVITY GROUP
+      sketchybar --add item network right \
+                 --set network update_freq=5 \
+                               icon.color="''${TEAL}dd" \
+                               label.color="''${TEXT}dd" \
+                               script="$HOME/.local/bin/sketchybar/network" \
+                               click_script="$HOME/.local/bin/sketchybar/network popup" \
                  --subscribe network system_woke wifi_change \
-                                 --add item volume right \
-                --set volume script="$HOME/.local/bin/sketchybar/volume" \
-                        click_script="$HOME/.local/bin/sketchybar/volume toggle" \
-                 --subscribe volume volume_change \
-                                --add item cpu right \
-                                          --set cpu update_freq=2 script="$HOME/.local/bin/sketchybar/cpu" \
-        click_script="$HOME/.local/bin/sketchybar/cpu popup" \
+                 --add item volume right \
+                 --set volume icon.color="''${PEACH}dd" \
+                             label.color="''${TEXT}dd" \
+                             script="$HOME/.local/bin/sketchybar/volume" \
+                             click_script="$HOME/.local/bin/sketchybar/volume toggle" \
+                 --subscribe volume volume_change
+
+      # ⚙️ SYSTEM RESOURCES GROUP  
+      sketchybar --add item cpu right \
+                 --set cpu update_freq=2 \
+                           icon.color="''${RED}dd" \
+                           label.color="''${TEXT}dd" \
+                           script="$HOME/.local/bin/sketchybar/cpu" \
+                           click_script="$HOME/.local/bin/sketchybar/cpu popup" \
                  --subscribe cpu system_woke \
-                --add item memory right \
-                                 --set memory update_freq=5 script="$HOME/.local/bin/sketchybar/memory" \
-                        click_script="$HOME/.local/bin/sketchybar/memory popup" \
+                 --add item memory right \
+                 --set memory update_freq=5 \
+                             icon.color="''${MAUVE}dd" \
+                             label.color="''${TEXT}dd" \
+                             script="$HOME/.local/bin/sketchybar/memory" \
+                             click_script="$HOME/.local/bin/sketchybar/memory popup" \
                  --subscribe memory system_woke \
-                                 --add item battery right \
-                --set battery update_freq=60 script="$HOME/.local/bin/sketchybar/battery" \
-                        click_script="$HOME/.local/bin/sketchybar/battery popup" \
+                 --add item battery right \
+                 --set battery update_freq=60 \
+                              icon.color="''${GREEN}dd" \
+                              label.color="''${TEXT}dd" \
+                              script="$HOME/.local/bin/sketchybar/battery" \
+                              click_script="$HOME/.local/bin/sketchybar/battery popup" \
                  --subscribe battery system_woke power_source_change
+
+      # 🔔 ENHANCED NOTIFICATIONS with DND toggle and preview
+      sketchybar --add item notifications right \
+                 --set notifications update_freq=15 \
+                                     icon.color="''${BLUE}dd" \
+                                     label.color="''${TEXT}ee" \
+                                     icon.padding_right=4 \
+                                     label.padding_right=6 \
+                                     script="$HOME/.local/bin/sketchybar/notifications" \
+                                     click_script="~/.local/bin/sketchybar/notifications click" \
+                 --subscribe notifications system_woke
+
+      ##### Modern Group Separators #####
+      # 🌊 Enhanced spacing between logical groups for optimal visual breathing room
+      sketchybar --add item separator1 right \
+                 --set separator1 padding_left=10 \
+                                  padding_right=10 \
+                                  background.drawing=off \
+                                  icon.drawing=off \
+                                  label.drawing=off \
+                 --add item separator2 right \
+                 --set separator2 padding_left=10 \
+                                  padding_right=10 \
+                                  background.drawing=off \
+                                  icon.drawing=off \
+                                  label.drawing=off \
+                 --add item separator3 right \
+                 --set separator3 padding_left=10 \
+                                  padding_right=10 \
+                                  background.drawing=off \
+                                  icon.drawing=off \
+                                  label.drawing=off
+
+      ##### Modern Group System #####
+      # 🎨 Create unified background groups for seamless design (after items are created)
+      
+      # Left Group: App Context & Media
+      sketchybar --add bracket left_group front_app spotify \
+                 --set left_group background.color="''${BASE}88" \
+                                  background.corner_radius=12 \
+                                  background.height=32 \
+                                  background.border_width=0 \
+                                  background.padding_left=10 \
+                                  background.padding_right=14
+
+      # Right Group: System Status (split into logical sections)
+      # Time & Ambient Section (moderate density - standard padding)
+      sketchybar --add bracket time_group clock moon_phase weather \
+                 --set time_group background.color="''${BASE}88" \
+                                  background.corner_radius=12 \
+                                  background.height=32 \
+                                  background.border_width=0 \
+                                  background.padding_left=12 \
+                                  background.padding_right=12
+      
+      # Connectivity Section (low density - tighter padding)
+      sketchybar --add bracket connectivity_group network volume \
+                 --set connectivity_group background.color="''${BASE}88" \
+                                          background.corner_radius=12 \
+                                          background.height=32 \
+                                          background.border_width=0 \
+                                          background.padding_left=10 \
+                                          background.padding_right=10
+
+      # System Resources Section (high density - generous padding)
+      sketchybar --add bracket system_group cpu memory battery \
+                 --set system_group background.color="''${BASE}88" \
+                                    background.corner_radius=12 \
+                                    background.height=32 \
+                                    background.border_width=0 \
+                                    background.padding_left=14 \
+                                    background.padding_right=14
 
       ##### Force all scripts to run the first time #####
       # Only run update if this is not a duplicate run

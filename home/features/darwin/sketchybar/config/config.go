@@ -155,12 +155,12 @@ func DefaultConfig() *GlobalConfig {
 				VerySlow: 3600,
 			},
 			Display: DisplaySettings{
-				IconFont:         "Hack Nerd Font:Bold:17.0",
-				LabelFont:        "Hack Nerd Font:Bold:14.0",
-				BackgroundHeight: 24,
-				CornerRadius:     8,
-				Padding:          5,
-				FontSize:         14,
+				IconFont:         "SF Pro Display:Semibold:15.0", // 🎨 MODERN: Native Apple font
+				LabelFont:        "SF Pro Display:Medium:13.0",   // 🎨 MODERN: Harmonious typography
+				BackgroundHeight: 32,                             // 🎨 MODERN: Increased for unified groups
+				CornerRadius:     12,                             // 🎨 MODERN: Larger radius for contemporary look
+				Padding:          0,                              // 🌊 SEAMLESS: Groups handle padding, not items
+				FontSize:         13,
 			},
 			Bar: BarSettings{
 				Height:             24,
@@ -262,30 +262,9 @@ func SaveConfig(config *GlobalConfig) error {
 	return nil
 }
 
-// GetStatusColor returns appropriate color based on percentage and context
-func (c *ColorScheme) GetStatusColor(percentage float64, reverse bool) string {
-	if reverse {
-		// For cases where high = bad (like CPU usage)
-		if percentage > 85 {
-			return c.Red
-		} else if percentage > 70 {
-			return c.Peach
-		} else if percentage > 50 {
-			return c.Yellow
-		} else {
-			return c.Green
-		}
-	} else {
-		// For cases where high = good (like battery)
-		if percentage > 85 {
-			return c.Green
-		} else if percentage > 50 {
-			return c.Yellow
-		} else {
-			return c.Red
-		}
-	}
-}
+// NOTE: Plugin-specific color logic has been moved to individual plugin color managers.
+// See plugins/{name}/colors.go for plugin-specific color handling.
+// The centralized color utilities are now in utils/color.go
 
 // EnsureCacheDir creates the cache directory if it doesn't exist
 func (c *CacheSettings) EnsureCacheDir() error {

@@ -21,12 +21,13 @@ const (
 
 // CPUPlugin handles CPU monitoring for SketchyBar
 type CPUPlugin struct {
-	config  *config.GlobalConfig
-	logger  *utils.Logger
-	updater *utils.SketchyBarUpdater
-	history *utils.HistoryManager
-	trends  *utils.TrendGraph
-	cache   *utils.CacheManager
+	config       *config.GlobalConfig
+	logger       *utils.Logger
+	updater      *utils.SketchyBarUpdater
+	history      *utils.HistoryManager
+	trends       *utils.TrendGraph
+	cache        *utils.CacheManager
+	colorManager *CPUColorManager
 }
 
 // NewCPUPlugin creates a new CPU monitoring plugin
@@ -50,12 +51,13 @@ func NewCPUPlugin() (*CPUPlugin, error) {
 	}
 
 	return &CPUPlugin{
-		config:  cfg,
-		logger:  logger,
-		updater: updater,
-		history: history,
-		trends:  trends,
-		cache:   cache,
+		config:       cfg,
+		logger:       logger,
+		updater:      updater,
+		history:      history,
+		trends:       trends,
+		cache:        cache,
+		colorManager: NewCPUColorManager(),
 	}, nil
 }
 
@@ -321,14 +323,14 @@ func (p *CPUPlugin) UpdateDisplay() error {
 		// Non-fatal, continue
 	}
 
-	// Get appropriate icon and color
+	// Get appropriate icon and color based purely on CPU usage
 	icon := utils.GetCPUIcon(usage)
-	color := p.config.Colors.GetStatusColor(usage, true) // true = reverse (high usage is bad)
+	color := p.colorManager.GetCPUColor(usage)
 
 	// Get trend indicator
 	trendIcon := p.history.GetTrendDirection("cpu_history")
 
-	// Format label with trend
+	// Format label with improved formatting (cleaner, consistent with memory)
 	label := fmt.Sprintf("%.0f%% %s", usage, trendIcon)
 
 	// Update SketchyBar

@@ -19,12 +19,13 @@ const (
 
 // MemoryPlugin handles memory monitoring for SketchyBar with Apple Silicon support
 type MemoryPlugin struct {
-	config  *config.GlobalConfig
-	logger  *utils.Logger
-	updater *utils.SketchyBarUpdater
-	history *utils.HistoryManager
-	trends  *utils.TrendGraph
-	cache   *utils.CacheManager // Isolated cache for memory plugin
+	config       *config.GlobalConfig
+	logger       *utils.Logger
+	updater      *utils.SketchyBarUpdater
+	history      *utils.HistoryManager
+	trends       *utils.TrendGraph
+	cache        *utils.CacheManager // Isolated cache for memory plugin
+	colorManager *MemoryColorManager
 }
 
 // NewMemoryPlugin creates a new memory monitoring plugin
@@ -48,12 +49,13 @@ func NewMemoryPlugin() (*MemoryPlugin, error) {
 	}
 
 	return &MemoryPlugin{
-		config:  cfg,
-		logger:  logger,
-		updater: updater,
-		history: history,
-		trends:  trends,
-		cache:   cache,
+		config:       cfg,
+		logger:       logger,
+		updater:      updater,
+		history:      history,
+		trends:       trends,
+		cache:        cache,
+		colorManager: NewMemoryColorManager(),
 	}, nil
 }
 
@@ -263,17 +265,17 @@ func (p *MemoryPlugin) parseVMStatLine(line string) int {
 	return -1
 }
 
-// GetMemoryIcon returns appropriate memory icon based on usage
+// GetMemoryIcon returns appropriate memory icon with reliable, well-supported icons
 func (p *MemoryPlugin) GetMemoryIcon(usage float64) string {
 	switch {
 	case usage > 85:
-		return "󰍛" // Memory icon - critical usage
+		return "󰍛" // Memory chip - critical usage (use color to indicate danger)
 	case usage > 70:
-		return "󰍛" // Memory icon - high usage
-	case usage > 50:
-		return "󰍛" // Memory icon - medium usage
+		return "󰍛" // Memory chip - high usage (use color to indicate warning)
+	case usage > 40:
+		return "󰍛" // Memory chip - moderate usage (use color to indicate normal)
 	default:
-		return "󰍛" // Memory icon - good usage
+		return "󰍛" // Memory chip - light usage (use color to indicate good)
 	}
 }
 
@@ -304,7 +306,7 @@ func (p *MemoryPlugin) HandlePopupAction() error {
 		p.formatMemoryDetails(memInfo))
 
 	icon := p.GetMemoryIcon(memInfo.UsagePercent)
-	color := p.config.Colors.GetStatusColor(memInfo.UsagePercent, true) // true = reverse (high usage is bad)
+	color := p.colorManager.GetMemoryColor(memInfo.UsagePercent)
 
 	if err := p.updater.UpdateItem(itemName, icon, popupLabel, color); err != nil {
 		return fmt.Errorf("failed to update popup: %w", err)
@@ -360,18 +362,18 @@ func (p *MemoryPlugin) UpdateDisplay() error {
 
 	// Get appropriate icon and color
 	icon := p.GetMemoryIcon(memInfo.UsagePercent)
-	color := p.config.Colors.GetStatusColor(memInfo.UsagePercent, true) // true = reverse (high usage is bad)
+	color := p.colorManager.GetMemoryColor(memInfo.UsagePercent)
 
-	// Format label with appropriate precision
+	// 🎨 MODERN FORMAT: Cleaner, less dense display
 	var label string
 	if memInfo.SystemTotalGB >= 32 {
-		// High-precision for large RAM systems
-		label = fmt.Sprintf("%.1fG/%dG (%.0f%%)",
-			memInfo.UsedGB, memInfo.SystemTotalGB, memInfo.UsagePercent)
+		// High-precision for large RAM systems - simplified format
+		label = fmt.Sprintf("%.1fG • %.0f%%",
+			memInfo.UsedGB, memInfo.UsagePercent)
 	} else {
-		// Standard precision for smaller systems
-		label = fmt.Sprintf("%.0fG/%dG (%.0f%%)",
-			memInfo.UsedGB, memInfo.SystemTotalGB, memInfo.UsagePercent)
+		// Standard precision for smaller systems - simplified format
+		label = fmt.Sprintf("%.0fG • %.0f%%",
+			memInfo.UsedGB, memInfo.UsagePercent)
 	}
 
 	// Update SketchyBar

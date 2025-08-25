@@ -19,11 +19,12 @@ const (
 
 // VolumePlugin handles audio monitoring and control for SketchyBar
 type VolumePlugin struct {
-	config  *config.GlobalConfig
-	logger  *utils.Logger
-	updater *utils.SketchyBarUpdater
-	sysinfo *utils.SystemInfo
-	cache   *utils.CacheManager // Cache for audio settings
+	config       *config.GlobalConfig
+	logger       *utils.Logger
+	updater      *utils.SketchyBarUpdater
+	sysinfo      *utils.SystemInfo
+	cache        *utils.CacheManager // Cache for audio settings
+	colorManager *VolumeColorManager
 }
 
 // VolumeInfo represents current audio status
@@ -53,11 +54,12 @@ func NewVolumePlugin() (*VolumePlugin, error) {
 	}
 
 	return &VolumePlugin{
-		config:  cfg,
-		logger:  logger,
-		updater: updater,
-		sysinfo: sysinfo,
-		cache:   cache,
+		config:       cfg,
+		logger:       logger,
+		updater:      updater,
+		sysinfo:      sysinfo,
+		cache:        cache,
+		colorManager: NewVolumeColorManager(),
 	}, nil
 }
 
@@ -323,7 +325,7 @@ func (p *VolumePlugin) HandleDeviceSwitch() error {
 	icon := p.GetVolumeIcon(&VolumeInfo{Volume: 50, IsMuted: false}) // Use default icon
 	notificationLabel := fmt.Sprintf("→ %s", deviceName)
 
-	if err := p.updater.UpdateItem(itemName, icon, notificationLabel, p.config.Colors.Blue); err != nil {
+	if err := p.updater.UpdateItem(itemName, icon, notificationLabel, p.colorManager.GetNotificationColor()); err != nil {
 		return fmt.Errorf("failed to update notification: %w", err)
 	}
 
@@ -426,22 +428,9 @@ func (p *VolumePlugin) GetVolumeIcon(info *VolumeInfo) string {
 	}
 }
 
-// GetVolumeColor returns appropriate color based on volume level and mute status
+// GetVolumeColor returns appropriate color using standardized color logic
 func (p *VolumePlugin) GetVolumeColor(info *VolumeInfo) string {
-	if info.IsMuted {
-		return p.config.Colors.Red
-	}
-
-	switch {
-	case info.Volume >= 80:
-		return p.config.Colors.Green
-	case info.Volume >= 30:
-		return p.config.Colors.Yellow
-	case info.Volume >= 10:
-		return p.config.Colors.Peach
-	default:
-		return p.config.Colors.Red
-	}
+	return p.colorManager.GetVolumeColor(info)
 }
 
 // UpdateDisplay updates the SketchyBar display with current volume status

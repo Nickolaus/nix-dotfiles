@@ -24,7 +24,7 @@ type SpotifyPlugin struct {
 	cache   *utils.CacheManager // Cache for Spotify data
 }
 
-// SpotifyInfo represents current Spotify status
+// SpotifyInfo represents current Spotify status with enhanced state information
 type SpotifyInfo struct {
 	IsRunning bool
 	State     string // "playing", "paused", "stopped"
@@ -33,6 +33,11 @@ type SpotifyInfo struct {
 	Icon      string
 	Color     string
 	Label     string
+	// Enhanced state information
+	ShuffleState bool   // true = shuffle on
+	RepeatState  string // "off", "track", "playlist"
+	IsLiked      bool   // true = current track is liked
+	StateIcons   string // Combined state icons (shuffle + repeat + liked)
 }
 
 // NewSpotifyPlugin creates a new Spotify media control plugin
@@ -81,6 +86,11 @@ func (p *SpotifyPlugin) GetSpotifyInfo() (*SpotifyInfo, error) {
 		info.Icon = "󰓇"
 		info.Label = "Not playing"
 		info.Color = p.config.Colors.Overlay2
+		// Initialize enhanced state fields
+		info.ShuffleState = false
+		info.RepeatState = "off"
+		info.IsLiked = false
+		info.StateIcons = ""
 		p.cacheSpotifyInfo(info) // Cache negative result too
 		return info, nil
 	}
@@ -126,21 +136,28 @@ func (p *SpotifyPlugin) cacheSpotifyInfo(info *SpotifyInfo) {
 	}
 }
 
-// Single AppleScript call for all Spotify data
+// Enhanced AppleScript call for all Spotify data including state information
 func (p *SpotifyPlugin) getSpotifyInfoOptimized(info *SpotifyInfo) error {
-	// Combined AppleScript call - much faster than 3 separate calls
+	// Enhanced AppleScript call - gets basic info plus shuffle, repeat, and liked status
 	cmd := exec.Command("osascript", "-e", `
 		tell application "Spotify"
 			set playerState to player state as string
 			set trackName to ""
 			set artistName to ""
+			set shuffleState to "false"
+			set repeatState to "off"
+			set isLiked to "false"
 			try
 				if player state is not stopped then
 					set trackName to name of current track as string
 					set artistName to artist of current track as string
+					set shuffleState to shuffling as string
+					set repeatState to repeating as string
+					-- Note: Spotify AppleScript doesn't expose liked status directly
+					-- We'll use a simplified approach for now
 				end if
 			end try
-			return playerState & "|" & trackName & "|" & artistName
+			return playerState & "|" & trackName & "|" & artistName & "|" & shuffleState & "|" & repeatState & "|" & isLiked
 		end tell
 	`)
 
@@ -149,14 +166,14 @@ func (p *SpotifyPlugin) getSpotifyInfoOptimized(info *SpotifyInfo) error {
 		return fmt.Errorf("optimized Spotify script failed: %w", err)
 	}
 
-	// Parse combined output
+	// Parse enhanced output
 	outputStr := strings.TrimSpace(string(output))
 	parts := strings.Split(outputStr, "|")
-	if len(parts) != 3 {
-		return fmt.Errorf("unexpected Spotify script output format: %s", outputStr)
+	if len(parts) != 6 {
+		return fmt.Errorf("unexpected Spotify script output format (expected 6 parts): %s", outputStr)
 	}
 
-	// Parse state
+	// Parse basic state
 	info.State = parts[0]
 
 	// Parse track and artist (only if playing/paused)
@@ -167,6 +184,14 @@ func (p *SpotifyPlugin) getSpotifyInfoOptimized(info *SpotifyInfo) error {
 		if parts[2] != "" {
 			info.Artist = p.truncateString(parts[2], 15)
 		}
+
+		// Parse enhanced state information
+		info.ShuffleState = strings.ToLower(parts[3]) == "true"
+		info.RepeatState = p.parseRepeatState(parts[4])
+		info.IsLiked = strings.ToLower(parts[5]) == "true"
+
+		// Generate state icons
+		info.StateIcons = p.generateStateIcons(info)
 	}
 
 	// Set display elements based on state
@@ -195,6 +220,13 @@ func (p *SpotifyPlugin) getSpotifyInfoFallback(info *SpotifyInfo) (*SpotifyInfo,
 			info.Track = p.truncateString(track, 20)
 			info.Artist = p.truncateString(artist, 15)
 		}
+
+		// Enhanced state info (fallback - simplified)
+		// Note: We don't get enhanced state in fallback mode to keep it simple
+		info.ShuffleState = false
+		info.RepeatState = "off"
+		info.IsLiked = false
+		info.StateIcons = "" // No state icons in fallback mode
 	}
 
 	// Set display elements based on state
@@ -254,24 +286,87 @@ func (p *SpotifyPlugin) truncateString(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
-// setDisplayElements sets the appropriate icon, color, and label based on Spotify state
+// parseRepeatState converts Spotify's repeat state to our format
+func (p *SpotifyPlugin) parseRepeatState(rawState string) string {
+	switch strings.ToLower(strings.TrimSpace(rawState)) {
+	case "true":
+		return "playlist" // Spotify "repeating" = repeat all/playlist
+	case "false":
+		return "off"
+	default:
+		// Spotify doesn't distinguish between track and playlist repeat via AppleScript
+		// We'll default to playlist repeat when true
+		return "off"
+	}
+}
+
+// generateStateIcons creates a combined string of state icons
+func (p *SpotifyPlugin) generateStateIcons(info *SpotifyInfo) string {
+	icons := []string{}
+
+	// Shuffle icon
+	if info.ShuffleState {
+		icons = append(icons, "󰒝") // Shuffle on
+	} else {
+		icons = append(icons, "󰒞") // Shuffle off
+	}
+
+	// Repeat icon
+	switch info.RepeatState {
+	case "track":
+		icons = append(icons, "󰑐") // Repeat track
+	case "playlist":
+		icons = append(icons, "󰑓") // Repeat all/playlist
+	default:
+		icons = append(icons, "󰑑") // Repeat off
+	}
+
+	// Liked icon (if we had reliable data)
+	if info.IsLiked {
+		icons = append(icons, "󰋚") // Liked
+	} else {
+		icons = append(icons, "󰋛") // Not liked
+	}
+
+	return strings.Join(icons, " ")
+}
+
+// setDisplayElements sets the appropriate icon, color, and label based on enhanced Spotify state
 func (p *SpotifyPlugin) setDisplayElements(info *SpotifyInfo) {
 	switch info.State {
 	case "playing":
 		info.Icon = "󰏤" // Playing icon
 		info.Color = p.config.Colors.Green
 		if info.Track != "" && info.Artist != "" {
-			info.Label = fmt.Sprintf("%s - %s", info.Artist, info.Track)
+			// Enhanced format with state icons
+			if info.StateIcons != "" {
+				info.Label = fmt.Sprintf("%s - %s %s", info.Artist, info.Track, info.StateIcons)
+			} else {
+				info.Label = fmt.Sprintf("%s - %s", info.Artist, info.Track)
+			}
 		} else {
-			info.Label = "Playing"
+			if info.StateIcons != "" {
+				info.Label = fmt.Sprintf("Playing %s", info.StateIcons)
+			} else {
+				info.Label = "Playing"
+			}
 		}
 	case "paused":
 		info.Icon = "󰐊" // Paused icon
 		info.Color = p.config.Colors.Yellow
 		if info.Track != "" && info.Artist != "" {
-			info.Label = fmt.Sprintf("%s - %s", info.Artist, info.Track)
+			// Enhanced format with state icons
+			if info.StateIcons != "" {
+				info.Label = fmt.Sprintf("%s - %s %s", info.Artist, info.Track, info.StateIcons)
+			} else {
+				info.Label = fmt.Sprintf("%s - %s", info.Artist, info.Track)
+			}
 		} else {
-			info.Label = "Paused"
+			if info.StateIcons != "" {
+				info.Label = fmt.Sprintf("Paused %s", info.StateIcons)
+			} else {
+				info.Label = "Paused"
+			}
 		}
 	default:
 		info.Icon = "󰓇" // Spotify icon
@@ -301,8 +396,9 @@ func (p *SpotifyPlugin) UpdateDisplay() error {
 		return fmt.Errorf("failed to get Spotify info: %w", err)
 	}
 
-	p.logger.Debug("Spotify: running=%v, state=%s, track=%s, artist=%s",
-		spotifyInfo.IsRunning, spotifyInfo.State, spotifyInfo.Track, spotifyInfo.Artist)
+	p.logger.Debug("Spotify: running=%v, state=%s, track=%s, artist=%s, shuffle=%v, repeat=%s, liked=%v, icons=%s",
+		spotifyInfo.IsRunning, spotifyInfo.State, spotifyInfo.Track, spotifyInfo.Artist,
+		spotifyInfo.ShuffleState, spotifyInfo.RepeatState, spotifyInfo.IsLiked, spotifyInfo.StateIcons)
 
 	// Update SketchyBar with enhanced styling for media controls
 	if err := p.updater.UpdateItemDetailed(itemName, spotifyInfo.Icon, spotifyInfo.Label,

@@ -20,11 +20,12 @@ const (
 
 // BatteryPlugin handles battery monitoring for SketchyBar
 type BatteryPlugin struct {
-	config  *config.GlobalConfig
-	logger  *utils.Logger
-	updater *utils.SketchyBarUpdater
-	sysinfo *utils.SystemInfo
-	cache   *utils.CacheManager // Cache for battery data
+	config       *config.GlobalConfig
+	logger       *utils.Logger
+	updater      *utils.SketchyBarUpdater
+	sysinfo      *utils.SystemInfo
+	cache        *utils.CacheManager // Cache for battery data
+	colorManager *BatteryColorManager
 }
 
 // BatteryInfo represents current battery status
@@ -57,11 +58,12 @@ func NewBatteryPlugin() (*BatteryPlugin, error) {
 	}
 
 	return &BatteryPlugin{
-		config:  cfg,
-		logger:  logger,
-		updater: updater,
-		sysinfo: sysinfo,
-		cache:   cache,
+		config:       cfg,
+		logger:       logger,
+		updater:      updater,
+		sysinfo:      sysinfo,
+		cache:        cache,
+		colorManager: NewBatteryColorManager(),
 	}, nil
 }
 
@@ -286,37 +288,6 @@ func (p *BatteryPlugin) GetBatteryIcon(info *BatteryInfo) string {
 	}
 }
 
-// GetBatteryColor returns appropriate color based on battery level and charging status
-func (p *BatteryPlugin) GetBatteryColor(info *BatteryInfo) string {
-	if !info.IsPresent {
-		return p.config.Colors.Red
-	}
-
-	if info.IsCharging {
-		// Charging colors - more optimistic
-		switch {
-		case info.Percentage >= 80:
-			return p.config.Colors.Green
-		case info.Percentage >= 40:
-			return p.config.Colors.Yellow
-		default:
-			return p.config.Colors.Peach
-		}
-	} else {
-		// Battery colors - more conservative
-		switch {
-		case info.Percentage >= 70:
-			return p.config.Colors.Green
-		case info.Percentage >= 30:
-			return p.config.Colors.Yellow
-		case info.Percentage >= 10:
-			return p.config.Colors.Peach
-		default:
-			return p.config.Colors.Red
-		}
-	}
-}
-
 // HandlePopupAction shows detailed battery information
 func (p *BatteryPlugin) HandlePopupAction() error {
 	p.logger.Info("Showing battery popup")
@@ -328,7 +299,7 @@ func (p *BatteryPlugin) HandlePopupAction() error {
 	}
 
 	if !batteryInfo.IsPresent {
-		if err := p.updater.UpdateItem(itemName, "󰂑", "No Battery", p.config.Colors.Red); err != nil {
+		if err := p.updater.UpdateItem(itemName, "󰂑", "No Battery", p.colorManager.GetNoDeviceColor()); err != nil {
 			return fmt.Errorf("failed to update popup: %w", err)
 		}
 		return nil
@@ -364,7 +335,7 @@ func (p *BatteryPlugin) HandlePopupAction() error {
 		status, batteryInfo.Percentage, timeMsg, condition, batteryInfo.CycleCount)
 
 	icon := p.GetBatteryIcon(batteryInfo)
-	color := p.GetBatteryColor(batteryInfo)
+	color := p.colorManager.GetBatteryColor(batteryInfo)
 
 	if err := p.updater.UpdateItem(itemName, icon, popupLabel, color); err != nil {
 		return fmt.Errorf("failed to update popup: %w", err)
@@ -399,7 +370,7 @@ func (p *BatteryPlugin) UpdateDisplay() error {
 
 	if !batteryInfo.IsPresent {
 		// No battery detected
-		if err := p.updater.UpdateItem(itemName, "󰂑", "No Battery", p.config.Colors.Red); err != nil {
+		if err := p.updater.UpdateItem(itemName, "󰂑", "No Battery", p.colorManager.GetNoDeviceColor()); err != nil {
 			return fmt.Errorf("failed to update SketchyBar: %w", err)
 		}
 		return nil
@@ -409,7 +380,7 @@ func (p *BatteryPlugin) UpdateDisplay() error {
 
 	// Get appropriate icon and color
 	icon := p.GetBatteryIcon(batteryInfo)
-	color := p.GetBatteryColor(batteryInfo)
+	color := p.colorManager.GetBatteryColor(batteryInfo)
 
 	// Format label
 	var label string
@@ -417,12 +388,12 @@ func (p *BatteryPlugin) UpdateDisplay() error {
 		// Show time remaining for battery mode
 		label = fmt.Sprintf("%d%% (%s)", batteryInfo.Percentage, batteryInfo.TimeRemaining)
 	} else {
-		// Show percentage with charging indicator
-		chargingIndicator := ""
+		// Show percentage with charging indicator (consistent spacing)
 		if batteryInfo.IsCharging {
-			chargingIndicator = "⚡"
+			label = fmt.Sprintf("%d%% ⚡", batteryInfo.Percentage)
+		} else {
+			label = fmt.Sprintf("%d%%", batteryInfo.Percentage)
 		}
-		label = fmt.Sprintf("%d%%%s", batteryInfo.Percentage, chargingIndicator)
 	}
 
 	// Update SketchyBar

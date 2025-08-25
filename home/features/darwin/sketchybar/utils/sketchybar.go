@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"sketchybar-plugins/config"
@@ -26,17 +25,26 @@ func (sb *SketchyBarUpdater) UpdateItem(name, icon, label, iconColor string) err
 	return sb.UpdateItemDetailed(name, icon, label, iconColor, sb.config.Colors.Text, sb.config.Colors.Surface0)
 }
 
-// UpdateItemDetailed updates a SketchyBar item with custom colors
+// UpdateItemDetailed updates a SketchyBar item with modern group-based design
 func (sb *SketchyBarUpdater) UpdateItemDetailed(name, icon, label, iconColor, labelColor, bgColor string) error {
 	cmd := exec.Command("sketchybar", "--set", name,
 		"icon="+icon,
 		"label="+label,
 		"icon.color="+iconColor,
 		"label.color="+labelColor,
-		"background.color="+bgColor,
-		"background.corner_radius="+strconv.Itoa(sb.config.Settings.Display.CornerRadius),
-		"background.padding_left="+strconv.Itoa(sb.config.Settings.Display.Padding),
-		"background.padding_right="+strconv.Itoa(sb.config.Settings.Display.Padding),
+		// 🎨 MODERN: Individual backgrounds disabled - groups handle styling
+		"background.drawing=off",
+		// 🎯 PERFECT ALIGNMENT: Precise positioning for modern typography
+		"icon.y_offset=0",
+		"label.y_offset=0",
+		// 🌊 SEAMLESS SPACING: Let group containers provide the structure
+		"icon.padding_left=8",
+		"icon.padding_right=6",
+		"label.padding_left=0",
+		"label.padding_right=8",
+		// 🎨 NO ITEM PADDING: Groups provide consistent spacing
+		"padding_left=0",
+		"padding_right=0",
 	)
 
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -70,17 +78,19 @@ func Round(val float64, precision int) float64 {
 	return float64(int(val*multiplier+0.5)) / multiplier
 }
 
-// GetCPUIcon returns appropriate CPU icon based on usage
+// GetCPUIcon returns appropriate CPU icon based purely on usage level
 func GetCPUIcon(usage float64) string {
 	switch {
-	case usage > 80:
-		return "󰻠" // CPU icon - high usage
-	case usage > 50:
-		return "󰻟" // CPU icon - medium usage
-	case usage > 20:
-		return "󰻟" // CPU icon - normal usage
+	case usage > 85:
+		return "󰘚" // High usage - CPU
+	case usage > 65:
+		return "󰻠" // Medium-high usage - CPU
+	case usage > 35:
+		return "󰻟" // Medium usage - CPU
+	case usage > 15:
+		return "󰻞" // Low-medium usage - CPU
 	default:
-		return "󰻞" // CPU icon - low usage
+		return "󰻝" // Low usage - CPU
 	}
 }
 

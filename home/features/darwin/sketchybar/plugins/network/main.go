@@ -24,23 +24,27 @@ const (
 
 // NetworkPlugin handles network monitoring for SketchyBar
 type NetworkPlugin struct {
-	config  *config.GlobalConfig
-	logger  *utils.Logger
-	updater *utils.SketchyBarUpdater
-	history *utils.HistoryManager
-	sysinfo *utils.SystemInfo
-	cache   *utils.CacheManager
+	config       *config.GlobalConfig
+	logger       *utils.Logger
+	updater      *utils.SketchyBarUpdater
+	history      *utils.HistoryManager
+	sysinfo      *utils.SystemInfo
+	cache        *utils.CacheManager
+	colorManager *NetworkColorManager
 }
 
 // NetworkInfo represents current network status
 type NetworkInfo struct {
-	InterfaceType  string // "wifi", "ethernet", "none"
+	InterfaceType  string // "wifi", "ethernet", "vpn", "hotspot", "none"
 	SSID           string // WiFi network name
 	SignalStrength int    // WiFi signal strength (-100 to 0 dBm)
 	SignalQuality  int    // Signal quality percentage (0-100)
 	IPAddress      string // Current IP address
 	InterfaceName  string // Interface name (en0, en1, etc.)
 	IsConnected    bool   // Whether we have an active connection
+	IsVPNActive    bool   // Whether VPN is active
+	VPNType        string // VPN type (if detected)
+	IsHotspot      bool   // Whether using mobile hotspot/tethering
 }
 
 // NewNetworkPlugin creates a new network monitoring plugin
@@ -64,12 +68,13 @@ func NewNetworkPlugin() (*NetworkPlugin, error) {
 	}
 
 	return &NetworkPlugin{
-		config:  cfg,
-		logger:  logger,
-		updater: updater,
-		history: history,
-		sysinfo: sysinfo,
-		cache:   cache,
+		config:       cfg,
+		logger:       logger,
+		updater:      updater,
+		history:      history,
+		sysinfo:      sysinfo,
+		cache:        cache,
+		colorManager: NewNetworkColorManager(),
 	}, nil
 }
 
@@ -91,20 +96,10 @@ func (p *NetworkPlugin) GetNetworkInfo() (*NetworkInfo, error) {
 		return info, nil
 	}
 
-	// Fast interface type detection to avoid expensive WiFi checks
+	// FIXED: Check WiFi first, then ethernet (proper detection order)
 	for _, iface := range interfaces {
 		if strings.HasPrefix(iface.Name, "en") {
-			// Method 1: Fast ethernet detection (check for wired connection indicators)
-			if p.isEthernetConnection(iface.Name) {
-				info.InterfaceType = "ethernet"
-				info.IPAddress = iface.IPAddress
-				info.InterfaceName = iface.Name
-				info.IsConnected = true
-				p.logger.Debug("Ethernet connection detected on %s (fast detection)", info.InterfaceName)
-				return info, nil
-			}
-
-			// Method 2: Only check WiFi if fast ethernet detection failed
+			// Method 1: Check WiFi first (more precise detection)
 			if p.isCachedWiFiInterface(iface.Name) {
 				wifiInfo, err := p.getCachedWiFiInfo(iface.Name)
 				if err == nil && wifiInfo.SSID != "" {
@@ -115,17 +110,64 @@ func (p *NetworkPlugin) GetNetworkInfo() (*NetworkInfo, error) {
 					info.IPAddress = iface.IPAddress
 					info.InterfaceName = iface.Name
 					info.IsConnected = true
+					// Check for VPN and hotspot connections
+					info.IsVPNActive = p.detectVPN()
+					if info.IsVPNActive {
+						info.VPNType = p.detectVPNType()
+					}
+					info.IsHotspot = p.detectHotspot(info.InterfaceName, info.SSID)
 					p.logger.Debug("WiFi connection found: %s on %s (%d%% signal)", info.SSID, info.InterfaceName, info.SignalQuality)
+					return info, nil
+				}
+				// Interface is WiFi-capable but not connected - try enhanced detection
+				wifiInfo, err = p.getWiFiInfoFromSystem(iface.Name)
+				if err == nil && wifiInfo.SSID != "" {
+					info.InterfaceType = "wifi"
+					info.SSID = wifiInfo.SSID
+					info.SignalStrength = wifiInfo.SignalStrength
+					info.SignalQuality = wifiInfo.SignalQuality
+					info.IPAddress = iface.IPAddress
+					info.InterfaceName = iface.Name
+					info.IsConnected = true
+					// Check for VPN and hotspot connections
+					info.IsVPNActive = p.detectVPN()
+					if info.IsVPNActive {
+						info.VPNType = p.detectVPNType()
+					}
+					info.IsHotspot = p.detectHotspot(info.InterfaceName, info.SSID)
+					p.logger.Debug("WiFi connection found via enhanced detection: %s on %s", info.SSID, info.InterfaceName)
 					return info, nil
 				}
 			}
 
-			// Method 3: Default to ethernet if WiFi detection failed but interface is active
+			// Method 2: Check ethernet only if WiFi detection failed
+			if p.isEthernetConnection(iface.Name) {
+				info.InterfaceType = "ethernet"
+				info.IPAddress = iface.IPAddress
+				info.InterfaceName = iface.Name
+				info.IsConnected = true
+				// Check for VPN and hotspot connections
+				info.IsVPNActive = p.detectVPN()
+				if info.IsVPNActive {
+					info.VPNType = p.detectVPNType()
+				}
+				info.IsHotspot = p.detectHotspot(info.InterfaceName, info.SSID)
+				p.logger.Debug("Ethernet connection detected on %s", info.InterfaceName)
+				return info, nil
+			}
+
+			// Method 3: Default fallback for active interface with IP
 			info.InterfaceType = "ethernet"
 			info.IPAddress = iface.IPAddress
 			info.InterfaceName = iface.Name
 			info.IsConnected = true
-			p.logger.Debug("Default ethernet connection on %s", info.InterfaceName)
+			// Check for VPN and hotspot connections
+			info.IsVPNActive = p.detectVPN()
+			if info.IsVPNActive {
+				info.VPNType = p.detectVPNType()
+			}
+			info.IsHotspot = p.detectHotspot(info.InterfaceName, info.SSID)
+			p.logger.Debug("Fallback connection on %s (assuming ethernet)", info.InterfaceName)
 			return info, nil
 		}
 	}
@@ -497,24 +539,58 @@ func (p *NetworkPlugin) getWiFiInfoFromWdutil(interfaceName string, info *WiFiIn
 
 // Optimization method 3: Basic WiFi info using fast system calls
 func (p *NetworkPlugin) getWiFiInfoBasic(interfaceName string, info *WiFiInfo) error {
-	// Try networksetup to get current WiFi network (much faster than system_profiler)
+	// Method 1: Try networksetup (fastest, but sometimes fails)
 	cmd := exec.Command("networksetup", "-getairportnetwork", interfaceName)
 	output, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("networksetup getairportnetwork failed: %w", err)
+	if err == nil {
+		line := strings.TrimSpace(string(output))
+		// Output format: "Current Wi-Fi Network: NetworkName" or "You are not associated with an AirPort network."
+		if strings.HasPrefix(line, "Current Wi-Fi Network: ") {
+			info.SSID = strings.TrimSpace(strings.TrimPrefix(line, "Current Wi-Fi Network: "))
+			info.SignalStrength = -50 // Assume decent signal
+			info.SignalQuality = 60   // Reasonable default
+			p.logger.Debug("Got SSID from networksetup: %s", info.SSID)
+			return nil
+		}
 	}
 
-	line := strings.TrimSpace(string(output))
-	// Output format: "Current Wi-Fi Network: NetworkName" or "You are not associated with an AirPort network."
-	if strings.HasPrefix(line, "Current Wi-Fi Network: ") {
-		info.SSID = strings.TrimSpace(strings.TrimPrefix(line, "Current Wi-Fi Network: "))
-		// Set reasonable defaults when we can't get signal strength
-		info.SignalStrength = -50 // Assume decent signal
-		info.SignalQuality = 60   // Reasonable default
-		return nil
+	// Method 2: Try airport utility if available (macOS alternative)
+	cmd = exec.Command("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport", "-I")
+	output, err = cmd.Output()
+	if err == nil {
+		lines := strings.Split(string(output), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.Contains(line, " SSID: ") {
+				parts := strings.SplitN(line, " SSID: ", 2)
+				if len(parts) == 2 {
+					info.SSID = strings.TrimSpace(parts[1])
+					info.SignalStrength = -50
+					info.SignalQuality = 60
+					p.logger.Debug("Got SSID from airport utility: %s", info.SSID)
+					return nil
+				}
+			}
+		}
 	}
 
-	return fmt.Errorf("not connected to WiFi")
+	// Method 3: Check if WiFi interface is active (even without SSID)
+	cmd = exec.Command("ifconfig", interfaceName)
+	output, err = cmd.Output()
+	if err == nil {
+		outputStr := string(output)
+		// Look for WiFi-specific information indicating active connection
+		if strings.Contains(outputStr, "status: active") || strings.Contains(outputStr, "inet ") {
+			// Interface is active with IP, assume it's WiFi connected
+			info.SSID = "Wi-Fi Network" // Generic fallback when SSID unavailable
+			info.SignalStrength = -50
+			info.SignalQuality = 60
+			p.logger.Debug("WiFi interface %s is active but SSID unavailable", interfaceName)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("WiFi not connected on %s", interfaceName)
 }
 
 // Optimization method 4: Original system_profiler method (slow but comprehensive)
@@ -587,6 +663,144 @@ func (p *NetworkPlugin) getWiFiInfoFromSystemProfiler(interfaceName string) (*Wi
 	return info, nil
 }
 
+// detectVPN checks if VPN is currently active
+func (p *NetworkPlugin) detectVPN() bool {
+	if p.cache == nil {
+		return p.detectVPNDirect()
+	}
+
+	key := "vpn_status"
+	if cached, exists := p.cache.Get(key); exists {
+		if vpnActive, ok := cached.(bool); ok {
+			return vpnActive
+		}
+	}
+
+	// Cache miss - detect VPN directly
+	vpnActive := p.detectVPNDirect()
+
+	// Cache for 30 seconds (VPN status can change)
+	if setErr := p.cache.Set(key, vpnActive, 30); setErr != nil {
+		p.logger.Warning("Failed to cache VPN status: %v", setErr)
+	}
+
+	return vpnActive
+}
+
+// detectVPNDirect performs direct VPN detection using multiple methods (refined for macOS)
+func (p *NetworkPlugin) detectVPNDirect() bool {
+	// Method 1: Check for active VPN processes (most reliable on macOS)
+	cmd := exec.Command("pgrep", "-f", "openvpn|wireguard|nordvpn|expressvpn|tunnelblick")
+	err := cmd.Run()
+	if err == nil {
+		p.logger.Debug("VPN detected via process check")
+		return true
+	}
+
+	// Method 2: Check route table for non-system VPN routes
+	cmd = exec.Command("route", "-n", "get", "default")
+	output, err := cmd.Output()
+	if err == nil {
+		outputStr := strings.ToLower(string(output))
+		// Only detect VPN if routing through utun with unusual interface numbers
+		// (utun0, utun1, utun2 are often system interfaces)
+		if strings.Contains(outputStr, "utun") {
+			// Extract interface number
+			if strings.Contains(outputStr, "utun3") || strings.Contains(outputStr, "utun4") ||
+				strings.Contains(outputStr, "utun5") || strings.Contains(outputStr, "utun6") {
+				p.logger.Debug("VPN detected via routing table (utun3+)")
+				return true
+			}
+		}
+		// PPP interfaces are more likely to be VPN
+		if strings.Contains(outputStr, "ppp") {
+			p.logger.Debug("VPN detected via PPP interface")
+			return true
+		}
+	}
+
+	// Method 3: Check for non-system VPN interfaces
+	cmd = exec.Command("ifconfig")
+	output, err = cmd.Output()
+	if err == nil {
+		outputStr := strings.ToLower(string(output))
+		// Look for TAP/TUN interfaces (usually VPN)
+		vpnInterfaces := []string{"tap", "tun"}
+		for _, vpnIface := range vpnInterfaces {
+			if strings.Contains(outputStr, vpnIface+": flags=") {
+				p.logger.Debug("VPN detected via %s interface", vpnIface)
+				return true
+			}
+		}
+		// Check for IPSec interfaces
+		if strings.Contains(outputStr, "ipsec") {
+			p.logger.Debug("VPN detected via IPSec interface")
+			return true
+		}
+	}
+
+	return false
+}
+
+// detectVPNType attempts to identify the VPN type
+func (p *NetworkPlugin) detectVPNType() string {
+	cmd := exec.Command("pgrep", "-fl", "openvpn|wireguard|nordvpn|expressvpn|tunnelblick")
+	output, err := cmd.Output()
+	if err != nil {
+		return "Unknown"
+	}
+
+	outputStr := strings.ToLower(string(output))
+	if strings.Contains(outputStr, "openvpn") {
+		return "OpenVPN"
+	} else if strings.Contains(outputStr, "wireguard") {
+		return "WireGuard"
+	} else if strings.Contains(outputStr, "nordvpn") {
+		return "NordVPN"
+	} else if strings.Contains(outputStr, "expressvpn") {
+		return "ExpressVPN"
+	} else if strings.Contains(outputStr, "tunnelblick") {
+		return "Tunnelblick"
+	}
+
+	return "VPN"
+}
+
+// detectHotspot checks if connected to mobile hotspot or USB tethering
+func (p *NetworkPlugin) detectHotspot(interfaceName, ssid string) bool {
+	// Method 1: Common mobile hotspot SSID patterns
+	if ssid != "" {
+		lowerSSID := strings.ToLower(ssid)
+		hotspotPatterns := []string{
+			"iphone", "android", "pixel", "samsung", "galaxy",
+			"mobile", "hotspot", "tether", "portable", "personal",
+		}
+		for _, pattern := range hotspotPatterns {
+			if strings.Contains(lowerSSID, pattern) {
+				return true
+			}
+		}
+	}
+
+	// Method 2: USB tethering interface patterns
+	if strings.HasPrefix(interfaceName, "en") {
+		// Check if this is a USB tethering interface
+		cmd := exec.Command("system_profiler", "SPUSBDataType")
+		output, err := cmd.Output()
+		if err == nil {
+			outputStr := strings.ToLower(string(output))
+			if strings.Contains(outputStr, "iphone") && strings.Contains(outputStr, "usb ethernet") {
+				return true
+			}
+			if strings.Contains(outputStr, "android") && strings.Contains(outputStr, "rndis") {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // rssiToQuality converts RSSI dBm to quality percentage
 func (p *NetworkPlugin) rssiToQuality(rssi int) int {
 	// RSSI ranges from -100 (worst) to -30 (best)
@@ -606,20 +820,36 @@ func (p *NetworkPlugin) GetNetworkIcon(info *NetworkInfo) string {
 		return "󰤮" // No connection icon
 	}
 
+	// VPN takes priority in display (overlay on other connections)
+	if info.IsVPNActive {
+		return "󰖂" // VPN shield icon
+	}
+
+	// Mobile hotspot/tethering indicator
+	if info.IsHotspot {
+		return "󱘖" // Mobile hotspot icon
+	}
+
 	switch info.InterfaceType {
 	case "wifi":
 		// WiFi icons based on signal quality
 		if info.SignalQuality >= 75 {
-			return "󰤨" // Strong WiFi
-		} else if info.SignalQuality >= 50 {
-			return "󰤥" // Medium WiFi
-		} else if info.SignalQuality >= 25 {
-			return "󰤢" // Weak WiFi
+			return "󰤨" // Strong WiFi (excellent signal)
+		} else if info.SignalQuality >= 60 {
+			return "󰤥" // Good WiFi (good signal)
+		} else if info.SignalQuality >= 40 {
+			return "󰤢" // Medium WiFi (fair signal)
+		} else if info.SignalQuality >= 20 {
+			return "󰤟" // Weak WiFi (poor signal)
 		} else {
-			return "󰤟" // Very weak WiFi
+			return "󰤯" // Very weak WiFi (very poor signal)
 		}
 	case "ethernet":
-		return "󰈀" // Ethernet icon
+		return "󰈀" // Ethernet cable icon
+	case "usb":
+		return "󰌷" // USB tethering icon
+	case "bluetooth":
+		return "󰂰" // Bluetooth PAN icon
 	default:
 		return "󰤮" // Unknown/no connection
 	}
@@ -653,7 +883,7 @@ func (p *NetworkPlugin) HandlePopupAction() error {
 	}
 
 	icon := p.GetNetworkIcon(netInfo)
-	color := p.getNetworkColor(netInfo)
+	color := p.colorManager.GetNetworkColor(netInfo)
 
 	if err := p.updater.UpdateItem(itemName, icon, popupLabel, color); err != nil {
 		return fmt.Errorf("failed to update popup: %w", err)
@@ -677,28 +907,6 @@ func (p *NetworkPlugin) HandlePopupAction() error {
 	return nil
 }
 
-// getNetworkColor returns appropriate color based on connection status
-func (p *NetworkPlugin) getNetworkColor(info *NetworkInfo) string {
-	if !info.IsConnected {
-		return p.config.Colors.Red // No connection
-	}
-
-	switch info.InterfaceType {
-	case "wifi":
-		if info.SignalQuality >= 75 {
-			return p.config.Colors.Green // Strong signal
-		} else if info.SignalQuality >= 50 {
-			return p.config.Colors.Yellow // Medium signal
-		} else {
-			return p.config.Colors.Peach // Weak signal
-		}
-	case "ethernet":
-		return p.config.Colors.Green // Ethernet is always good
-	default:
-		return p.config.Colors.Red // Unknown
-	}
-}
-
 // UpdateDisplay updates the SketchyBar display with current network status
 func (p *NetworkPlugin) UpdateDisplay() error {
 	// Get current network info (now much faster with caching)
@@ -712,24 +920,46 @@ func (p *NetworkPlugin) UpdateDisplay() error {
 
 	// Get appropriate icon and color
 	icon := p.GetNetworkIcon(netInfo)
-	color := p.getNetworkColor(netInfo)
+	color := p.colorManager.GetNetworkColor(netInfo)
 
-	// Format label based on connection type
+	// Format label based on connection type with enhanced information
 	var label string
 	if !netInfo.IsConnected {
 		label = "No Connection"
 	} else {
-		switch netInfo.InterfaceType {
-		case "wifi":
-			if netInfo.SSID != "" {
-				label = fmt.Sprintf("%s (%d%%)", netInfo.SSID, netInfo.SignalQuality)
-			} else {
-				label = "WiFi Connected"
+		// VPN status takes priority in labeling
+		if netInfo.IsVPNActive {
+			switch netInfo.InterfaceType {
+			case "wifi":
+				if netInfo.SSID != "" && netInfo.VPNType != "" {
+					label = fmt.Sprintf("🛡️ %s • %s", netInfo.VPNType, netInfo.SSID)
+				} else {
+					label = fmt.Sprintf("🛡️ %s • WiFi", netInfo.VPNType)
+				}
+			case "ethernet":
+				label = fmt.Sprintf("🛡️ %s • Ethernet", netInfo.VPNType)
+			default:
+				label = fmt.Sprintf("🛡️ %s", netInfo.VPNType)
 			}
-		case "ethernet":
-			label = "Ethernet"
-		default:
-			label = "Connected"
+		} else if netInfo.IsHotspot {
+			label = "📱 Mobile Hotspot"
+		} else {
+			switch netInfo.InterfaceType {
+			case "wifi":
+				if netInfo.SSID != "" {
+					label = fmt.Sprintf("%s • %d%%", netInfo.SSID, netInfo.SignalQuality)
+				} else {
+					label = "WiFi Connected"
+				}
+			case "ethernet":
+				label = "Ethernet"
+			case "usb":
+				label = "USB Tethering"
+			case "bluetooth":
+				label = "Bluetooth PAN"
+			default:
+				label = "Connected"
+			}
 		}
 	}
 
