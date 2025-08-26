@@ -361,6 +361,66 @@ lib.mkIf pkgs.stdenv.isDarwin {
   # We disable our custom launchd service in favor of Homebrew's approach
   launchd.agents.sketchybar.enable = false;
 
+  # Ensure SketchyBar service is started and managed properly
+  # This activation script ensures the service starts on system boot and config reapplication
+  home.activation.startSketchybarService = lib.hm.dag.entryAfter ["buildGoPlugins"] ''
+    echo "🚀 Managing SketchyBar service..."
+    
+    # Set up PATH for activation script to find Homebrew and system utilities
+    export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+    
+    # Check if Homebrew and SketchyBar are available
+    if ! command -v brew >/dev/null 2>&1; then
+      echo "⚠️  Homebrew not found at /opt/homebrew/bin/brew - SketchyBar service management skipped"
+      echo "   PATH: $PATH"
+      exit 0
+    fi
+    
+    if ! brew list sketchybar >/dev/null 2>&1; then
+      echo "⚠️  SketchyBar not installed via Homebrew - service management skipped"
+      exit 0
+    fi
+    
+    # Get current service status
+    SERVICE_STATUS=$(brew services list | grep sketchybar | awk '{print $2}' || echo "none")
+    
+    case "$SERVICE_STATUS" in
+      "started")
+        echo "✅ SketchyBar service already running - restarting to apply new configuration"
+        if brew services restart sketchybar >/dev/null 2>&1; then
+          echo "🔄 SketchyBar service restarted successfully"
+        else
+          echo "⚠️  Failed to restart SketchyBar service"
+        fi
+        ;;
+      "none"|"stopped"|"")
+        echo "🚀 Starting SketchyBar service..."
+        if brew services start sketchybar >/dev/null 2>&1; then
+          echo "✅ SketchyBar service started successfully"
+        else
+          echo "❌ Failed to start SketchyBar service"
+        fi
+        ;;
+      *)
+        echo "ℹ️  SketchyBar service status: $SERVICE_STATUS"
+        echo "🔄 Restarting service to ensure proper configuration"
+        if brew services restart sketchybar >/dev/null 2>&1; then
+          echo "✅ SketchyBar service restarted"
+        else
+          echo "⚠️  Service restart failed"
+        fi
+        ;;
+    esac
+    
+    # Verify the service started correctly
+    sleep 2
+    if pgrep -f "/opt/homebrew/opt/sketchybar/bin/sketchybar" >/dev/null 2>&1; then
+      echo "🎉 SketchyBar is running successfully"
+    else
+      echo "⚠️  SketchyBar process not detected - manual troubleshooting may be needed"
+    fi
+  '';
+
   # Create log directory for any debugging needs
   home.file.".local/share/sketchybar/.keep".text = "";
 
