@@ -386,7 +386,21 @@ lib.mkIf pkgs.stdenv.isDarwin {
     '';
   };
 
-    # Build Go plugins on activation
+    # Refresh SketchyBar after configuration changes
+  home.activation.refreshSketchyBar = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    echo "🔄 Refreshing SketchyBar..."
+    
+    # Check if SketchyBar is running using ps (always available on macOS)
+    if ps aux | grep -q "[S]ketchyBar"; then
+      echo "⚙️  SketchyBar is running - reloading configuration..."
+      /opt/homebrew/bin/sketchybar --reload
+      echo "✅ SketchyBar configuration reloaded"
+    else
+      echo "⚠️  SketchyBar not running - it will be started by AeroSpace when needed"
+    fi
+  '';
+
+  # Build Go plugins on activation
   home.activation.buildGoPlugins = lib.hm.dag.entryBefore ["writeBoundary"] ''
     echo "🔨 Building SketchyBar Go plugins..."
 

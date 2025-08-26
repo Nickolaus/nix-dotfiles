@@ -285,26 +285,95 @@ func updateSketchyBar(overview *WorkspaceOverview) {
 	updateExistingItems(overview, colors)
 }
 
+// formatAppNames provides smart app name formatting with proper truncation
+func formatAppNames(apps []string) string {
+	if len(apps) == 0 {
+		return "Empty"
+	}
+
+	// Clean up app names for better readability
+	cleanedApps := make([]string, 0, len(apps))
+	for _, app := range apps {
+		cleaned := cleanAppName(app)
+		if cleaned != "" {
+			cleanedApps = append(cleanedApps, cleaned)
+		}
+	}
+
+	if len(cleanedApps) == 0 {
+		return "Empty"
+	}
+
+	// Smart display logic with improved readability
+	switch len(cleanedApps) {
+	case 1:
+		return cleanedApps[0]
+	case 2:
+		return fmt.Sprintf("%s, %s", cleanedApps[0], cleanedApps[1])
+	case 3:
+		return fmt.Sprintf("%s, %s, %s", cleanedApps[0], cleanedApps[1], cleanedApps[2])
+	default:
+		// Show first 2 apps with elegant count indicator
+		return fmt.Sprintf("%s, %s  +%d more", cleanedApps[0], cleanedApps[1], len(cleanedApps)-2)
+	}
+}
+
+// cleanAppName cleans up app names for better display
+func cleanAppName(appName string) string {
+	// Remove common suffixes and clean up names
+	cleaned := strings.TrimSpace(appName)
+
+	// Handle common app name patterns for better readability
+	switch {
+	case strings.HasSuffix(cleaned, " - Google Chrome"):
+		// Chrome tabs: show just the main part
+		cleaned = strings.Replace(cleaned, " - Google Chrome", "", 1)
+	case strings.HasSuffix(cleaned, " — WezTerm"):
+		// WezTerm windows: show just the path/title
+		cleaned = strings.Replace(cleaned, " — WezTerm", "", 1)
+	case strings.HasPrefix(cleaned, "PhpStorm - "):
+		// PhpStorm windows: show just project name
+		cleaned = strings.Replace(cleaned, "PhpStorm - ", "", 1)
+	case strings.Contains(cleaned, " - "):
+		// Generic "App - Document" pattern: show just the document
+		parts := strings.Split(cleaned, " - ")
+		if len(parts) > 1 {
+			cleaned = parts[len(parts)-1] // Take the last part (usually document name)
+		}
+	}
+
+	// Truncate very long names with smart ellipsis
+	if len(cleaned) > 18 {
+		cleaned = cleaned[:15] + "…"
+	}
+
+	return cleaned
+}
+
 func getShortMonitorName(fullName string) string {
-	// Common monitor name mappings for cleaner display
+	// Enhanced monitor icons with consistent Nerd Font symbols
 	switch {
 	case strings.Contains(fullName, "Built-in"):
-		return "💻"
+		return "󰌢" // Nerd Font laptop icon
 	case strings.Contains(fullName, "LG HDR 4K"):
-		return "🖥️"
+		return "󰍹" // Nerd Font monitor icon (4K)
+	case strings.Contains(fullName, "LG HDR WQHD"):
+		return "󰍺" // Nerd Font monitor icon (ultrawide)
 	case strings.Contains(fullName, "Studio Display"):
-		return "🖥️"
+		return "󰨇" // Nerd Font Apple display icon
 	case strings.Contains(fullName, "Pro Display"):
-		return "⚡"
+		return "󰨇" // Nerd Font Apple display icon
 	case strings.Contains(fullName, "Thunderbolt"):
-		return "⚡"
+		return "󱈟" // Nerd Font Thunderbolt icon
+	case strings.Contains(fullName, "LG"):
+		return "󰍹" // Generic LG monitor icon
 	default:
-		// Extract model name or use first word
+		// Extract model name with generic monitor icon
 		parts := strings.Fields(fullName)
 		if len(parts) > 0 {
-			return parts[0]
+			return "󰍹" // Generic monitor icon
 		}
-		return "Monitor"
+		return "󰍹"
 	}
 }
 
@@ -413,41 +482,64 @@ func updateExistingItems(overview *WorkspaceOverview, colors *utils.ColorPalette
 		itemName := fmt.Sprintf("aerospace.display.%d", monitor.ID)
 		monitorIcon := getShortMonitorName(monitor.Name)
 
-		// Create the display label (same as before)
+		// Create enhanced display label with status indicators
 		var displayLabel string
-		if len(activeWorkspace.AppNames) > 0 {
-			apps := activeWorkspace.AppNames
-			if len(apps) > 2 {
-				displayLabel = fmt.Sprintf("%s %s - %s, %s (+%d)",
-					monitorIcon, activeWorkspace.Name, apps[0], apps[1], len(apps)-2)
-			} else {
-				displayLabel = fmt.Sprintf("%s %s - %s",
-					monitorIcon, activeWorkspace.Name, strings.Join(apps, ", "))
-			}
-		} else {
-			displayLabel = fmt.Sprintf("%s %s - Empty", monitorIcon, activeWorkspace.Name)
-		}
+		var workspaceIndicator string
 
-		// Determine styling (same logic as before)
+		// Add workspace status indicator
 		isFocused := activeWorkspace.Name == overview.FocusedWorkspace
-		bgDrawing := "off"
-		bgColor := colors.Surface0
-		labelColor := colors.Subtext0 // Muted text for inactive
+		isVisible := contains(overview.VisibleWorkspaces, activeWorkspace.Name)
 
 		if isFocused {
+			workspaceIndicator = "●" // Filled circle for focused workspace
+		} else if isVisible {
+			workspaceIndicator = "◉" // Double circle for visible workspace
+		} else {
+			workspaceIndicator = "○" // Empty circle for inactive workspace
+		}
+
+		// Enhanced text formatting with smart app name handling
+		if len(activeWorkspace.AppNames) > 0 {
+			apps := activeWorkspace.AppNames
+			formattedApps := formatAppNames(apps)
+			displayLabel = fmt.Sprintf("%s %s %s  •  %s",
+				monitorIcon, workspaceIndicator, activeWorkspace.Name, formattedApps)
+		} else {
+			displayLabel = fmt.Sprintf("%s %s %s  •  Empty",
+				monitorIcon, workspaceIndicator, activeWorkspace.Name)
+		}
+
+		// Enhanced styling with better visual hierarchy
+		var bgDrawing, bgColor, labelColor, iconColor string
+
+		if isFocused {
+			// 🎯 FOCUSED: Maximum visual impact - this is where attention is
 			bgDrawing = "on"
-			bgColor = colors.Red     // Focused workspace
-			labelColor = colors.Text // Bright text for focused
+			bgColor = colors.Blue    // Strong blue for active focus
+			labelColor = colors.Text // Brightest text for readability
+			iconColor = colors.Text  // Bright icon to match
+		} else if isVisible {
+			// 👁️ VISIBLE: Moderate emphasis - you can see it but not focused
+			bgDrawing = "on"
+			bgColor = colors.Surface1    // Elevated surface for visible state
+			labelColor = colors.Subtext1 // Medium brightness text
+			iconColor = colors.Subtext1  // Medium brightness icon
+		} else {
+			// 💤 INACTIVE: Minimal emphasis - background workspace
+			bgDrawing = "off"
+			bgColor = colors.Surface0    // No background (clean look)
+			labelColor = colors.Subtext0 // Muted text for less distraction
+			iconColor = colors.Overlay0  // Subtle icon color
 		}
 
 		// Check if item exists, if not create it
 		checkResult := exec.Command("sketchybar", "--query", itemName).Run()
 		if checkResult != nil {
 			// Item doesn't exist, create it (first time setup)
-			createNewItem(itemName, displayLabel, bgDrawing, bgColor, labelColor, colors, monitor.ID)
+			createNewItem(itemName, monitorIcon, displayLabel, bgDrawing, bgColor, labelColor, iconColor, colors, monitor.ID)
 		} else {
 			// Item exists, just update it (prevents flickering)
-			fmt.Printf("Updating item %s with label: %s\n", itemName, displayLabel)
+			fmt.Printf("Updating item %s with icon: %s, label: %s\n", itemName, monitorIcon, displayLabel)
 			exec.Command("sketchybar",
 				"--set", itemName,
 				"label="+displayLabel,
@@ -457,26 +549,34 @@ func updateExistingItems(overview *WorkspaceOverview, colors *utils.ColorPalette
 				"update_freq=1",
 			).Run()
 		}
+
+		// Note: SketchyBar provides natural spacing between items, no explicit spacers needed
 	}
 }
 
 // createNewItem creates a new SketchyBar item (only called when item doesn't exist)
-func createNewItem(itemName, displayLabel, bgDrawing, bgColor, labelColor string, colors *utils.ColorPalette, monitorID int) {
+func createNewItem(itemName, monitorIcon, displayLabel, bgDrawing, bgColor, labelColor, iconColor string, colors *utils.ColorPalette, monitorID int) {
 	monitorPattern := fmt.Sprintf("%d", monitorID)
 
 	exec.Command("sketchybar",
 		"--add", "item", itemName, "left",
 		"--set", itemName,
+		"icon=",
 		"label="+displayLabel,
 		"label.color="+labelColor,
-		"label.font=SF Pro Display:Medium:13.0",
+		"label.font=SF Pro Display:Semibold:12.5",
 		"label.padding_left=8",
 		"label.padding_right=8",
 		"icon.drawing=off",
 		"background.color="+bgColor,
-		"background.corner_radius=8",
+		"background.corner_radius=6",
 		"background.height=30",
 		"background.drawing="+bgDrawing,
+		"background.padding_left=0",
+		"background.padding_right=0",
+		"padding_left=0",
+		"padding_right=0",
+		"background.border_width=0",
 		"update_freq=5",
 		"click_script=aerospace focus-monitor "+monitorPattern,
 		"script=$HOME/.local/bin/sketchybar/aerospace_overview",
