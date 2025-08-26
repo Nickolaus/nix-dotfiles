@@ -18,7 +18,7 @@
       # SketchyBar integration - start SketchyBar with AeroSpace and notify on workspace changes
       after-startup-command = ["exec-and-forget sketchybar"];
       exec-on-workspace-change = ["/bin/bash" "-c" 
-        "sketchybar --trigger aerospace_workspace_change FOCUSED=$AEROSPACE_FOCUSED_WORKSPACE"
+        "FOCUSED=$AEROSPACE_FOCUSED_WORKSPACE $HOME/.local/bin/sketchybar/aerospace_overview && sketchybar --trigger aerospace_workspace_change FOCUSED=$AEROSPACE_FOCUSED_WORKSPACE"
       ];
 
       automatically-unhide-macos-hidden-apps = false;

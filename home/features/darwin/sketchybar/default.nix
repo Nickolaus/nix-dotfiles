@@ -290,28 +290,18 @@ lib.mkIf pkgs.stdenv.isDarwin {
                                     background.padding_left=14 \
                                     background.padding_right=14
 
-      ##### AeroSpace Workspace Integration #####
-      # Add AeroSpace workspace change event support
+      ##### Dynamic AeroSpace Workspace Integration #####
+      # Add AeroSpace workspace change event support  
       # See: https://nikitabobko.github.io/AeroSpace/goodies#show-aerospace-workspaces-in-sketchybar
       sketchybar --add event aerospace_workspace_change
 
-      # Add workspace indicators for AeroSpace workspaces
-      for sid in 1 2 3 4 5 6 7 8 9; do
-          sketchybar --add item space.$sid left \
-                     --subscribe space.$sid aerospace_workspace_change \
-                     --set space.$sid \
-                           background.color="''${BASE}88" \
-                           background.corner_radius=8 \
-                           background.height=28 \
-                           background.drawing=off \
-                           label="$sid" \
-                           label.color="''${TEXT}dd" \
-                           label.font="SF Pro Display:Semibold:13.0" \
-                           label.padding_left=8 \
-                           label.padding_right=8 \
-                           click_script="aerospace workspace $sid" \
-                           script="if [ \"\$sid\" = \"\$FOCUSED\" ]; then sketchybar --set \$NAME background.drawing=on label.color=\"''${TEXT}\"; else sketchybar --set \$NAME background.drawing=off label.color=\"''${TEXT}dd\"; fi"
-      done
+      # Initialize dynamic workspace overview
+      # This creates monitor groups and workspace indicators dynamically
+      if command -v "$HOME/.local/bin/sketchybar/aerospace_overview" >/dev/null 2>&1; then
+        "$HOME/.local/bin/sketchybar/aerospace_overview"
+      else
+        echo "Warning: aerospace_overview plugin not found, workspace indicators disabled"
+      fi
 
       ##### Force all scripts to run the first time #####
       # Only run update if this is not a duplicate run
@@ -470,12 +460,12 @@ lib.mkIf pkgs.stdenv.isDarwin {
 
     # Build plugins with comprehensive error checking
     # True SketchyBar plugins (called by SketchyBar to update items)
-    PLUGINS="cpu memory network battery volume front_app notifications clock moon_phase weather spotify"
+    PLUGINS="cpu memory network battery volume front_app notifications clock moon_phase weather spotify aerospace_overview"
     # Utility tools (standalone CLI tools)
     TOOLS="titlebar config"
     
     BUILT_COUNT=0
-    TOTAL_PLUGINS=11
+    TOTAL_PLUGINS=12
     TOTAL_TOOLS=2
     TOTAL_TARGETS=$((TOTAL_PLUGINS + TOTAL_TOOLS))
 
