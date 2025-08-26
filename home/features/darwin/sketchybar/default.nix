@@ -290,6 +290,29 @@ lib.mkIf pkgs.stdenv.isDarwin {
                                     background.padding_left=14 \
                                     background.padding_right=14
 
+      ##### AeroSpace Workspace Integration #####
+      # Add AeroSpace workspace change event support
+      # See: https://nikitabobko.github.io/AeroSpace/goodies#show-aerospace-workspaces-in-sketchybar
+      sketchybar --add event aerospace_workspace_change
+
+      # Add workspace indicators for AeroSpace workspaces
+      for sid in 1 2 3 4 5 6 7 8 9; do
+          sketchybar --add item space.$sid left \
+                     --subscribe space.$sid aerospace_workspace_change \
+                     --set space.$sid \
+                           background.color="''${BASE}88" \
+                           background.corner_radius=8 \
+                           background.height=28 \
+                           background.drawing=off \
+                           label="$sid" \
+                           label.color="''${TEXT}dd" \
+                           label.font="SF Pro Display:Semibold:13.0" \
+                           label.padding_left=8 \
+                           label.padding_right=8 \
+                           click_script="aerospace workspace $sid" \
+                           script="if [ \"\$sid\" = \"\$FOCUSED\" ]; then sketchybar --set \$NAME background.drawing=on label.color=\"''${TEXT}\"; else sketchybar --set \$NAME background.drawing=off label.color=\"''${TEXT}dd\"; fi"
+      done
+
       ##### Force all scripts to run the first time #####
       # Only run update if this is not a duplicate run
       if ! pgrep -f "sketchybar.*--update" > /dev/null 2>&1; then
@@ -357,69 +380,10 @@ lib.mkIf pkgs.stdenv.isDarwin {
 
 
 
-  # Use Homebrew's service management as per official setup
-  # We disable our custom launchd service in favor of Homebrew's approach
+  # SketchyBar startup is now handled by AeroSpace via after-startup-command
+  # See: https://nikitabobko.github.io/AeroSpace/goodies#show-aerospace-workspaces-in-sketchybar
+  # AeroSpace automatically starts SketchyBar and has built-in duplicate detection
   launchd.agents.sketchybar.enable = false;
-
-  # Ensure SketchyBar service is started and managed properly
-  # This activation script ensures the service starts on system boot and config reapplication
-  home.activation.startSketchybarService = lib.hm.dag.entryAfter ["buildGoPlugins"] ''
-    echo "🚀 Managing SketchyBar service..."
-    
-    # Set up PATH for activation script to find Homebrew and system utilities
-    export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-    
-    # Check if Homebrew and SketchyBar are available
-    if ! command -v brew >/dev/null 2>&1; then
-      echo "⚠️  Homebrew not found at /opt/homebrew/bin/brew - SketchyBar service management skipped"
-      echo "   PATH: $PATH"
-      exit 0
-    fi
-    
-    if ! brew list sketchybar >/dev/null 2>&1; then
-      echo "⚠️  SketchyBar not installed via Homebrew - service management skipped"
-      exit 0
-    fi
-    
-    # Get current service status
-    SERVICE_STATUS=$(brew services list | grep sketchybar | awk '{print $2}' || echo "none")
-    
-    case "$SERVICE_STATUS" in
-      "started")
-        echo "✅ SketchyBar service already running - restarting to apply new configuration"
-        if brew services restart sketchybar >/dev/null 2>&1; then
-          echo "🔄 SketchyBar service restarted successfully"
-        else
-          echo "⚠️  Failed to restart SketchyBar service"
-        fi
-        ;;
-      "none"|"stopped"|"")
-        echo "🚀 Starting SketchyBar service..."
-        if brew services start sketchybar >/dev/null 2>&1; then
-          echo "✅ SketchyBar service started successfully"
-        else
-          echo "❌ Failed to start SketchyBar service"
-        fi
-        ;;
-      *)
-        echo "ℹ️  SketchyBar service status: $SERVICE_STATUS"
-        echo "🔄 Restarting service to ensure proper configuration"
-        if brew services restart sketchybar >/dev/null 2>&1; then
-          echo "✅ SketchyBar service restarted"
-        else
-          echo "⚠️  Service restart failed"
-        fi
-        ;;
-    esac
-    
-    # Verify the service started correctly
-    sleep 2
-    if pgrep -f "/opt/homebrew/opt/sketchybar/bin/sketchybar" >/dev/null 2>&1; then
-      echo "🎉 SketchyBar is running successfully"
-    else
-      echo "⚠️  SketchyBar process not detected - manual troubleshooting may be needed"
-    fi
-  '';
 
   # Create log directory for any debugging needs
   home.file.".local/share/sketchybar/.keep".text = "";

@@ -15,9 +15,10 @@
         "move-mouse window-lazy-center"
       ];
 
-      # SketchyBar integration - notify on workspace changes
+      # SketchyBar integration - start SketchyBar with AeroSpace and notify on workspace changes
+      after-startup-command = ["exec-and-forget sketchybar"];
       exec-on-workspace-change = ["/bin/bash" "-c" 
-        "sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE"
+        "sketchybar --trigger aerospace_workspace_change FOCUSED=$AEROSPACE_FOCUSED_WORKSPACE"
       ];
 
       automatically-unhide-macos-hidden-apps = false;
