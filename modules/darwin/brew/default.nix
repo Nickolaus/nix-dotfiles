@@ -25,6 +25,7 @@
 
     # CLI tools not available or problematic in Nix
     brews = [
+      "nx"                      # Nx CLI via Homebrew; prefer brew for global CLI convenience
       "docker-credential-helper"  # Docker credential helper for secure storage of Docker credentials
       "argocd"                   # Declarative continuous delivery tool for Kubernetes
       "mysql-client"             # MySQL client for interacting with MySQL databases
