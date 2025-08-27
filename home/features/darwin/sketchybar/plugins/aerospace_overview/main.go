@@ -453,8 +453,14 @@ func updateExistingLabelsOnly(focusedWorkspace string) {
 
 // updateExistingItems updates labels and colors of existing items (no structure rebuild)
 func updateExistingItems(overview *WorkspaceOverview, colors *utils.ColorPalette) {
-	// Track which items we're updating
-	for _, monitor := range overview.Monitors {
+	// Get monitors that have active content (visible workspaces or workspaces with windows)
+	activeMonitors := getActiveMonitors(overview.Monitors, overview.Workspaces, overview.VisibleWorkspaces)
+
+	// Clean up items for monitors with no active content
+	cleanupInactiveMonitors(overview.Monitors, activeMonitors)
+
+	// Track which items we're updating - only process monitors with active content
+	for _, monitor := range activeMonitors {
 		// Find the active workspace for this monitor
 		var activeWorkspace *Workspace
 		for _, ws := range overview.Workspaces {
@@ -582,4 +588,70 @@ func createNewItem(itemName, monitorIcon, displayLabel, bgDrawing, bgColor, labe
 		"script=$HOME/.local/bin/sketchybar/aerospace_overview",
 		"--subscribe", itemName, "aerospace_workspace_change", "space_windows_change", "front_app_switched",
 	).Run()
+}
+
+// cleanupInactiveMonitors removes SketchyBar items for monitors with no active content
+func cleanupInactiveMonitors(allMonitors []Monitor, activeMonitors []Monitor) {
+	// Create a map of active monitor IDs for quick lookup
+	activeIDs := make(map[int]bool)
+	for _, monitor := range activeMonitors {
+		activeIDs[monitor.ID] = true
+	}
+
+	// Try to find and remove items for monitor IDs that commonly exist (1-10)
+	for monitorID := 1; monitorID <= 10; monitorID++ {
+		if !activeIDs[monitorID] {
+			itemName := fmt.Sprintf("aerospace.display.%d", monitorID)
+
+			// Check if item exists by trying to query it
+			if exec.Command("sketchybar", "--query", itemName).Run() == nil {
+				// Item exists but monitor has no active content - remove it
+				fmt.Printf("Removing item for inactive monitor: %s\n", itemName)
+				exec.Command("sketchybar", "--remove", itemName).Run()
+			}
+		}
+	}
+
+	fmt.Printf("Cleanup completed - Total monitors: %d, active monitors: %d\n",
+		len(allMonitors), len(activeMonitors))
+}
+
+// getActiveMonitors filters AeroSpace monitors to only those with active content
+func getActiveMonitors(aerospaceMonitors []Monitor, workspaces []Workspace, visibleWorkspaces []string) []Monitor {
+	var activeMonitors []Monitor
+
+	for _, monitor := range aerospaceMonitors {
+		hasActiveContent := false
+
+		// Check if this monitor has workspaces with actual windows
+		for _, ws := range workspaces {
+			if ws.Monitor == monitor.Name {
+				// Monitor has content only if it has workspaces with actual windows
+				// OR it's the built-in display with visible workspaces (always show built-in when active)
+				if len(ws.AppNames) > 0 ||
+					(strings.Contains(monitor.Name, "Built-in") && contains(visibleWorkspaces, ws.Name)) {
+					hasActiveContent = true
+					break
+				}
+			}
+		}
+
+		if hasActiveContent {
+			activeMonitors = append(activeMonitors, monitor)
+		}
+	}
+
+	fmt.Printf("Active content detection: %d of %d monitors have active content\n",
+		len(activeMonitors), len(aerospaceMonitors))
+
+	return activeMonitors
+}
+
+// getConnectedMonitorIDs returns a list of connected monitor IDs for logging
+func getConnectedMonitorIDs(monitors []Monitor) []int {
+	var ids []int
+	for _, monitor := range monitors {
+		ids = append(ids, monitor.ID)
+	}
+	return ids
 }
