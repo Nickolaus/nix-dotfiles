@@ -1,11 +1,7 @@
 { pkgs, ... }: {
   programs.ssh = {
     enable = true;
-    
-    # SSH settings that integrate with Home Manager's base config
-    addKeysToAgent = "yes";
-    forwardAgent = false;
-    compression = true;
+    enableDefaultConfig = false;
     
     # Global SSH settings
     extraConfig = ''
@@ -63,6 +59,9 @@
       # All other hosts use work key (DEFAULT)
       "*" = {
         identityFile = "~/.ssh/id_ed25519";  # Work key as explicit default
+        addKeysToAgent = "yes";
+        forwardAgent = false;
+        compression = true;
       };
     };
   };
