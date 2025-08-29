@@ -32,6 +32,7 @@
       "television"               # Terminal-based TV streaming application
       "sketchybar"               # Highly customizable macOS status bar (requires system permissions)
       "switchaudio-osx"          # Command-line utility to switch audio devices (for SketchyBar volume control)
+      "angular-cli"              # Angular CLI for creating and building Angular projects (not available in nixpkgs)
     ];
 
     # GUI applications and system integrations
