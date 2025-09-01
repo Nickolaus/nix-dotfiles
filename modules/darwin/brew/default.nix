@@ -33,6 +33,7 @@
       "sketchybar"               # Highly customizable macOS status bar (requires system permissions)
       "switchaudio-osx"          # Command-line utility to switch audio devices (for SketchyBar volume control)
       "angular-cli"              # Angular CLI for creating and building Angular projects (not available in nixpkgs)
+      "pnpm"                    # Fast, disk space efficient package manager for sketchybar-app-font
     ];
 
     # GUI applications and system integrations
@@ -49,6 +50,7 @@
       "fathom"              # AI meeting notetaker and analytics app, not available in nixpkgs
       "shottr"              # Lightweight screenshot tool with URL scheme API support
       "corelocationcli"     # CLI tool for accessing Core Location services (requires location permissions)
+      "sf-symbols"          # Apple's SF Symbols app for finding and copying system icons for SketchyBar
     ];
   };
 }

@@ -469,27 +469,22 @@ func updateSketchyBar(overview *WorkspaceOverview) {
 
 		// Create display label
 		var displayLabel string
-		var workspaceIndicator string
 
 		isFocused := activeWorkspace.Name == overview.FocusedWorkspace
 		isVisible := contains(overview.VisibleWorkspaces, activeWorkspace.Name)
 
-		if isFocused {
-			workspaceIndicator = "●" // Focused
-		} else if isVisible {
-			workspaceIndicator = "◉" // Visible
+		// Count-first format with app preview
+		totalCount := len(activeWorkspace.AppNames)
+		if totalCount > 0 {
+			formattedApps := formatAppNames(activeWorkspace.AppNames)
+			displayLabel = fmt.Sprintf("%s %s (%d) %s",
+				monitorIcon, activeWorkspace.Name, totalCount, formattedApps)
 		} else {
-			workspaceIndicator = "○" // Inactive
+			displayLabel = fmt.Sprintf("%s %s (0) Empty",
+				monitorIcon, activeWorkspace.Name)
 		}
 
-		if len(activeWorkspace.AppNames) > 0 {
-			formattedApps := formatAppNames(activeWorkspace.AppNames)
-			displayLabel = fmt.Sprintf("%s %s %s  •  %s",
-				monitorIcon, workspaceIndicator, activeWorkspace.Name, formattedApps)
-		} else {
-			displayLabel = fmt.Sprintf("%s %s %s  •  Empty",
-				monitorIcon, workspaceIndicator, activeWorkspace.Name)
-		}
+		// Let SketchyBar handle natural text flow - no manual truncation
 
 		// Determine styling
 		var bgDrawing, bgColor, labelColor string
@@ -510,7 +505,7 @@ func updateSketchyBar(overview *WorkspaceOverview) {
 				"icon=", "label=" + displayLabel,
 				"label.color=" + labelColor,
 				"label.font=SF Pro Display:Semibold:12.5",
-				"label.padding_left=8", "label.padding_right=8",
+				"label.padding_left=4", "label.padding_right=4",
 				"icon.drawing=off",
 				"background.color=" + bgColor,
 				"background.corner_radius=6",
@@ -519,6 +514,7 @@ func updateSketchyBar(overview *WorkspaceOverview) {
 				"background.padding_left=0", "background.padding_right=0",
 				"padding_left=0", "padding_right=0",
 				"background.border_width=0",
+				"width=240",      // Compact width for essential content
 				"update_freq=10", // Reduced frequency for better performance
 				"click_script=aerospace focus-monitor " + fmt.Sprintf("%d", monitor.ID),
 				"script=$HOME/.local/bin/sketchybar/aerospace_overview",
@@ -532,6 +528,7 @@ func updateSketchyBar(overview *WorkspaceOverview) {
 				"background.drawing=" + bgDrawing,
 				"background.color=" + bgColor,
 				"label.color=" + labelColor,
+				"width=240",      // Maintain compact width
 				"update_freq=10", // Consistent update frequency
 			})
 		}
@@ -574,7 +571,7 @@ func formatAppNames(apps []string) string {
 		return fmt.Sprintf("%s, %s, %s", cleanedApps[0], cleanedApps[1], cleanedApps[2])
 	default:
 		// Show first 2 apps with elegant count indicator
-		return fmt.Sprintf("%s, %s  +%d more", cleanedApps[0], cleanedApps[1], len(cleanedApps)-2)
+		return fmt.Sprintf("%s, %s (+%d)", cleanedApps[0], cleanedApps[1], len(cleanedApps)-2)
 	}
 }
 
@@ -596,9 +593,9 @@ func cleanAppName(appName string) string {
 		}
 	}
 
-	// Truncate very long names
-	if len(cleaned) > 18 {
-		cleaned = cleaned[:15] + "…"
+	// Truncate app names reasonably (less aggressive since we show total count)
+	if len(cleaned) > 10 {
+		cleaned = cleaned[:8] + "…"
 	}
 
 	return cleaned
@@ -607,21 +604,21 @@ func cleanAppName(appName string) string {
 func getShortMonitorName(fullName string) string {
 	switch {
 	case strings.Contains(fullName, "Built-in"):
-		return "󰌢" // Laptop icon
+		return "💻" // Laptop emoji for built-in display
 	case strings.Contains(fullName, "LG HDR 4K"):
-		return "󰍹" // 4K monitor
+		return "🖥️" // Desktop monitor for 4K LG
 	case strings.Contains(fullName, "LG HDR WQHD"):
-		return "󰍺" // Ultrawide
+		return "🖥️" // Desktop monitor for ultrawide LG
 	case strings.Contains(fullName, "Studio Display"):
-		return "󰨇" // Apple display
+		return "🍎" // Apple symbol for Apple displays
 	case strings.Contains(fullName, "Pro Display"):
-		return "󰨇" // Apple display
+		return "🍎" // Apple symbol for Apple displays
 	case strings.Contains(fullName, "Thunderbolt"):
-		return "󱈟" // Thunderbolt
+		return "⚡" // Lightning bolt for Thunderbolt displays
 	case strings.Contains(fullName, "LG"):
-		return "󰍹" // Generic LG
+		return "🖥️" // Desktop monitor for generic LG
 	default:
-		return "󰍹" // Generic monitor
+		return "🖥️" // Desktop monitor for unknown displays
 	}
 }
 

@@ -144,25 +144,20 @@ lib.mkIf pkgs.stdenv.isDarwin {
       ##### Modern Grouped Items Configuration #####
       # 🎨 Items organized into logical, visually cohesive groups
       
-      # 🌊 LEFT GROUP: App Context & Media
+       # 🌊 LEFT GROUP: App Context with Professional Icons
       sketchybar --add item front_app left \
                  --set front_app icon.drawing=on \
                                  label.color="''${TEXT}ee" \
                                  label.padding_right=6 \
+                                 label.max_chars=15 \
+                                 width=120 \
                                  script="$HOME/.local/bin/sketchybar/front_app" \
-                 --subscribe front_app front_app_switched \
-                 --add item spotify left \
-                 --set spotify update_freq=1 \
-                               icon.color="''${GREEN}dd" \
-                               label.color="''${TEXT}dd" \
-                               script="$HOME/.local/bin/sketchybar/spotify" \
-                               click_script="$HOME/.local/bin/sketchybar/spotify toggle" \
-                 --subscribe spotify media_change
+                 --subscribe front_app front_app_switched
 
       # ⏰ TIME & AMBIENT GROUP
       sketchybar --add item clock right \
                  --set clock update_freq=10 \
-                             icon="󰥔" \
+                             icon="🕐" \
                              icon.color="''${LAVENDER}dd" \
                              label.color="''${TEXT}ee" \
                              script="$HOME/.local/bin/sketchybar/clock" \
@@ -253,8 +248,8 @@ lib.mkIf pkgs.stdenv.isDarwin {
       ##### Modern Group System #####
       # 🎨 Create unified background groups for seamless design (after items are created)
       
-      # Left Group: App Context & Media
-      sketchybar --add bracket left_group front_app spotify \
+      # Left Group: App Context
+      sketchybar --add bracket left_group front_app \
                  --set left_group background.color="''${BASE}88" \
                                   background.corner_radius=12 \
                                   background.height=32 \
@@ -303,12 +298,29 @@ lib.mkIf pkgs.stdenv.isDarwin {
         echo "Warning: aerospace_overview plugin not found, workspace indicators disabled"
       fi
 
+      # Add Spotify after aerospace overview (positioned to the right of workspace indicators)
+      sketchybar --add item spotify left \
+                 --set spotify update_freq=1 \
+                               icon.color="''${GREEN}dd" \
+                               label.color="''${TEXT}dd" \
+                               width=160 \
+                               label.max_chars=18 \
+                               script="$HOME/.local/bin/sketchybar/spotify" \
+                               click_script="$HOME/.local/bin/sketchybar/spotify toggle" \
+                 --subscribe spotify media_change
+
       ##### Force all scripts to run the first time #####
       # Only run update if this is not a duplicate run
       if ! pgrep -f "sketchybar.*--update" > /dev/null 2>&1; then
         sketchybar --update
       fi
     '';
+    executable = true;
+  };
+
+  # Install sketchybar-app-font for professional app icons
+  home.file.".local/bin/install-sketchybar-app-font" = {
+    source = ./install-app-font.sh;
     executable = true;
   };
 
@@ -574,6 +586,27 @@ lib.mkIf pkgs.stdenv.isDarwin {
       echo "⚠️  Some items built successfully ($BUILT_COUNT/$TOTAL_TARGETS)"
     else
       echo "❌ Build failed - using fallbacks"
+    fi
+  '';
+
+  # Install sketchybar-app-font for professional app icons (after homebrew is available)
+  home.activation.installAppFont = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    echo "🎨 Installing sketchybar-app-font..."
+    
+    # Ensure system tools are available in PATH (including git)
+    export PATH="/opt/homebrew/bin:/usr/bin:/bin:$PATH"
+    
+    # Only install if not already present or if the script/repo has been updated
+    if [ ! -f "$HOME/Library/Fonts/sketchybar-app-font.ttf" ] || [ "$HOME/.local/bin/install-sketchybar-app-font" -nt "$HOME/Library/Fonts/sketchybar-app-font.ttf" ]; then
+      if command -v pnpm >/dev/null 2>&1; then
+        echo "✨ pnpm found, installing professional app icons..."
+        "$HOME/.local/bin/install-sketchybar-app-font" || echo "⚠️  App font installation failed, will continue with emoji fallbacks"
+      else
+        echo "⚠️  pnpm not available - sketchybar will use emoji icon fallbacks"
+        echo "💡 Run 'darwin-rebuild switch' again after system setup completes to install professional icons"
+      fi
+    else
+      echo "✅ sketchybar-app-font already installed and up to date"
     fi
   '';
 
