@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"sketchybar-plugins/utils"
 )
@@ -33,66 +35,249 @@ type WorkspaceOverview struct {
 	Workspaces        []Workspace
 	VisibleWorkspaces []string
 	FocusedWorkspace  string
+	LastUpdate        time.Time
 }
 
+// Global state cache with mutex for thread safety
+var (
+	cachedOverview *WorkspaceOverview
+	cacheMutex     sync.RWMutex
+	lastEventTime  time.Time
+	debounceTimer  *time.Timer
+)
+
+const (
+	// Performance tuning constants
+	CACHE_DURATION    = 2 * time.Second        // Cache aerospace data for 2 seconds
+	DEBOUNCE_DURATION = 150 * time.Millisecond // Debounce rapid events
+	MAX_RETRIES       = 2                      // Max retries for aerospace commands
+)
+
 func main() {
-	// Get the focused workspace from environment (set by AeroSpace)
-	focusedWorkspace := os.Getenv("FOCUSED")
-	if focusedWorkspace == "" {
-		// Fallback: get current workspace directly
-		if output, err := exec.Command("/run/current-system/sw/bin/aerospace", "list-workspaces", "--focused").Output(); err == nil {
-			focusedWorkspace = strings.TrimSpace(string(output))
+	sender := os.Getenv("SENDER")
+
+	// Reduce debug noise - only log important events
+	switch sender {
+	case "aerospace_workspace_change":
+		fmt.Printf("Workspace change detected\n")
+	case "space_windows_change":
+		// Skip logging for frequent window changes to reduce noise
+		break
+	default:
+		fmt.Printf("Plugin called - SENDER: '%s'\n", sender)
+	}
+
+	// Handle different event types with appropriate optimizations
+	switch sender {
+	case "front_app_switched":
+		// For front_app events, skip full update - this causes most of the flickering
+		// The front_app plugin handles this separately
+		fmt.Printf("Skipping aerospace update for front_app_switched (prevents flickering)\n")
+		return
+
+	case "space_windows_change":
+		// Debounce rapid window changes (common when moving apps between displays)
+		handleDebouncedUpdate()
+		return
+
+	case "aerospace_workspace_change":
+		// Immediate update for workspace changes (user expects instant feedback)
+		handleWorkspaceChange()
+		return
+
+	default:
+		// Initial setup or manual trigger
+		handleInitialSetup()
+	}
+}
+
+// handleDebouncedUpdate implements debouncing for rapid events
+func handleDebouncedUpdate() {
+	now := time.Now()
+	lastEventTime = now
+
+	// Cancel existing timer if any
+	if debounceTimer != nil {
+		debounceTimer.Stop()
+	}
+
+	// Set new timer
+	debounceTimer = time.AfterFunc(DEBOUNCE_DURATION, func() {
+		// Check if this is still the latest event
+		if time.Since(lastEventTime) >= DEBOUNCE_DURATION {
+			updateWithCaching()
+		}
+	})
+}
+
+// handleWorkspaceChange handles immediate workspace changes
+func handleWorkspaceChange() {
+	// Clear cache for workspace changes to ensure accuracy
+	cacheMutex.Lock()
+	cachedOverview = nil
+	cacheMutex.Unlock()
+
+	updateWithCaching()
+}
+
+// handleInitialSetup handles initial plugin setup
+func handleInitialSetup() {
+	updateWithCaching()
+}
+
+// updateWithCaching updates using cached data when possible
+func updateWithCaching() {
+	var overview *WorkspaceOverview
+	var err error
+
+	// Try to use cached data first
+	cacheMutex.RLock()
+	if cachedOverview != nil && time.Since(cachedOverview.LastUpdate) < CACHE_DURATION {
+		overview = cachedOverview
+		cacheMutex.RUnlock()
+		fmt.Printf("Using cached aerospace data (age: %v)\n", time.Since(overview.LastUpdate))
+	} else {
+		cacheMutex.RUnlock()
+
+		// Fetch fresh data with focused workspace detection
+		focusedWorkspace := getFocusedWorkspace()
+		overview, err = getWorkspaceOverview(focusedWorkspace)
+		if err != nil {
+			fmt.Printf("Error getting workspace overview: %v\n", err)
+			return
+		}
+
+		// Update cache
+		cacheMutex.Lock()
+		cachedOverview = overview
+		cacheMutex.Unlock()
+
+		fmt.Printf("Fetched fresh aerospace data - focused: %s\n", overview.FocusedWorkspace)
+	}
+
+	updateSketchyBar(overview)
+}
+
+// getFocusedWorkspace gets focused workspace with fallback
+func getFocusedWorkspace() string {
+	// Try environment variable first (fastest)
+	if focused := os.Getenv("FOCUSED"); focused != "" {
+		return focused
+	}
+
+	// Fallback to aerospace command
+	if output, err := execWithRetry("/run/current-system/sw/bin/aerospace", "list-workspaces", "--focused"); err == nil {
+		return strings.TrimSpace(string(output))
+	}
+
+	return ""
+}
+
+// execWithRetry executes command with retry logic
+func execWithRetry(name string, args ...string) ([]byte, error) {
+	var lastErr error
+
+	for i := 0; i < MAX_RETRIES; i++ {
+		output, err := exec.Command(name, args...).Output()
+		if err == nil {
+			return output, nil
+		}
+		lastErr = err
+
+		// Short delay between retries
+		if i < MAX_RETRIES-1 {
+			time.Sleep(50 * time.Millisecond)
 		}
 	}
 
-	// Simple approach like front_app: just update what's needed
-	sender := os.Getenv("SENDER")
-
-	// Debug logging (show all calls to debug the issue)
-	fmt.Printf("Plugin called - SENDER: '%s', FOCUSED env: '%s', detected focused: '%s'\n", sender, os.Getenv("FOCUSED"), focusedWorkspace)
-
-	overview, err := getWorkspaceOverview(focusedWorkspace)
-	if err != nil {
-		fmt.Printf("Error getting workspace overview: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Updating SketchyBar - focused: %s, visible: %v\n", overview.FocusedWorkspace, overview.VisibleWorkspaces)
-	updateSketchyBar(overview)
+	return nil, fmt.Errorf("command failed after %d retries: %w", MAX_RETRIES, lastErr)
 }
 
 func getWorkspaceOverview(focusedWorkspace string) (*WorkspaceOverview, error) {
 	overview := &WorkspaceOverview{
 		FocusedWorkspace: focusedWorkspace,
+		LastUpdate:       time.Now(),
 	}
 
-	// Get monitors
-	monitors, err := getMonitors()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get monitors: %w", err)
+	// Get all data in parallel to reduce total latency
+	type result struct {
+		monitors   []Monitor
+		workspaces []Workspace
+		visible    []string
+		err        error
 	}
-	overview.Monitors = monitors
 
-	// Get all workspaces with their monitor assignments
-	workspaces, err := getWorkspaces()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get workspaces: %w", err)
-	}
-	overview.Workspaces = workspaces
+	resultChan := make(chan result, 1)
 
-	// Get visible workspaces
-	visibleWorkspaces, err := getVisibleWorkspaces()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get visible workspaces: %w", err)
+	go func() {
+		var r result
+
+		// Get monitors
+		r.monitors, r.err = getMonitors()
+		if r.err != nil {
+			resultChan <- r
+			return
+		}
+
+		// Get workspaces and visible workspaces in parallel
+		workspaceChan := make(chan []Workspace, 1)
+		visibleChan := make(chan []string, 1)
+		errorChan := make(chan error, 2)
+
+		go func() {
+			if ws, err := getWorkspaces(); err != nil {
+				errorChan <- err
+			} else {
+				workspaceChan <- ws
+			}
+		}()
+
+		go func() {
+			if vis, err := getVisibleWorkspaces(); err != nil {
+				errorChan <- err
+			} else {
+				visibleChan <- vis
+			}
+		}()
+
+		// Collect results
+		workspacesReceived := false
+		visibleReceived := false
+
+		for !workspacesReceived || !visibleReceived {
+			select {
+			case r.workspaces = <-workspaceChan:
+				workspacesReceived = true
+			case r.visible = <-visibleChan:
+				visibleReceived = true
+			case err := <-errorChan:
+				r.err = err
+				resultChan <- r
+				return
+			}
+		}
+
+		resultChan <- r
+	}()
+
+	// Wait for results with timeout
+	select {
+	case r := <-resultChan:
+		if r.err != nil {
+			return nil, r.err
+		}
+		overview.Monitors = r.monitors
+		overview.Workspaces = r.workspaces
+		overview.VisibleWorkspaces = r.visible
+	case <-time.After(3 * time.Second):
+		return nil, fmt.Errorf("aerospace commands timed out")
 	}
-	overview.VisibleWorkspaces = visibleWorkspaces
 
 	return overview, nil
 }
 
 func getMonitors() ([]Monitor, error) {
-	cmd := exec.Command("/run/current-system/sw/bin/aerospace", "list-monitors")
-	output, err := cmd.Output()
+	output, err := execWithRetry("/run/current-system/sw/bin/aerospace", "list-monitors")
 	if err != nil {
 		return nil, fmt.Errorf("aerospace list-monitors failed: %w", err)
 	}
@@ -132,9 +317,7 @@ func getMonitors() ([]Monitor, error) {
 }
 
 func getWorkspaces() ([]Workspace, error) {
-	// Get all workspaces
-	cmd := exec.Command("/run/current-system/sw/bin/aerospace", "list-workspaces", "--all")
-	output, err := cmd.Output()
+	output, err := execWithRetry("/run/current-system/sw/bin/aerospace", "list-workspaces", "--all")
 	if err != nil {
 		return nil, fmt.Errorf("aerospace list-workspaces failed: %w", err)
 	}
@@ -148,14 +331,9 @@ func getWorkspaces() ([]Workspace, error) {
 			continue
 		}
 
-		// Get monitor for this workspace
-		monitor, err := getWorkspaceMonitor(line)
-		if err != nil {
-			monitor = "unassigned" // fallback
-		}
-
-		// Get applications in this workspace (like native AeroSpace interface)
-		appNames, windowCount := getWorkspaceApps(line)
+		// Get monitor assignment and apps for this workspace efficiently
+		monitor := getWorkspaceMonitorFast(line)
+		appNames, windowCount := getWorkspaceAppsFast(line)
 
 		workspaces = append(workspaces, Workspace{
 			Name:        line,
@@ -167,67 +345,41 @@ func getWorkspaces() ([]Workspace, error) {
 
 	// Sort workspaces numerically where possible, then alphabetically
 	sort.Slice(workspaces, func(i, j int) bool {
-		// Try to parse as numbers first
 		if numI, errI := strconv.Atoi(workspaces[i].Name); errI == nil {
 			if numJ, errJ := strconv.Atoi(workspaces[j].Name); errJ == nil {
 				return numI < numJ
 			}
 		}
-		// Fall back to string comparison
 		return workspaces[i].Name < workspaces[j].Name
 	})
 
 	return workspaces, nil
 }
 
-func getWorkspaceMonitor(workspace string) (string, error) {
-	// Get workspace assignments exactly like AeroSpace native interface
-	cmd := exec.Command("/run/current-system/sw/bin/aerospace", "list-workspaces", "--monitor", "all", "--format", "%{workspace}|%{monitor-name}|%{monitor-id}")
-	output, err := cmd.Output()
+// getWorkspaceMonitorFast gets workspace monitor with single command
+func getWorkspaceMonitorFast(workspace string) string {
+	// Single efficient command to get monitor assignment
+	output, err := execWithRetry("/run/current-system/sw/bin/aerospace", "list-workspaces", "--monitor", "all", "--format", "%{workspace}|%{monitor-name}")
 	if err != nil {
-		// Fallback: check if workspace is visible on any monitor
-		for _, monitor := range []string{"1", "2", "3"} {
-			visCmd := exec.Command("/run/current-system/sw/bin/aerospace", "list-workspaces", "--monitor", monitor, "--visible")
-			if visOutput, visErr := visCmd.Output(); visErr == nil {
-				visibleWorkspaces := strings.Split(strings.TrimSpace(string(visOutput)), "\n")
-				for _, ws := range visibleWorkspaces {
-					if strings.TrimSpace(ws) == workspace {
-						// Get monitor name for this ID
-						monCmd := exec.Command("/run/current-system/sw/bin/aerospace", "list-monitors")
-						if monOutput, monErr := monCmd.Output(); monErr == nil {
-							monLines := strings.Split(strings.TrimSpace(string(monOutput)), "\n")
-							for _, monLine := range monLines {
-								if strings.HasPrefix(monLine, monitor+" | ") {
-									return strings.TrimSpace(strings.Split(monLine, " | ")[1]), nil
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		return "", fmt.Errorf("could not determine monitor for workspace %s", workspace)
+		return "unknown"
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	for _, line := range lines {
 		parts := strings.Split(line, "|")
 		if len(parts) >= 2 && strings.TrimSpace(parts[0]) == workspace {
-			return strings.TrimSpace(parts[1]), nil
+			return strings.TrimSpace(parts[1])
 		}
 	}
 
-	return "", fmt.Errorf("workspace %s not found in monitor assignments", workspace)
+	return "unassigned"
 }
 
 func getVisibleWorkspaces() ([]string, error) {
-	// Get visible workspaces across all monitors
-	cmd := exec.Command("/run/current-system/sw/bin/aerospace", "list-workspaces", "--monitor", "all", "--visible")
-	output, err := cmd.Output()
+	output, err := execWithRetry("/run/current-system/sw/bin/aerospace", "list-workspaces", "--monitor", "all", "--visible")
 	if err != nil {
 		// Fallback: try to get focused workspace only
-		focusedCmd := exec.Command("/run/current-system/sw/bin/aerospace", "list-workspaces", "--focused")
-		if focusedOutput, focusedErr := focusedCmd.Output(); focusedErr == nil {
+		if focusedOutput, focusedErr := execWithRetry("/run/current-system/sw/bin/aerospace", "list-workspaces", "--focused"); focusedErr == nil {
 			focused := strings.TrimSpace(string(focusedOutput))
 			if focused != "" {
 				return []string{focused}, nil
@@ -247,10 +399,9 @@ func getVisibleWorkspaces() ([]string, error) {
 	return visible, nil
 }
 
-func getWorkspaceApps(workspace string) ([]string, int) {
-	// Get windows in this workspace like native AeroSpace interface
-	cmd := exec.Command("/run/current-system/sw/bin/aerospace", "list-windows", "--workspace", workspace, "--format", "%{app-name}")
-	output, err := cmd.Output()
+// getWorkspaceAppsFast gets workspace apps with better error handling
+func getWorkspaceAppsFast(workspace string) ([]string, int) {
+	output, err := execWithRetry("/run/current-system/sw/bin/aerospace", "list-windows", "--workspace", workspace, "--format", "%{app-name}")
 	if err != nil {
 		return []string{}, 0
 	}
@@ -278,11 +429,120 @@ func getWorkspaceApps(workspace string) ([]string, int) {
 }
 
 func updateSketchyBar(overview *WorkspaceOverview) {
-	// Get color palette - consistent with all other plugins
 	colors := utils.NewCatppuccinMacchiato()
 
-	// Update existing items instead of rebuilding everything (prevents flickering)
-	updateExistingItems(overview, colors)
+	// Batch updates to prevent flickering
+	activeMonitors := getActiveMonitors(overview.Monitors, overview.Workspaces, overview.VisibleWorkspaces)
+
+	// Clean up inactive monitors first (in batch)
+	cleanupInactiveMonitors(overview.Monitors, activeMonitors)
+
+	// Prepare all updates in memory first, then apply in batch
+	var updates [][]string
+
+	for _, monitor := range activeMonitors {
+		// Find the active workspace for this monitor
+		var activeWorkspace *Workspace
+		for _, ws := range overview.Workspaces {
+			if ws.Monitor == monitor.Name && contains(overview.VisibleWorkspaces, ws.Name) {
+				activeWorkspace = &ws
+				break
+			}
+		}
+
+		// If no visible workspace found, find any workspace assigned to this monitor
+		if activeWorkspace == nil {
+			for _, ws := range overview.Workspaces {
+				if ws.Monitor == monitor.Name {
+					activeWorkspace = &ws
+					break
+				}
+			}
+		}
+
+		if activeWorkspace == nil {
+			continue
+		}
+
+		itemName := fmt.Sprintf("aerospace.display.%d", monitor.ID)
+		monitorIcon := getShortMonitorName(monitor.Name)
+
+		// Create display label
+		var displayLabel string
+		var workspaceIndicator string
+
+		isFocused := activeWorkspace.Name == overview.FocusedWorkspace
+		isVisible := contains(overview.VisibleWorkspaces, activeWorkspace.Name)
+
+		if isFocused {
+			workspaceIndicator = "●" // Focused
+		} else if isVisible {
+			workspaceIndicator = "◉" // Visible
+		} else {
+			workspaceIndicator = "○" // Inactive
+		}
+
+		if len(activeWorkspace.AppNames) > 0 {
+			formattedApps := formatAppNames(activeWorkspace.AppNames)
+			displayLabel = fmt.Sprintf("%s %s %s  •  %s",
+				monitorIcon, workspaceIndicator, activeWorkspace.Name, formattedApps)
+		} else {
+			displayLabel = fmt.Sprintf("%s %s %s  •  Empty",
+				monitorIcon, workspaceIndicator, activeWorkspace.Name)
+		}
+
+		// Determine styling
+		var bgDrawing, bgColor, labelColor string
+		if isFocused {
+			bgDrawing, bgColor, labelColor = "on", colors.Blue, colors.Text
+		} else if isVisible {
+			bgDrawing, bgColor, labelColor = "on", colors.Surface1, colors.Subtext1
+		} else {
+			bgDrawing, bgColor, labelColor = "off", colors.Surface0, colors.Subtext0
+		}
+
+		// Check if item exists, create or update
+		if exec.Command("sketchybar", "--query", itemName).Run() != nil {
+			// Create new item
+			updates = append(updates, []string{
+				"sketchybar", "--add", "item", itemName, "left",
+				"--set", itemName,
+				"icon=", "label=" + displayLabel,
+				"label.color=" + labelColor,
+				"label.font=SF Pro Display:Semibold:12.5",
+				"label.padding_left=8", "label.padding_right=8",
+				"icon.drawing=off",
+				"background.color=" + bgColor,
+				"background.corner_radius=6",
+				"background.height=30",
+				"background.drawing=" + bgDrawing,
+				"background.padding_left=0", "background.padding_right=0",
+				"padding_left=0", "padding_right=0",
+				"background.border_width=0",
+				"update_freq=10", // Reduced frequency for better performance
+				"click_script=aerospace focus-monitor " + fmt.Sprintf("%d", monitor.ID),
+				"script=$HOME/.local/bin/sketchybar/aerospace_overview",
+				"--subscribe", itemName, "aerospace_workspace_change", "space_windows_change",
+			})
+		} else {
+			// Update existing item (batched update)
+			updates = append(updates, []string{
+				"sketchybar", "--set", itemName,
+				"label=" + displayLabel,
+				"background.drawing=" + bgDrawing,
+				"background.color=" + bgColor,
+				"label.color=" + labelColor,
+				"update_freq=10", // Consistent update frequency
+			})
+		}
+	}
+
+	// Execute all updates
+	for _, update := range updates {
+		exec.Command(update[0], update[1:]...).Run()
+	}
+
+	fmt.Printf("Batch update completed - %d monitors processed\n", len(activeMonitors))
 }
 
 // formatAppNames provides smart app name formatting with proper truncation
@@ -320,29 +580,23 @@ func formatAppNames(apps []string) string {
 
 // cleanAppName cleans up app names for better display
 func cleanAppName(appName string) string {
-	// Remove common suffixes and clean up names
 	cleaned := strings.TrimSpace(appName)
 
-	// Handle common app name patterns for better readability
 	switch {
 	case strings.HasSuffix(cleaned, " - Google Chrome"):
-		// Chrome tabs: show just the main part
 		cleaned = strings.Replace(cleaned, " - Google Chrome", "", 1)
 	case strings.HasSuffix(cleaned, " — WezTerm"):
-		// WezTerm windows: show just the path/title
 		cleaned = strings.Replace(cleaned, " — WezTerm", "", 1)
 	case strings.HasPrefix(cleaned, "PhpStorm - "):
-		// PhpStorm windows: show just project name
 		cleaned = strings.Replace(cleaned, "PhpStorm - ", "", 1)
 	case strings.Contains(cleaned, " - "):
-		// Generic "App - Document" pattern: show just the document
 		parts := strings.Split(cleaned, " - ")
 		if len(parts) > 1 {
-			cleaned = parts[len(parts)-1] // Take the last part (usually document name)
+			cleaned = parts[len(parts)-1]
 		}
 	}
 
-	// Truncate very long names with smart ellipsis
+	// Truncate very long names
 	if len(cleaned) > 18 {
 		cleaned = cleaned[:15] + "…"
 	}
@@ -351,29 +605,23 @@ func cleanAppName(appName string) string {
 }
 
 func getShortMonitorName(fullName string) string {
-	// Enhanced monitor icons with consistent Nerd Font symbols
 	switch {
 	case strings.Contains(fullName, "Built-in"):
-		return "󰌢" // Nerd Font laptop icon
+		return "󰌢" // Laptop icon
 	case strings.Contains(fullName, "LG HDR 4K"):
-		return "󰍹" // Nerd Font monitor icon (4K)
+		return "󰍹" // 4K monitor
 	case strings.Contains(fullName, "LG HDR WQHD"):
-		return "󰍺" // Nerd Font monitor icon (ultrawide)
+		return "󰍺" // Ultrawide
 	case strings.Contains(fullName, "Studio Display"):
-		return "󰨇" // Nerd Font Apple display icon
+		return "󰨇" // Apple display
 	case strings.Contains(fullName, "Pro Display"):
-		return "󰨇" // Nerd Font Apple display icon
+		return "󰨇" // Apple display
 	case strings.Contains(fullName, "Thunderbolt"):
-		return "󱈟" // Nerd Font Thunderbolt icon
+		return "󱈟" // Thunderbolt
 	case strings.Contains(fullName, "LG"):
-		return "󰍹" // Generic LG monitor icon
+		return "󰍹" // Generic LG
 	default:
-		// Extract model name with generic monitor icon
-		parts := strings.Fields(fullName)
-		if len(parts) > 0 {
-			return "󰍹" // Generic monitor icon
-		}
-		return "󰍹"
+		return "󰍹" // Generic monitor
 	}
 }
 
@@ -386,248 +634,31 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-// updateExistingLabelsOnly updates only the labels of existing items (no structure changes)
-// This is much faster and prevents flickering for front_app_switched events
-func updateExistingLabelsOnly(focusedWorkspace string) {
-	overview, err := getWorkspaceOverview(focusedWorkspace)
-	if err != nil {
-		fmt.Printf("Error getting workspace overview for label update: %v\n", err)
-		return
-	}
-
-	// Update labels for each monitor without rebuilding structure
-	for _, monitor := range overview.Monitors {
-		// Find the active workspace for this monitor (same logic as updateSketchyBar)
-		var activeWorkspace *Workspace
-		for _, ws := range overview.Workspaces {
-			if ws.Monitor == monitor.Name && contains(overview.VisibleWorkspaces, ws.Name) {
-				activeWorkspace = &ws
-				break
-			}
-		}
-
-		// If no visible workspace found, find any workspace assigned to this monitor
-		if activeWorkspace == nil {
-			for _, ws := range overview.Workspaces {
-				if ws.Monitor == monitor.Name {
-					activeWorkspace = &ws
-					break
-				}
-			}
-		}
-
-		// Skip monitors with no workspaces
-		if activeWorkspace == nil {
-			continue
-		}
-
-		itemName := fmt.Sprintf("aerospace.display.%d", monitor.ID)
-		monitorIcon := getShortMonitorName(monitor.Name)
-
-		// Use same label formatting logic as updateSketchyBar
-		var displayLabel string
-		if len(activeWorkspace.AppNames) > 0 {
-			// Show active workspace with apps: "💻 2 - Chrome, Slack"
-			apps := activeWorkspace.AppNames
-			if len(apps) > 2 {
-				displayLabel = fmt.Sprintf("%s %s - %s, %s (+%d)",
-					monitorIcon, activeWorkspace.Name, apps[0], apps[1], len(apps)-2)
-			} else {
-				displayLabel = fmt.Sprintf("%s %s - %s",
-					monitorIcon, activeWorkspace.Name, strings.Join(apps, ", "))
-			}
-		} else {
-			// Show workspace with monitor name: "🖥️ 6 - Empty"
-			displayLabel = fmt.Sprintf("%s %s - Empty", monitorIcon, activeWorkspace.Name)
-		}
-
-		// Update only the label, not the entire item structure
-		exec.Command("sketchybar",
-			"--set", itemName,
-			"label="+displayLabel,
-		).Run()
-	}
-
-	fmt.Printf("Lightweight label update completed\n")
-}
-
-// updateExistingItems updates labels and colors of existing items (no structure rebuild)
-func updateExistingItems(overview *WorkspaceOverview, colors *utils.ColorPalette) {
-	// Get monitors that have active content (visible workspaces or workspaces with windows)
-	activeMonitors := getActiveMonitors(overview.Monitors, overview.Workspaces, overview.VisibleWorkspaces)
-
-	// Clean up items for monitors with no active content
-	cleanupInactiveMonitors(overview.Monitors, activeMonitors)
-
-	// Track which items we're updating - only process monitors with active content
-	for _, monitor := range activeMonitors {
-		// Find the active workspace for this monitor
-		var activeWorkspace *Workspace
-		for _, ws := range overview.Workspaces {
-			if ws.Monitor == monitor.Name && contains(overview.VisibleWorkspaces, ws.Name) {
-				activeWorkspace = &ws
-				break
-			}
-		}
-
-		// If no visible workspace found, find any workspace assigned to this monitor
-		if activeWorkspace == nil {
-			for _, ws := range overview.Workspaces {
-				if ws.Monitor == monitor.Name {
-					activeWorkspace = &ws
-					break
-				}
-			}
-		}
-
-		// Skip monitors with no workspaces
-		if activeWorkspace == nil {
-			continue
-		}
-
-		itemName := fmt.Sprintf("aerospace.display.%d", monitor.ID)
-		monitorIcon := getShortMonitorName(monitor.Name)
-
-		// Create enhanced display label with status indicators
-		var displayLabel string
-		var workspaceIndicator string
-
-		// Add workspace status indicator
-		isFocused := activeWorkspace.Name == overview.FocusedWorkspace
-		isVisible := contains(overview.VisibleWorkspaces, activeWorkspace.Name)
-
-		if isFocused {
-			workspaceIndicator = "●" // Filled circle for focused workspace
-		} else if isVisible {
-			workspaceIndicator = "◉" // Double circle for visible workspace
-		} else {
-			workspaceIndicator = "○" // Empty circle for inactive workspace
-		}
-
-		// Enhanced text formatting with smart app name handling
-		if len(activeWorkspace.AppNames) > 0 {
-			apps := activeWorkspace.AppNames
-			formattedApps := formatAppNames(apps)
-			displayLabel = fmt.Sprintf("%s %s %s  •  %s",
-				monitorIcon, workspaceIndicator, activeWorkspace.Name, formattedApps)
-		} else {
-			displayLabel = fmt.Sprintf("%s %s %s  •  Empty",
-				monitorIcon, workspaceIndicator, activeWorkspace.Name)
-		}
-
-		// Enhanced styling with better visual hierarchy
-		var bgDrawing, bgColor, labelColor, iconColor string
-
-		if isFocused {
-			// 🎯 FOCUSED: Maximum visual impact - this is where attention is
-			bgDrawing = "on"
-			bgColor = colors.Blue    // Strong blue for active focus
-			labelColor = colors.Text // Brightest text for readability
-			iconColor = colors.Text  // Bright icon to match
-		} else if isVisible {
-			// 👁️ VISIBLE: Moderate emphasis - you can see it but not focused
-			bgDrawing = "on"
-			bgColor = colors.Surface1    // Elevated surface for visible state
-			labelColor = colors.Subtext1 // Medium brightness text
-			iconColor = colors.Subtext1  // Medium brightness icon
-		} else {
-			// 💤 INACTIVE: Minimal emphasis - background workspace
-			bgDrawing = "off"
-			bgColor = colors.Surface0    // No background (clean look)
-			labelColor = colors.Subtext0 // Muted text for less distraction
-			iconColor = colors.Overlay0  // Subtle icon color
-		}
-
-		// Check if item exists, if not create it
-		checkResult := exec.Command("sketchybar", "--query", itemName).Run()
-		if checkResult != nil {
-			// Item doesn't exist, create it (first time setup)
-			createNewItem(itemName, monitorIcon, displayLabel, bgDrawing, bgColor, labelColor, iconColor, colors, monitor.ID)
-		} else {
-			// Item exists, just update it (prevents flickering)
-			fmt.Printf("Updating item %s with icon: %s, label: %s\n", itemName, monitorIcon, displayLabel)
-			exec.Command("sketchybar",
-				"--set", itemName,
-				"label="+displayLabel,
-				"background.drawing="+bgDrawing,
-				"background.color="+bgColor,
-				"label.color="+labelColor,
-				"update_freq=1",
-			).Run()
-		}
-
-		// Note: SketchyBar provides natural spacing between items, no explicit spacers needed
-	}
-}
-
-// createNewItem creates a new SketchyBar item (only called when item doesn't exist)
-func createNewItem(itemName, monitorIcon, displayLabel, bgDrawing, bgColor, labelColor, iconColor string, colors *utils.ColorPalette, monitorID int) {
-	monitorPattern := fmt.Sprintf("%d", monitorID)
-
-	exec.Command("sketchybar",
-		"--add", "item", itemName, "left",
-		"--set", itemName,
-		"icon=",
-		"label="+displayLabel,
-		"label.color="+labelColor,
-		"label.font=SF Pro Display:Semibold:12.5",
-		"label.padding_left=8",
-		"label.padding_right=8",
-		"icon.drawing=off",
-		"background.color="+bgColor,
-		"background.corner_radius=6",
-		"background.height=30",
-		"background.drawing="+bgDrawing,
-		"background.padding_left=0",
-		"background.padding_right=0",
-		"padding_left=0",
-		"padding_right=0",
-		"background.border_width=0",
-		"update_freq=5",
-		"click_script=aerospace focus-monitor "+monitorPattern,
-		"script=$HOME/.local/bin/sketchybar/aerospace_overview",
-		"--subscribe", itemName, "aerospace_workspace_change", "space_windows_change", "front_app_switched",
-	).Run()
-}
-
-// cleanupInactiveMonitors removes SketchyBar items for monitors with no active content
 func cleanupInactiveMonitors(allMonitors []Monitor, activeMonitors []Monitor) {
-	// Create a map of active monitor IDs for quick lookup
 	activeIDs := make(map[int]bool)
 	for _, monitor := range activeMonitors {
 		activeIDs[monitor.ID] = true
 	}
 
-	// Try to find and remove items for monitor IDs that commonly exist (1-10)
+	// Clean up efficiently - check common monitor IDs
 	for monitorID := 1; monitorID <= 10; monitorID++ {
 		if !activeIDs[monitorID] {
 			itemName := fmt.Sprintf("aerospace.display.%d", monitorID)
-
-			// Check if item exists by trying to query it
 			if exec.Command("sketchybar", "--query", itemName).Run() == nil {
-				// Item exists but monitor has no active content - remove it
-				fmt.Printf("Removing item for inactive monitor: %s\n", itemName)
 				exec.Command("sketchybar", "--remove", itemName).Run()
 			}
 		}
 	}
-
-	fmt.Printf("Cleanup completed - Total monitors: %d, active monitors: %d\n",
-		len(allMonitors), len(activeMonitors))
 }
 
-// getActiveMonitors filters AeroSpace monitors to only those with active content
 func getActiveMonitors(aerospaceMonitors []Monitor, workspaces []Workspace, visibleWorkspaces []string) []Monitor {
 	var activeMonitors []Monitor
 
 	for _, monitor := range aerospaceMonitors {
 		hasActiveContent := false
 
-		// Check if this monitor has workspaces with actual windows
 		for _, ws := range workspaces {
 			if ws.Monitor == monitor.Name {
-				// Monitor has content only if it has workspaces with actual windows
-				// OR it's the built-in display with visible workspaces (always show built-in when active)
 				if len(ws.AppNames) > 0 ||
 					(strings.Contains(monitor.Name, "Built-in") && contains(visibleWorkspaces, ws.Name)) {
 					hasActiveContent = true
@@ -641,17 +672,5 @@ func getActiveMonitors(aerospaceMonitors []Monitor, workspaces []Workspace, visi
 		}
 	}
 
-	fmt.Printf("Active content detection: %d of %d monitors have active content\n",
-		len(activeMonitors), len(aerospaceMonitors))
-
 	return activeMonitors
-}
-
-// getConnectedMonitorIDs returns a list of connected monitor IDs for logging
-func getConnectedMonitorIDs(monitors []Monitor) []int {
-	var ids []int
-	for _, monitor := range monitors {
-		ids = append(ids, monitor.ID)
-	}
-	return ids
 }

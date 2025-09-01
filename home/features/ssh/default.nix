@@ -32,12 +32,42 @@
         identitiesOnly = true;
       };
       
-      # Personal Home Assistant
+      # Personal Home Assistant (Production)
       "home-assistant" = {
         hostname = "192.168.2.50";
         user = "root";
         identityFile = "~/.ssh/id_ed25519_personal";  # Personal key
         identitiesOnly = true;
+      };
+      
+      # Home Assistant Testing VMs
+      "ha-test-vm" = {
+        hostname = "192.168.2.40";
+        user = "root";
+        identityFile = "~/.ssh/id_ed25519_personal";  # Personal key
+        identitiesOnly = true;
+        extraOptions = {
+          StrictHostKeyChecking = "no";
+        };
+      };
+      
+      "192.168.2.40" = {
+        user = "root";
+        identityFile = "~/.ssh/id_ed25519_personal";
+        identitiesOnly = true;
+        extraOptions = {
+          StrictHostKeyChecking = "no";
+        };
+      };
+      
+      # All 192.168.2.* hosts (HA testing network)
+      "192.168.2.*" = {
+        user = "root";
+        identityFile = "~/.ssh/id_ed25519_personal";
+        identitiesOnly = true;
+        extraOptions = {
+          StrictHostKeyChecking = "no";
+        };
       };
       
       # Work GitHub (default - no special hostname needed)

@@ -8,7 +8,7 @@ TOOLS_DIR := tools
 GO_VERSION := 1.21
 
 # True SketchyBar plugins (called by SketchyBar to update items)
-PLUGINS := cpu memory network battery volume front_app notifications clock moon_phase weather spotify
+PLUGINS := cpu memory network battery volume front_app notifications clock moon_phase weather spotify aerospace_overview
 
 # Utility tools (standalone CLI tools for users/scripts)
 TOOLS := titlebar config
