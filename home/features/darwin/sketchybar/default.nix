@@ -213,16 +213,16 @@ lib.mkIf pkgs.stdenv.isDarwin {
                               click_script="$HOME/.local/bin/sketchybar/battery popup" \
                  --subscribe battery system_woke power_source_change
 
-      # 🔔 ENHANCED NOTIFICATIONS with DND toggle and preview
+      # 🔔 NATIVE NOTIFICATIONS with improved macOS integration
       sketchybar --add item notifications right \
-                 --set notifications update_freq=15 \
+                 --set notifications update_freq=30 \
                                      icon.color="''${BLUE}dd" \
                                      label.color="''${TEXT}ee" \
                                      icon.padding_right=4 \
                                      label.padding_right=6 \
                                      script="$HOME/.local/bin/sketchybar/notifications" \
                                      click_script="~/.local/bin/sketchybar/notifications click" \
-                 --subscribe notifications system_woke
+                 --subscribe notifications system_woke front_app_switched space_change
 
       ##### Modern Group Separators #####
       # 🌊 Enhanced spacing between logical groups for optimal visual breathing room
