@@ -134,13 +134,27 @@ func (p *WeatherPlugin) GetWeatherInfo() (*WeatherInfo, error) {
 		return info, nil
 	}
 
-	// Fetch fresh weather data
+	// Fetch fresh weather data with graceful fallback
 	if err := p.fetchWeatherData(info); err != nil {
 		p.logger.Debug("Failed to fetch weather data: %v", err)
-		info.Icon = "❌"
-		info.Temp = "Offline"
-		info.Color = p.config.Colors.Red
+
+		// GRACEFUL DEGRADATION: Try to use any cached data, even if old
+		if staleCache := p.getStaleWeatherCache(); staleCache != nil {
+			p.logger.Debug("Using stale weather cache as fallback")
+			info.Icon = staleCache.Icon
+			info.Temp = staleCache.Temp + " ⏰"  // Indicate data is old
+			info.Color = p.config.Colors.Yellow // Warning: stale data
+			info.Condition = staleCache.Condition + " (cached)"
+			info.Available = true
+			return info, nil
+		}
+
+		// LAST RESORT: Weather-specific offline indicator to prevent confusion
+		info.Icon = "🌐"                     // Globe icon suggests connectivity issue, not system network
+		info.Temp = "No Data"               // More specific than "Offline"
+		info.Color = p.config.Colors.Yellow // Warning color, not error red
 		info.Available = false
+		info.Condition = "Weather service unavailable"
 		return info, nil
 	}
 
@@ -170,6 +184,28 @@ func (p *WeatherPlugin) getCachedWeather() (*CachedWeather, bool) {
 	return nil, false
 }
 
+// getStaleWeatherCache returns cached weather data even if expired (for graceful degradation)
+func (p *WeatherPlugin) getStaleWeatherCache() *CachedWeather {
+	if p.cache == nil {
+		return nil
+	}
+
+	// GRACEFUL DEGRADATION: Try to get any cached data, even if expired
+	// This is a fallback when fresh data is unavailable
+	key := "weather_data"
+
+	// First try normal cache
+	if cached, exists := p.cache.Get(key); exists {
+		if weatherData, ok := cached.(*CachedWeather); ok {
+			return weatherData
+		}
+	}
+
+	// TODO: If cache manager supports TTL bypass, use it here
+	// For now, we rely on the normal cache mechanism
+	return nil
+}
+
 // cacheWeatherData saves weather data to cache
 func (p *WeatherPlugin) cacheWeatherData(info *WeatherInfo) {
 	if p.cache == nil {
@@ -191,7 +227,7 @@ func (p *WeatherPlugin) cacheWeatherData(info *WeatherInfo) {
 	}
 }
 
-// fetchWeatherData fetches weather from wttr.in API
+// fetchWeatherData fetches weather from wttr.in API with improved error handling
 func (p *WeatherPlugin) fetchWeatherData(info *WeatherInfo) error {
 	// Build URL for simple format
 	var url string
@@ -201,31 +237,51 @@ func (p *WeatherPlugin) fetchWeatherData(info *WeatherInfo) error {
 		url = "https://wttr.in/?format=%C+%t"
 	}
 
+	p.logger.Debug("Fetching weather from: %s", url)
+
 	resp, err := p.httpClient.Get(url)
 	if err != nil {
-		return fmt.Errorf("failed to fetch weather: %w", err)
+		return fmt.Errorf("weather API connection failed (check internet): %w", err)
 	}
 	defer resp.Body.Close()
 
+	// Check HTTP status
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("weather API returned status %d", resp.StatusCode)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
+		return fmt.Errorf("failed to read weather response: %w", err)
 	}
 
 	weatherText := strings.TrimSpace(string(body))
 	if weatherText == "" {
-		return fmt.Errorf("empty weather response")
+		return fmt.Errorf("weather API returned empty response")
+	}
+
+	// Check for wttr.in error messages
+	if strings.Contains(strings.ToLower(weatherText), "unknown location") {
+		return fmt.Errorf("location not recognized by weather service")
+	}
+	if strings.Contains(strings.ToLower(weatherText), "sorry") || strings.Contains(strings.ToLower(weatherText), "error") {
+		return fmt.Errorf("weather service error: %s", weatherText)
 	}
 
 	// Parse condition and temperature
 	parts := strings.Fields(weatherText)
 	if len(parts) < 2 {
-		return fmt.Errorf("invalid weather format: %s", weatherText)
+		return fmt.Errorf("invalid weather data format: '%s'", weatherText)
 	}
 
 	// Extract condition (everything except the last part which should be temperature)
 	condition := strings.Join(parts[:len(parts)-1], " ")
 	temp := parts[len(parts)-1]
+
+	// Validate temperature format
+	if !strings.Contains(temp, "°") && !strings.Contains(temp, "C") && !strings.Contains(temp, "F") {
+		return fmt.Errorf("invalid temperature format: '%s'", temp)
+	}
 
 	info.Condition = condition
 	info.Temp = temp
@@ -234,6 +290,7 @@ func (p *WeatherPlugin) fetchWeatherData(info *WeatherInfo) error {
 	// Map condition to icon and color
 	p.mapWeatherCondition(info)
 
+	p.logger.Debug("Weather data fetched successfully: %s %s", condition, temp)
 	return nil
 }
 

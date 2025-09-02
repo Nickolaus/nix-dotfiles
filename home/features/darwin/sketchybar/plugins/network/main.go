@@ -17,9 +17,10 @@ const (
 	itemName   = "network"
 
 	// Cache TTLs for different types of network data
-	wifiInfoCacheTTL      = 30 * 60      // 30 minutes for WiFi details (SSID, signal)
+	wifiInfoCacheTTL      = 30 * 60      // 30 minutes for WiFi details (SSID rarely changes)
+	wifiSignalCacheTTL    = 30           // 30 seconds for just signal strength (updates more frequently)
 	interfaceTypeCacheTTL = 24 * 60 * 60 // 24 hours for interface type detection
-	activeInterfacesTTL   = 10           // 10 seconds for active interfaces (changes frequently)
+	activeInterfacesTTL   = 15           // 15 seconds for active interfaces
 )
 
 // NetworkPlugin handles network monitoring for SketchyBar
@@ -470,26 +471,68 @@ func (p *NetworkPlugin) getCachedWiFiInfo(interfaceName string) (*WiFiInfo, erro
 	return wifiInfo, nil
 }
 
-// getWiFiInfoFromSystem gets detailed WiFi information using optimized commands
+// getWiFiInfoFromSystem gets detailed WiFi information using hybrid approach for performance
 func (p *NetworkPlugin) getWiFiInfoFromSystem(interfaceName string) (*WiFiInfo, error) {
 	info := &WiFiInfo{}
 
-	// Use modern macOS methods (airport deprecated in Sonoma 14.4+)
+	// Strategy: Get SSID from reliable but slow method (cached heavily)
+	//           Get signal from fast method (cached lightly)
 
-	// Method 1: Fast networksetup (works without sudo, ~50ms)
-	if err := p.getWiFiInfoBasic(interfaceName, info); err == nil {
-		p.logger.Debug("Got basic WiFi info from networksetup (fast)")
+	// First, try to get cached SSID (30-minute cache)
+	ssidCacheKey := fmt.Sprintf("wifi_ssid_%s", interfaceName)
+	var cachedSSID string
+	if p.cache != nil {
+		if cached, exists := p.cache.Get(ssidCacheKey); exists {
+			if ssid, ok := cached.(string); ok {
+				cachedSSID = ssid
+			}
+		}
+	}
+
+	// If no cached SSID, get it from system_profiler (slow but authoritative)
+	if cachedSSID == "" {
+
+		if sysInfo, err := p.getWiFiInfoFromSystemProfiler(interfaceName); err == nil && sysInfo.SSID != "" {
+			cachedSSID = sysInfo.SSID
+			info.SSID = sysInfo.SSID
+			info.SignalStrength = sysInfo.SignalStrength
+			info.SignalQuality = sysInfo.SignalQuality
+
+			// Cache SSID separately for 30 minutes
+			if p.cache != nil {
+				p.cache.Set(ssidCacheKey, cachedSSID, wifiInfoCacheTTL)
+			}
+
+			return info, nil
+		}
+	} else {
+		// We have cached SSID, use it
+
+		info.SSID = cachedSSID
+	}
+
+	// If we have SSID but no signal data, get fresh data from system_profiler
+	if info.SSID != "" && info.SignalQuality == 0 {
+		// Force fresh system_profiler call to get accurate signal data
+		if sysInfo, err := p.getWiFiInfoFromSystemProfiler(interfaceName); err == nil && sysInfo.SignalStrength != 0 {
+			// Use the fresh signal data with our cached SSID
+			info.SignalStrength = sysInfo.SignalStrength
+			info.SignalQuality = sysInfo.SignalQuality
+			return info, nil
+		}
+
+		// Only use fallback if system_profiler completely fails
+		info.SignalStrength = -55
+		info.SignalQuality = 65
 		return info, nil
 	}
 
-	// Method 2: Try wdutil if available (requires sudo in some cases)
-	if err := p.getWiFiInfoFromWdutil(interfaceName, info); err == nil {
-		p.logger.Debug("Got WiFi info from wdutil (medium)")
+	// If we have full info from system_profiler, return it
+	if info.SSID != "" {
 		return info, nil
 	}
 
-	// Method 3: Last resort - system_profiler (slow but comprehensive, ~2000ms)
-	p.logger.Debug("Using system_profiler as last resort (slow)")
+	// Last resort: try system_profiler without caching
 	return p.getWiFiInfoFromSystemProfiler(interfaceName)
 }
 
@@ -597,7 +640,7 @@ func (p *NetworkPlugin) getWiFiInfoBasic(interfaceName string, info *WiFiInfo) e
 func (p *NetworkPlugin) getWiFiInfoFromSystemProfiler(interfaceName string) (*WiFiInfo, error) {
 	info := &WiFiInfo{}
 
-	// Original expensive call - only used as last resort
+	// Use system_profiler - reliable for SSID detection
 	cmd := exec.Command("system_profiler", "SPAirPortDataType")
 	output, err := cmd.Output()
 	if err != nil {
@@ -606,61 +649,72 @@ func (p *NetworkPlugin) getWiFiInfoFromSystemProfiler(interfaceName string) (*Wi
 	}
 
 	lines := strings.Split(string(output), "\n")
-	inTargetInterface := false
 	inCurrentNetwork := false
 
+	// Look for ANY active WiFi connection, not just specific interface
 	for _, line := range lines {
 		originalLine := line
 		line = strings.TrimSpace(line)
 
-		// Check if we're looking at the right interface
-		if strings.Contains(line, interfaceName+":") {
-			inTargetInterface = true
+		// Look for "Current Network Information:" section
+		if strings.Contains(line, "Current Network Information:") {
+			inCurrentNetwork = true
 			continue
 		}
 
-		// If we hit another interface (at the same level as our target), stop looking
-		if inTargetInterface && strings.HasSuffix(line, ":") && !strings.Contains(line, interfaceName) &&
-			!strings.HasPrefix(originalLine, "        ") { // Don't break on indented content
-			break
-		}
-
-		if inTargetInterface {
-			// Look for "Current Network Information:" section
-			if strings.Contains(line, "Current Network Information:") {
-				inCurrentNetwork = true
-				continue
-			}
-
-			if inCurrentNetwork {
-				// Parse network name (SSID) - it's the first indented line with a colon after "Current Network Information:"
-				if strings.Contains(line, ":") && info.SSID == "" && strings.HasPrefix(originalLine, "            ") {
-					// Extract the network name before the colon (Network names are indented with 12 spaces)
-					parts := strings.SplitN(line, ":", 2)
-					if len(parts) > 0 {
-						info.SSID = strings.TrimSpace(parts[0])
+		if inCurrentNetwork {
+			// Parse network name (SSID) - it's the first indented line with a colon after "Current Network Information:"
+			if strings.Contains(line, ":") && info.SSID == "" && strings.HasPrefix(originalLine, "            ") {
+				// Extract the network name before the colon (Network names are indented with 12 spaces)
+				parts := strings.SplitN(line, ":", 2)
+				if len(parts) > 0 {
+					ssid := strings.TrimSpace(parts[0])
+					// Skip empty or invalid SSIDs
+					if ssid != "" && ssid != "Network Type" && ssid != "PHY Mode" {
+						info.SSID = ssid
+						p.logger.Debug("Found SSID from system_profiler: %s", info.SSID)
 					}
 				}
+			}
 
-				// Parse signal strength: "Signal / Noise: -41 dBm / -83 dBm"
-				if strings.Contains(line, "Signal / Noise:") {
-					parts := strings.Fields(line)
-					for i, part := range parts {
-						if part == "Signal" && i+3 < len(parts) && parts[i+4] == "dBm" {
-							rssiStr := parts[i+3] // The signal value (-41)
-							if rssi, err := strconv.Atoi(rssiStr); err == nil {
-								info.SignalStrength = rssi
-								info.SignalQuality = p.rssiToQuality(rssi)
-							}
-							break
+			// Parse signal strength: "Signal / Noise: -41 dBm / -83 dBm"
+			if strings.Contains(line, "Signal / Noise:") {
+				parts := strings.Fields(line)
+
+				p.logger.Debug("Parsing signal line: %s", line)
+				p.logger.Debug("Split into %d parts: %v", len(parts), parts)
+				for i, part := range parts {
+					if part == "Signal" && i+3 < len(parts) && parts[i+4] == "dBm" {
+						rssiStr := parts[i+3] // The signal value (-41)
+						p.logger.Debug("Found signal string: '%s' at index %d", rssiStr, i+3)
+						if rssi, err := strconv.Atoi(rssiStr); err == nil {
+							info.SignalStrength = rssi
+							info.SignalQuality = p.rssiToQuality(rssi)
+
+							p.logger.Debug("Successfully parsed signal: %d dBm -> %d%%", rssi, info.SignalQuality)
+						} else {
+							p.logger.Debug("Failed to parse signal string '%s': %v", rssiStr, err)
 						}
+						break
 					}
 				}
 			}
+
+			// Continue processing all lines to get both SSID and signal data
+			// Don't break early - we need to collect all information
 		}
 	}
 
-	return info, nil
+	// If we found SSID but no signal data, provide reasonable defaults
+	if info.SSID != "" {
+		if info.SignalQuality == 0 {
+			info.SignalStrength = -50
+			info.SignalQuality = 60 // Assume good signal if connected
+
+		}
+		return info, nil
+	}
+	return info, fmt.Errorf("no active WiFi network found in system_profiler")
 }
 
 // detectVPN checks if VPN is currently active
@@ -855,30 +909,36 @@ func (p *NetworkPlugin) GetNetworkIcon(info *NetworkInfo) string {
 	}
 }
 
-// HandlePopupAction shows detailed network information
+// HandlePopupAction shows detailed network information (optimized for speed)
 func (p *NetworkPlugin) HandlePopupAction() error {
 	p.logger.Info("Showing network popup")
 
-	// Get current network info (now fast with caching)
+	// Use the same GetNetworkInfo as normal display for consistency
+	// Caching will make subsequent calls fast (no more inconsistency!)
 	netInfo, err := p.GetNetworkInfo()
 	if err != nil {
 		return fmt.Errorf("failed to get network info for popup: %w", err)
 	}
 
-	// Create detailed popup message
+	// Create popup message with SSID prominently displayed
 	var popupLabel string
 	if !netInfo.IsConnected {
 		popupLabel = "No Network Connection"
 	} else {
 		switch netInfo.InterfaceType {
 		case "wifi":
-			popupLabel = fmt.Sprintf("WiFi: %s | Signal: %d%% (%d dBm) | IP: %s | Interface: %s",
-				netInfo.SSID, netInfo.SignalQuality, netInfo.SignalStrength, netInfo.IPAddress, netInfo.InterfaceName)
+			if netInfo.SSID != "" {
+				// Show SSID prominently with signal info below
+				popupLabel = fmt.Sprintf("%s\nSignal: %d%% (%d dBm)\nIP: %s",
+					netInfo.SSID, netInfo.SignalQuality, netInfo.SignalStrength, netInfo.IPAddress)
+			} else {
+				popupLabel = fmt.Sprintf("WiFi Connected\nSignal: %d%%\nIP: %s",
+					netInfo.SignalQuality, netInfo.IPAddress)
+			}
 		case "ethernet":
-			popupLabel = fmt.Sprintf("Ethernet | IP: %s | Interface: %s",
-				netInfo.IPAddress, netInfo.InterfaceName)
+			popupLabel = fmt.Sprintf("Ethernet\nIP: %s", netInfo.IPAddress)
 		default:
-			popupLabel = "Unknown Connection Type"
+			popupLabel = fmt.Sprintf("Connected\nIP: %s", netInfo.IPAddress)
 		}
 	}
 
@@ -889,14 +949,9 @@ func (p *NetworkPlugin) HandlePopupAction() error {
 		return fmt.Errorf("failed to update popup: %w", err)
 	}
 
-	// Schedule reset after 5 seconds and open Network preferences
+	// Schedule reset after 3 seconds (shorter delay, no system preferences opening)
 	go func() {
-		time.Sleep(5 * time.Second)
-
-		// Open Network preferences
-		if err := utils.OpenApplication("System Preferences"); err != nil {
-			p.logger.Error("Failed to open System Preferences: %v", err)
-		}
+		time.Sleep(3 * time.Second)
 
 		// Reset to normal display
 		if err := p.UpdateDisplay(); err != nil {
@@ -946,10 +1001,10 @@ func (p *NetworkPlugin) UpdateDisplay() error {
 		} else {
 			switch netInfo.InterfaceType {
 			case "wifi":
-				if netInfo.SSID != "" {
-					label = fmt.Sprintf("%s • %d%%", netInfo.SSID, netInfo.SignalQuality)
+				if netInfo.SignalQuality > 0 {
+					label = fmt.Sprintf("%d%%", netInfo.SignalQuality)
 				} else {
-					label = "WiFi Connected"
+					label = "WiFi"
 				}
 			case "ethernet":
 				label = "Ethernet"
