@@ -100,8 +100,9 @@ func (p *MemoryPlugin) GetMemoryInfo() (*MemoryInfo, error) {
 	usedGB := float64(usedBytes) / 1024 / 1024 / 1024
 	totalUsableGB := float64(totalUsableBytes) / 1024 / 1024 / 1024
 
-	// Calculate percentage based on usable memory pool (not including GPU/Neural Engine reserved)
-	usagePercent := float64(usedBytes) / float64(totalUsableBytes) * 100
+	// Calculate percentage based on total physical memory to match Activity Monitor
+	systemTotalBytes := int64(systemTotalGB) * 1024 * 1024 * 1024
+	usagePercent := float64(usedBytes) / float64(systemTotalBytes) * 100
 
 	// Clamp percentage to valid range
 	if usagePercent < 0 {
@@ -227,27 +228,43 @@ func (p *MemoryPlugin) getVMStat() (*VMStatOutput, error) {
 		}
 	}
 
-	// Calculate totals
-	result.TotalPages = result.FreePages + result.ActivePages + result.WiredPages
-	result.UsedPages = result.ActivePages + result.WiredPages
-
-	// Add other memory types we might have missed
+	// Parse additional memory types for Activity Monitor-compatible calculation
+	var inactivePages, speculativePages, purgeablePages, compressedPages int
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if strings.Contains(line, "Pages inactive:") {
 			if count := p.parseVMStatLine(line); count >= 0 {
-				result.TotalPages += count
+				inactivePages = count
 			}
 		} else if strings.Contains(line, "Pages speculative:") {
 			if count := p.parseVMStatLine(line); count >= 0 {
-				result.TotalPages += count
+				speculativePages = count
 			}
 		} else if strings.Contains(line, "Pages purgeable:") {
 			if count := p.parseVMStatLine(line); count >= 0 {
-				result.TotalPages += count
+				purgeablePages = count
+			}
+		} else if strings.Contains(line, "Pages occupied by compressor:") {
+			// Use occupied (actual compressed size) not stored (uncompressed size)
+			// This matches Activity Monitor's "Compressed" display
+			if count := p.parseVMStatLine(line); count >= 0 {
+				compressedPages = count
 			}
 		}
 	}
+
+	// Calculate totals to match Activity Monitor methodology
+	// Total physical memory = all page types
+	result.TotalPages = result.FreePages + result.ActivePages + result.WiredPages +
+		inactivePages + speculativePages + purgeablePages
+
+	// Used pages = App Memory (Active) + System/Wired + Compressed
+	// This matches Activity Monitor's calculation and excludes cached files
+	// Inactive pages are mostly file cache that can be freed, so don't count as "used"
+	result.UsedPages = result.ActivePages + result.WiredPages + compressedPages
+
+	p.logger.Debug("Memory calculation: Active=%d, Wired=%d, Compressed=%d, Inactive=%d, Free=%d, Total=%d, Used=%d",
+		result.ActivePages, result.WiredPages, compressedPages, inactivePages, result.FreePages, result.TotalPages, result.UsedPages)
 
 	return result, nil
 }
