@@ -168,12 +168,13 @@ lib.mkIf pkgs.stdenv.isDarwin {
                                   label.color="''${TEXT}dd" \
                                   script="$HOME/.local/bin/sketchybar/moon_phase" \
                                   click_script="open -a 'Calendar'" \
-                 --add item weather right \
-                 --set weather update_freq=1800 \
-                               icon.color="''${SKY}dd" \
-                               label.color="''${TEXT}dd" \
-                               script="$HOME/.local/bin/sketchybar/weather" \
-                               click_script="$HOME/.local/bin/sketchybar/weather forecast"
+                                 --add item weather right \
+                --set weather update_freq=30 \
+                              icon.color="''${SKY}dd" \
+                              label.color="''${TEXT}dd" \
+                              script="$HOME/.local/bin/sketchybar/weather" \
+                              click_script="$HOME/.local/bin/sketchybar/weather popup" \
+                --subscribe weather system_woke mouse.clicked
 
       # 🌐 CONNECTIVITY GROUP
       sketchybar --add item network right \
