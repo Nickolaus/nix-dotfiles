@@ -72,6 +72,7 @@
     nodejs_22
     cargo
     uv
+    (python3.withPackages (ps: with ps; [ pyyaml ]))  # Python with pyyaml package
     bun
     mise
     asdf-vm
