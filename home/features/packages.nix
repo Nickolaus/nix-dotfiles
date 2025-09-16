@@ -57,7 +57,7 @@
     kind
     awscli2
     ssm-session-manager-plugin
-    terraform
+    terraform_1
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🐳 CONTAINER & DOCKER TOOLS
@@ -76,7 +76,6 @@
     bun
     mise
     asdf-vm
-    go
     gnumake
     
     # ═══════════════════════════════════════════════════════════════════════════

@@ -2,7 +2,9 @@
 
   programs.go = {
     enable = true;
-    package = pkgs.go_1_24;
-    goPath = ".go";
+    package = pkgs.go;
+    env = {
+      GOPATH = "${config.home.homeDirectory}/.go";
+    };
   };
 }
