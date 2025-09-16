@@ -9,15 +9,56 @@ lib.mkIf pkgs.stdenv.isDarwin {
   # 
   # Based on official SketchyBar examples, adapted for AeroSpace integration.
 
-  # System preferences for SketchyBar integration
-  # Auto-hide menu bar on desktop - allows hovering to access app menus
+  # SketchyBar-specific packages - only installed when SketchyBar is enabled
+  home.packages = with pkgs; [
+    sketchybar-app-font  # Ligature-based symbol font for SketchyBar
+  ];
+
+  # SketchyBar-specific Homebrew packages - only installed when SketchyBar is enabled
+  homebrew = {
+    taps = [
+      "FelixKratz/formulae"  # SketchyBar tap
+    ];
+    brews = [
+      "sketchybar"         # SketchyBar binary (requires system integration)
+      "switchaudio-osx"    # Volume control for SketchyBar plugins
+      "pnpm"               # Package manager for sketchybar-app-font installation
+    ];
+    casks = [
+      "sf-symbols"         # Apple SF Symbols for SketchyBar icons
+    ];
+  };
+
+  # Configure AeroSpace when SketchyBar is enabled
+  # This overrides the default settings in modules/darwin/aerospace/default.nix
+  services.aerospace.settings = {
+    # Top gaps for SketchyBar
+    gaps.outer.top = [
+      { monitor."built-in" = 0; }       # Built-in display: no gap (SketchyBar works correctly)
+      { monitor."main" = 24; }          # Main display: 24px gap for SketchyBar
+      { monitor."LG HDR 4K" = 24; }     # Portrait display: 24px gap for SketchyBar
+      24                                # Default: 24px gap for any other displays
+    ];
+    
+    # SketchyBar integration - start SketchyBar with AeroSpace and notify on workspace changes
+    after-startup-command = ["exec-and-forget sketchybar"];
+    
+    # Trigger plugin updates on workspace changes
+    exec-on-workspace-change = ["/bin/bash" "-c" 
+      "echo 'AeroSpace: workspace changed to $AEROSPACE_FOCUSED_WORKSPACE' >> /tmp/aerospace.log && FOCUSED=$AEROSPACE_FOCUSED_WORKSPACE $HOME/.local/bin/sketchybar/aerospace_overview >> /tmp/aerospace.log 2>&1 && sketchybar --trigger aerospace_workspace_change FOCUSED=$AEROSPACE_FOCUSED_WORKSPACE"
+    ];
+  };
+
+  # System preferences for SketchyBar integration - ONLY applied when SketchyBar is enabled
+  # These settings optimize the system for custom SketchyBar usage
   targets.darwin.defaults."com.apple.dock" = {
-    autohide = true;
+    # Keep dock visible when using SketchyBar (system default behavior)
+    autohide = false;
   };
   
   targets.darwin.defaults.NSGlobalDomain = {
-    _HIHideMenuBar = true;                    # Hide menu bar on desktop
-    AppleMenuBarVisibleInFullscreen = true;   # But show in fullscreen apps
+    _HIHideMenuBar = true;                    # Hide system menu bar when using SketchyBar
+    AppleMenuBarVisibleInFullscreen = true;   # Show menu bar in fullscreen apps
   };
 
   # Stable wrapper script for SketchyBar to handle macOS privacy permissions

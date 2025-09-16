@@ -3,9 +3,7 @@
 , ...
 }: {
   system.defaults.dock = {
-    autohide = true;
     autohide-delay = 0.0;
-
     autohide-time-modifier = 0.2;
     expose-animation-duration = 0.2;
     tilesize = 48;
@@ -17,9 +15,6 @@
     orientation = "bottom";
     mru-spaces = false;
   };
-
-  # Menu bar configuration moved to SketchyBar module
-
   security.pam.services.sudo_local.touchIdAuth = true;
 
   system.keyboard = {

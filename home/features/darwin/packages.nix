@@ -34,7 +34,6 @@ lib.mkIf pkgs.stdenv.isDarwin {
     # ═══════════════════════════════════════════════════════════════════════════
     betterdisplay # Display management tool for macOS
     # Screenshot functionality: Use Lightshot via Homebrew (ksnip not available on Darwin)
-    sketchybar-app-font # Ligature-based symbol font for SketchyBar (supports Homebrew SketchyBar)
     # Add macOS-specific utilities here
     
     # ═══════════════════════════════════════════════════════════════════════════

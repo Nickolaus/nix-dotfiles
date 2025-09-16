@@ -3,6 +3,6 @@
     ./packages.nix
     ./shell.nix
     ./keybindings
-    ./sketchybar
+    # ./sketchybar  # Disabled - using system built-in menu bar with boring-notch instead
   ];
 } 

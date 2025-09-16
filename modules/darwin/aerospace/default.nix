@@ -14,16 +14,6 @@
       on-focus-changed = [
         "move-mouse window-lazy-center"
       ];
-
-
-
-      # SketchyBar integration - start SketchyBar with AeroSpace and notify on workspace changes
-      after-startup-command = ["exec-and-forget sketchybar"];
-      
-      # Trigger plugin updates on workspace changes
-      exec-on-workspace-change = ["/bin/bash" "-c" 
-        "echo 'AeroSpace: workspace changed to $AEROSPACE_FOCUSED_WORKSPACE' >> /tmp/aerospace.log && FOCUSED=$AEROSPACE_FOCUSED_WORKSPACE $HOME/.local/bin/sketchybar/aerospace_overview >> /tmp/aerospace.log 2>&1 && sketchybar --trigger aerospace_workspace_change FOCUSED=$AEROSPACE_FOCUSED_WORKSPACE"
-      ];
       
       automatically-unhide-macos-hidden-apps = false;
 
@@ -33,14 +23,8 @@
 
       gaps = {
         outer.bottom = 0;
-        # Per-monitor top gaps: Reserve 24px for SketchyBar on external displays, 0px on built-in (it handles this correctly)
-        outer.top = [
-          { monitor."built-in" = 0; }       # Built-in display: no gap (SketchyBar works correctly)
-          { monitor."main" = 24; }          # Main display: 24px gap for SketchyBar
-          { monitor."LG HDR 4K" = 24; }     # Portrait display: 24px gap for SketchyBar
-          24                                # Default: 24px gap for any other displays
-        ];
-                outer.left = 1;
+        outer.top = 0;    # No gaps by default - SketchyBar config will override if enabled
+        outer.left = 1;
         outer.right = 1;
         inner.horizontal = 3;
         inner.vertical = 3;
