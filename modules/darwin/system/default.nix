@@ -3,6 +3,7 @@
 , ...
 }: {
   system.defaults.dock = {
+    autohide = true;  # Auto-hide dock, show when hovering at bottom edge
     autohide-delay = 0.0;
     autohide-time-modifier = 0.2;
     expose-animation-duration = 0.2;
