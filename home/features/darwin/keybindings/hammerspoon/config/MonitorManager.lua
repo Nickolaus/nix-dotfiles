@@ -244,6 +244,9 @@ local function safeFileRead(filepath)
 end
 
 -- Operation queue management
+-- Forward declaration
+local processNextOperation
+
 local function queueOperation(operation)
     table.insert(operationQueue, operation)
     if not currentOperation then
@@ -251,7 +254,7 @@ local function queueOperation(operation)
     end
 end
 
-local function processNextOperation()
+processNextOperation = function()
     if #operationQueue == 0 then
         currentOperation = nil
         return
