@@ -118,6 +118,7 @@
     ollama                   # Local LLM server
     claude-code              # Agentic coding tool that lives in your terminal
     openai                   # OpenAI Python client library with CLI capabilities
+    cursor-cli               # Cursor CLI agent for AI-powered code editing
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 📊 DATA & ANALYTICS

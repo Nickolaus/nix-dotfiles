@@ -363,10 +363,7 @@ EOF
   };
   
   # Environment variables for optimal PhpStorm performance
-  home.sessionVariables = {
-    # Java performance for JetBrains IDEs
-    "_JAVA_OPTIONS" = "-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1HeapRegionSize=16m -XX:+UseStringDeduplication";
-    
+  home.sessionVariables = {    
     # Disable JetBrains data sharing for performance
     "JETBRAINS_DATA_SHARING" = "false";
   };

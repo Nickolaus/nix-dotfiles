@@ -110,8 +110,6 @@ lib.mkIf pkgs.stdenv.isDarwin {
         <option value="com.jetbrains.plugins.ai.assistant" />
         <option value="com.intellij.grazie" />
         <option value="tanvd.grazi" />
-        <option value="com.intellij.stats.completion" />
-        <option value="com.intellij.completion.ml.ranking" />
         
         <!-- Disable unused language support -->
         <option value="Pythonid" />

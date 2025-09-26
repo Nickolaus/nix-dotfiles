@@ -4,20 +4,11 @@ lib.mkIf pkgs.stdenv.isDarwin {
   # Version-agnostic configuration for Apple Silicon and macOS
   
   # macOS-specific environment variables
-  home.sessionVariables = {
-    # Apple Silicon optimizations
-    "JAVA_TOOL_OPTIONS" = "-XX:+UnlockExperimentalVMOptions -XX:+UseZGC -XX:+UseTransparentHugePages";
-    
-    # macOS file system optimizations
+  home.sessionVariables = {    
+    # PhpStorm-specific optimizations (won't affect system input)
     "IDEA_CASE_SENSITIVE_FS" = "true";
     "IDEA_DISABLE_SYSTEM_CRASH_REPORTS" = "true";
-    
-    # Retina display settings
     "IDEA_RETINA" = "true";
-    "GDK_SCALE" = "2";
-    "GDK_DPI_SCALE" = "0.5";
-    
-    # Performance monitoring
     "IDEA_LOG_PERF_STATS" = "false";
     "IDEA_LOG_SLOW_OPERATIONS" = "false";
   };
