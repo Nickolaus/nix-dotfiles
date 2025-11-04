@@ -17,7 +17,7 @@ lib.mkIf pkgs.stdenv.isDarwin {
     jetbrains.phpstorm
     code-cursor
     hoppscotch
-    # bruno # Open-source IDE for exploring and testing APIs - temporarily disabled due to build issues
+    bruno # Open-source IDE for exploring and testing APIs
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🎨 DESIGN & CREATIVE TOOLS
