@@ -14,20 +14,24 @@
       enable = true;
     };
 
-    userName = "Christian Hessel";
-    userEmail = "c.hessel@shopware.com";
-
     signing.key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHBw37pfQ1qRRONPampA3kv/2AhcmZxgzdMPcXuRI9Ue";
     signing.signByDefault = true;
 
-    extraConfig = {
-      push.autoSetupRemote = true;
+    settings = {
+      user = {
+        name = "Christian Hessel";
+        email = "c.hessel@shopware.com";
+      };
+
+      push = {
+        autoSetupRemote = true;
+        default = "simple";
+      };
+
       init.defaultBranch = "main";
       pull.rebase = true;
       rebase.autoStash = true;
-      push.default = "simple";
       fetch.prune = true;
-
       gpg.format = "ssh";
     };
   };
