@@ -1,8 +1,9 @@
 { pkgs, lib, ... }: {
   
   # Enable ollama service for local LLM hosting
+  # Temporarily disabled due to build failure in nixpkgs
   services.ollama = {
-    enable = true;
+    enable = false;
     package = pkgs.ollama;
     
     # Configure network settings
