@@ -1,4 +1,12 @@
 result
+result-*
+
+# Images directory outputs
+images/result*
+images/*.iso
+images/*.qcow2
+images/*.img
+
 # Benchmark report at root
 benchmark-results.md
 

@@ -1,25 +1,19 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, flake, ... }:
 
 # Home Manager configuration for farnsworth user (C.Hessel)
-# This imports the shared configuration and adds farnsworth-specific settings
+# Imports: default.nix → features → linux (includes hyprland, waybar, packages)
 
 {
-  # Import shared home configuration
   imports = [
-    ./features  # Shared cross-platform configuration
-    ./features/linux/hyprland  # Hyprland window manager
-    ./features/linux/waybar    # Waybar status bar
+    ./default.nix  # Imports SOPS + ./features (which imports ./linux automatically)
   ];
 
   # User-specific settings
   home = {
     username = "C.Hessel";
     homeDirectory = "/home/C.Hessel";
-    stateVersion = "24.11";
+    stateVersion = "24.11";  # NixOS 24.11 release
   };
-
-  # Enable Home Manager
-  programs.home-manager.enable = true;
 
   # User-specific environment variables (if any)
   home.sessionVariables = {

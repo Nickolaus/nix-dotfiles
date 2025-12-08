@@ -15,17 +15,19 @@ in
   config = lib.mkMerge [
     # Base hardware configuration (always enabled)
     {
-      # Hardware acceleration
-      hardware.opengl = {
+      # Hardware acceleration (NixOS 24.11+ uses hardware.graphics)
+      hardware.graphics = {
         enable = true;
-        driSupport = true;
-        driSupport32Bit = true; # For 32-bit applications
+        # driSupport and driSupport32Bit are deprecated and removed
         
         extraPackages = with pkgs; [
-          # VA-API and VDPAU
-          vaapiVdpau
+          # VA-API and VDPAU (NixOS 24.11+ renamed packages)
+          libva-vdpau-driver
           libvdpau-va-gl
         ];
+        
+        # 32-bit support (only on x86_64)
+        enable32Bit = lib.mkIf (pkgs.stdenv.hostPlatform.system == "x86_64-linux") true;
       };
 
       # Enable firmware updates
@@ -89,17 +91,17 @@ in
     (lib.mkIf cfg.amdgpu.enable {
       services.xserver.videoDrivers = [ "amdgpu" ];
       
-      # AMD-specific OpenGL packages
-      hardware.opengl.extraPackages = with pkgs; [
+      # AMD-specific graphics packages
+      hardware.graphics.extraPackages = with pkgs; [
         rocm-opencl-icd
         rocm-opencl-runtime
         amdvlk
       ];
       
-      # 32-bit support for AMD
-      hardware.opengl.extraPackages32 = with pkgs; [
+      # 32-bit support for AMD (only on x86_64)
+      hardware.graphics.extraPackages32 = lib.mkIf (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (with pkgs; [
         driversi686Linux.amdvlk
-      ];
+      ]);
       
       # Additional AMD packages
       environment.systemPackages = with pkgs; [

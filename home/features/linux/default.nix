@@ -3,8 +3,7 @@
   imports = [
     ./packages.nix
     ./shell.nix
-    # Future Linux-specific features will go here
-    # ./window-managers
-    # ./desktop-environments
+    ./hyprland     # Wayland compositor
+    ./waybar       # Status bar
   ];
 } 

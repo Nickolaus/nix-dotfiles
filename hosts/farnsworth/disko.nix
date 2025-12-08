@@ -39,21 +39,26 @@ in
                 type = "luks";
                 name = "cryptroot";
                 
-                # Encryption settings
-                settings = {
-                  # Use LUKS2 with Argon2id (modern, secure)
-                  type = "luks2";
-                  cipher = "aes-xts-plain64";
-                  keySize = 512;
-                  hash = "sha512";
-                  
-                  # Performance optimizations
-                  pbkdfForceIterations = 1000000;
-                };
-                
-                # Password file location for automated installation
-                # IMPORTANT: Create this file manually during installation
-                # passwordFile = "/tmp/secret.key";
+                # Password provided via nixos-anywhere: --disk-encryption-keys flag
+                #
+                # Modern LUKS2 defaults (automatically applied by cryptsetup):
+                # - Format: LUKS2
+                # - Cipher: aes-xts-plain64 (256-bit key, XTS mode)
+                # - Key size: 512 bits (for XTS: 2x256)
+                # - Hash: SHA-256
+                # - PBKDF: Argon2id (memory-hard, GPU-resistant)
+                #
+                # Advanced LUKS options (if needed, use extraFormatArgs):
+                # extraFormatArgs = [
+                #   "--cipher aes-xts-plain64"
+                #   "--key-size 512"
+                #   "--hash sha512"
+                #   "--pbkdf argon2id"
+                #   "--pbkdf-memory 1048576"  # 1GB RAM for key derivation
+                # ];
+                #
+                # Note: Defaults are secure for most use cases. Only customize
+                # if you have specific compliance or performance requirements.
                 
                 content = {
                   type = "btrfs";

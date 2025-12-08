@@ -1,6 +1,11 @@
-{ pkgs, lib, ... }:
+{ pkgs, lib, flake, ... }:
 lib.mkIf pkgs.stdenv.isDarwin {
   home.packages = with pkgs; [
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 📦 DEVELOPMENT TOOLS (Darwin-specific)
+    # ═══════════════════════════════════════════════════════════════════════════
+    flake.inputs.devenv.packages.${system}.devenv  # Pinned version from flake
+    
     # ═══════════════════════════════════════════════════════════════════════════
     # 💬 COMMUNICATION & COLLABORATION
     # ═══════════════════════════════════════════════════════════════════════════

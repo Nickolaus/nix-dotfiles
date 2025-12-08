@@ -3,7 +3,7 @@
 # Hyprland user configuration
 # Keybindings, colors, animations, workspace management
 
-{
+lib.mkIf pkgs.stdenv.isLinux {
   wayland.windowManager.hyprland = {
     enable = true;
     xwayland.enable = true;

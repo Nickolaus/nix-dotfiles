@@ -36,6 +36,7 @@
     # GUI applications and system integrations
     casks = [
       "orbstack"            # Container management tool with better performance than the Nix version
+      "utm"                 # Virtual machine manager for macOS (not available in nixpkgs)
       "hammerspoon"         # Automation tool for macOS, requires system access
       "karabiner-elements"  # Keyboard customization tool requiring system-level permissions and integration
       "gitify"              # GitHub notifications app for macOS

@@ -2,8 +2,9 @@
 
 {
   imports = [
-    ./hardware-configuration.nix
+    # Hardware generated during installation by nixos-generate-config
     ./disko.nix
+    ./users.nix
     ../shared/determinate.nix
     ../shared/fonts.nix
     ../../modules/nixos/hyprland
@@ -47,7 +48,7 @@
       systemd.enable = true; # Modern systemd-based initrd
     };
 
-    # Laptop-specific: enable thermald for thermal management
+    # Laptop-specific: enable thermald for thermal management (x86_64 only)
     kernelModules = [ "kvm-intel" "kvm-amd" ]; # Support both Intel and AMD
   };
 
@@ -125,22 +126,7 @@
     };
   };
 
-  # User configuration
-  users.users."C.Hessel" = {
-    isNormalUser = true;
-    description = "C.Hessel";
-    extraGroups = [ 
-      "wheel"          # sudo access
-      "networkmanager" # manage network without sudo
-      "docker"         # Docker access
-      "video"          # video device access
-      "audio"          # audio device access
-    ];
-    shell = pkgs.fish;
-  };
-
-  # Enable Fish shell
-  programs.fish.enable = true;
+  # User configuration in ./users.nix
 
   # SSH server configuration
   services.openssh = {
@@ -241,7 +227,8 @@
   ];
 
   # Laptop power management
-  services.thermald.enable = true; # Intel thermal management
+  # Intel thermal management (x86_64 only - not available on ARM)
+  services.thermald.enable = pkgs.stdenv.isx86_64;
   services.auto-cpufreq = {
     enable = true;
     settings = {
@@ -259,15 +246,13 @@
   # Enable upower for battery management
   services.upower.enable = true;
 
-  # Laptop lid and power button actions
-  services.logind = {
-    lidSwitch = "suspend";
-    lidSwitchExternalPower = "lock";
-    extraConfig = ''
-      HandlePowerKey=suspend
-      IdleAction=suspend
-      IdleActionSec=15min
-    '';
+  # Laptop lid and power button actions (NixOS 24.11+ settings format)
+  services.logind.settings.Login = {
+    HandleLidSwitch = "suspend";
+    HandleLidSwitchExternalPower = "lock";
+    HandlePowerKey = "suspend";
+    IdleAction = "suspend";
+    IdleActionSec = "15min";
   };
 
   # Enable location services for automatic timezone

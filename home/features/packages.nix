@@ -4,8 +4,7 @@
     # ═══════════════════════════════════════════════════════════════════════════
     # 📦 DEVELOPMENT ENVIRONMENT & PACKAGE MANAGERS
     # ═══════════════════════════════════════════════════════════════════════════
-    flake.inputs.devenv.packages.${system}.devenv
-    cachix
+    cachix       # Binary cache (works on all platforms)
     nixpkgs-fmt
     
     # ═══════════════════════════════════════════════════════════════════════════

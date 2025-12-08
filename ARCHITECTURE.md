@@ -8,20 +8,39 @@ This document describes the organization and design principles of this cross-pla
 nix-dotfiles/
 ├── flake.nix                      # Main flake configuration with outputs
 ├── install.sh                     # Cross-platform installation script
+│
+├── images/                        # System images (ISOs, VM images, disk images)
+│   ├── README.md                  # Images directory documentation
+│   ├── installer.nix              # NixOS installer configuration with SSH
+│   ├── build-images.sh            # Build script for system images
+│   └── (result*, *.iso, *.qcow2)  # Build outputs (gitignored)
+│
 ├── scripts/                       # Utility scripts and tools
 │   ├── update-system.sh           # System update automation
 │   └── hot-benchmark.sh           # AI model benchmarking
 │
 ├── hosts/                         # System configurations per machine
 │   ├── zoidberg/                  # macOS system (nix-darwin)
-│   ├── farnsworth/                # Linux laptop (NixOS)
+│   │   └── ...
+│   ├── farnsworth/                # Linux laptop (NixOS, multi-arch)
+│   │   ├── default.nix            # Main system configuration
+│   │   ├── disko.nix              # Declarative disk layout
+│   │   ├── users.nix              # User configuration
+│   │   ├── docs/                  # Host-specific documentation
+│   │   │   ├── README.md          # Documentation index
+│   │   │   ├── INSTALLATION.md    # Production installation guide
+│   │   │   └── VM_TESTING.md      # VM testing guide
+│   │   └── scripts/               # Host-specific scripts
+│   │       ├── README.md          # Script documentation
+│   │       └── vm-test-setup.sh   # VM testing automation
 │   └── shared/                    # Shared system configurations
 │       ├── determinate.nix        # Nix daemon configuration
 │       └── fonts.nix              # Font configuration
 │
 ├── home/                          # Home Manager configurations
 │   ├── default.nix                # Base user configuration (imports ./features)
-│   ├── zoidberg.nix               # User-specific config (platform-specific)
+│   ├── zoidberg.nix               # macOS user config
+│   ├── farnsworth.nix             # Linux user config
 │   └── features/                  # Modular user feature configurations
 │       ├── default.nix            # Imports all feature modules
 │       ├── packages.nix           # Cross-platform packages
@@ -40,13 +59,20 @@ nix-dotfiles/
 │       └── linux/                 # Linux-specific user configurations
 │           ├── default.nix        # Imports linux features and packages
 │           ├── packages.nix       # Linux-specific packages
-│           └── shell.nix          # Linux shell additions
+│           ├── hyprland/          # Hyprland window manager config
+│           └── waybar/            # Waybar status bar config
 │
 └── modules/                       # System-level modules
-    └── darwin/                    # macOS system modules (nix-darwin)
-        ├── aerospace/             # Window manager configuration
-        ├── brew/                  # Homebrew package management
-        └── system/                # System-level settings
+    ├── darwin/                    # macOS system modules (nix-darwin)
+    │   ├── aerospace/             # Window manager configuration
+    │   ├── brew/                  # Homebrew package management
+    │   └── system/                # System-level settings
+    └── nixos/                     # NixOS system modules
+        ├── hyprland/              # Hyprland system configuration
+        ├── hardware/              # Hardware support (GPU drivers)
+        ├── impermanence/          # Tmpfs root configuration
+        ├── flatpak/               # Declarative Flatpak management
+        └── btrfs-maintenance/     # Automated Btrfs maintenance
 ```
 
 ## Design Principles

@@ -1,6 +1,12 @@
 { pkgs, lib, ... }:
+
 lib.mkIf pkgs.stdenv.isLinux {
   home.packages = with pkgs; [
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 📦 DEVELOPMENT TOOLS (Linux-specific)
+    # ═══════════════════════════════════════════════════════════════════════════
+    devenv  # Development environment (from nixpkgs)
+    
     # ═══════════════════════════════════════════════════════════════════════════
     # 🌐 BROWSERS & WEB TOOLS
     # ═══════════════════════════════════════════════════════════════════════════
@@ -9,7 +15,9 @@ lib.mkIf pkgs.stdenv.isLinux {
     # ═══════════════════════════════════════════════════════════════════════════
     # 💬 COMMUNICATION & COLLABORATION
     # ═══════════════════════════════════════════════════════════════════════════
-    slack
+  ] 
+  ++ lib.optionals pkgs.stdenv.isx86_64 [ slack ]  # x86_64-only (no ARM build)
+  ++ [
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🤖 AI & PRODUCTIVITY TOOLS (mirrored from macOS where available)
@@ -22,7 +30,9 @@ lib.mkIf pkgs.stdenv.isLinux {
     # ═══════════════════════════════════════════════════════════════════════════
     jetbrains.phpstorm
     code-cursor
-    hoppscotch
+  ]
+  ++ lib.optionals pkgs.stdenv.isx86_64 [ hoppscotch ]  # x86_64-only (no ARM build)
+  ++ [
     bruno  # Open-source IDE for exploring and testing APIs
     
     # ═══════════════════════════════════════════════════════════════════════════
@@ -48,7 +58,9 @@ lib.mkIf pkgs.stdenv.isLinux {
     # ═══════════════════════════════════════════════════════════════════════════
     # 🎵 MULTIMEDIA & ENTERTAINMENT
     # ═══════════════════════════════════════════════════════════════════════════
-    spotify  # Music streaming (mirrored from macOS)
+  ]
+  ++ lib.optionals pkgs.stdenv.isx86_64 [ spotify ]  # x86_64-only (no ARM build)
+  ++ [
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🔧 DEVELOPMENT TOOLS (Linux-specific builds)

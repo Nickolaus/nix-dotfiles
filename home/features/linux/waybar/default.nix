@@ -6,7 +6,7 @@
 let
   cfg = config.programs.waybar;
 in
-{
+lib.mkIf pkgs.stdenv.isLinux {
   programs.waybar = {
     enable = lib.mkDefault true; # Toggle: set to false to disable
     

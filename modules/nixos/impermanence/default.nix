@@ -1,13 +1,13 @@
-{ config, pkgs, lib, impermanence, ... }:
+{ config, pkgs, lib, ... }:
 
 # Impermanence configuration - tmpfs root with persistent directories
 # Provides enhanced security by wiping root filesystem on reboot
 # Only selected directories persist via Btrfs subvolumes
+# 
+# Note: impermanence.nixosModules.impermanence is imported in flake.nix
+# This module only configures the options it provides
 
 {
-  imports = [
-    impermanence.nixosModules.impermanence
-  ];
 
   # Enable impermanence using tmpfs overlay
   # Root filesystem (/) is mounted as tmpfs, overlaid with Btrfs subvolumes
@@ -78,29 +78,9 @@
   # Note: /nix is a separate persistent Btrfs subvolume (configured in disko.nix)
   # Note: /var/log is a separate persistent Btrfs subvolume (configured in disko.nix)
   
-  # Boot-time script to set up tmpfs root overlay
-  boot.initrd.postDeviceCommands = lib.mkAfter ''
-    # Clean up /tmp on boot
-    mkdir -p /mnt
-    
-    # Mount the Btrfs root to clean it up
-    mount -o subvol=@root /dev/mapper/cryptroot /mnt
-    
-    # Remove everything except /nix, /home, /persist (which are separate subvolumes)
-    if [ -d /mnt ]; then
-      # Delete old root files (be careful!)
-      btrfs subvolume list -o /mnt | cut -f9- -d' ' | \
-        while read subvolume; do
-          echo "Deleting /$subvolume subvolume..."
-          btrfs subvolume delete "/mnt/$subvolume"
-        done || true
-      
-      # Clean up root directory
-      find /mnt -mindepth 1 -maxdepth 1 -not -name 'nix' -not -name 'home' -not -name 'persist' -not -name 'var' -not -name '.snapshots' -delete
-    fi
-    
-    umount /mnt
-  '';
+  # Note: Root filesystem cleanup is handled by tmpfs overlay in fileSystems
+  # For systemd stage 1, impermanence automatically handles ephemeral root
+  # No manual cleanup needed with tmpfs root mount
 
   # Warning message about impermanence
   warnings = [

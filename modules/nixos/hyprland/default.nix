@@ -35,7 +35,7 @@
     libnotify       # Send notifications
     
     # Application launcher
-    rofi-wayland    # App launcher
+    rofi            # App launcher (wayland support built-in)
     
     # File manager
     xfce.thunar     # GUI file manager
