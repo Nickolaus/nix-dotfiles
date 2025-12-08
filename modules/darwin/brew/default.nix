@@ -35,6 +35,7 @@
 
     # GUI applications and system integrations
     casks = [
+      "cursor"              # AI-powered code editor; Nix package is broken/unmaintained (v0.47.8), Homebrew provides latest (v2.1.46+)
       "orbstack"            # Container management tool with better performance than the Nix version
       "utm"                 # Virtual machine manager for macOS (not available in nixpkgs)
       "hammerspoon"         # Automation tool for macOS, requires system access
