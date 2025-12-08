@@ -119,12 +119,34 @@ install_darwin() {
 
 # Install on Linux
 install_linux() {
+    local config="${1:-}"
+    
     print_step "Installing nix-dotfiles for Linux..."
     
     # Check if this is NixOS or standalone Home Manager
-    if [ -f /etc/nixos/configuration.nix ]; then
+    if [ -f /etc/nixos/configuration.nix ] || [ -f /etc/NIXOS ]; then
         print_step "Detected NixOS, using nixos-rebuild..."
-        sudo nixos-rebuild switch --flake ~/.config/nix-dotfiles#linux-example --show-trace
+        
+        # Determine which configuration to use
+        if [ -z "$config" ]; then
+            print_step "Available NixOS configurations:"
+            echo "  1. farnsworth     - ARM development laptop (default)"
+            echo "  2. farnsworth-x86 - x86_64 variant"
+            echo ""
+            read -p "Enter configuration name (default: farnsworth): " config
+            config="${config:-farnsworth}"
+        fi
+        
+        print_step "Using configuration: $config"
+        
+        # Validate configuration exists
+        if ! nix eval ".#nixosConfigurations.${config}.config.system.nixos.version" &> /dev/null; then
+            print_error "Configuration '${config}' not found in flake!"
+            print_step "Available configurations: farnsworth, farnsworth-x86"
+            exit 1
+        fi
+        
+        sudo nixos-rebuild switch --flake ~/.config/nix-dotfiles#${config} --show-trace
     else
         print_step "Using standalone Home Manager..."
         nix run home-manager -- switch --flake ~/.config/nix-dotfiles#C.Hessel
@@ -136,6 +158,7 @@ install_linux() {
 # Main installation function
 main() {
     local platform="${1:-$(detect_platform)}"
+    local config="${2:-}"
     
     print_step "Detected platform: $platform"
     
@@ -155,7 +178,7 @@ main() {
             install_darwin
             ;;
         linux|nixos)
-            install_linux
+            install_linux "$config"
             ;;
         *)
             print_error "Unknown platform: $platform"
@@ -181,11 +204,22 @@ main() {
 
 # Show usage
 usage() {
-    echo "Usage: $0 [PLATFORM]"
+    echo "Usage: $0 [PLATFORM] [CONFIG]"
     echo ""
     echo "PLATFORM can be:"
     echo "  darwin, macos, osx - for macOS systems"
     echo "  linux, nixos       - for Linux systems"
+    echo ""
+    echo "CONFIG (Linux only):"
+    echo "  farnsworth         - ARM development laptop (default)"
+    echo "  farnsworth-x86     - x86_64 variant"
+    echo ""
+    echo "Examples:"
+    echo "  $0                           # Auto-detect platform"
+    echo "  $0 darwin                    # Install macOS (zoidberg)"
+    echo "  $0 linux                     # Install Linux (interactive selection)"
+    echo "  $0 linux farnsworth          # Install farnsworth (ARM)"
+    echo "  $0 linux farnsworth-x86      # Install farnsworth (x86_64)"
     echo ""
     echo "If no platform is specified, it will be auto-detected."
 }

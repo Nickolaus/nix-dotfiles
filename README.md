@@ -677,7 +677,7 @@ nix flake check
 nix build .#darwinConfigurations.zoidberg.system --dry-run
 
 # Linux  
-nix build .#nixosConfigurations.example-linux.config.system.build.toplevel --dry-run
+nix build .#nixosConfigurations.farnsworth.config.system.build.toplevel --dry-run
 ```
 
 ## 🔧 Troubleshooting

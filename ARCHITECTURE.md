@@ -1,269 +1,316 @@
-# nix-dotfiles Architecture
+# Architecture
 
-This document describes the architecture and organization of this cross-platform Nix configuration.
+This document describes the organization and design principles of this cross-platform Nix configuration.
 
-## 🏗️ Directory Structure
+## Directory Structure
 
 ```
 nix-dotfiles/
-├── flake.nix              # Main flake configuration with outputs
-├── install.sh             # Cross-platform installation script
-├── scripts/               # Utility scripts and tools
-│   ├── update-system.sh   # Comprehensive system update script
-│   └── hot-benchmark.sh   # AI model performance benchmarking tool
-├── 
-├── hosts/                 # System configurations per machine
-│   ├── zoidberg/          # Primary macOS system (nix-darwin)
-│   ├── example-linux/     # Example Linux configuration (NixOS)
-│   └── shared/            # Shared system configurations
-│       ├── determinate.nix # Determinate Systems Nix configuration
-│       └── fonts.nix      # Font configuration
+├── flake.nix                      # Main flake configuration with outputs
+├── install.sh                     # Cross-platform installation script
+├── scripts/                       # Utility scripts and tools
+│   ├── update-system.sh           # System update automation
+│   └── hot-benchmark.sh           # AI model benchmarking
 │
-├── home/                  # Home Manager configurations
-│   ├── default.nix        # Base user configuration (imports ./features)
-│   ├── zoidberg.nix       # User-specific config for zoidberg (platform-specific)
-│   └── features/          # Modular user feature configurations
-│       ├── default.nix    # Imports all feature modules
-│       ├── packages.nix   # Cross-platform packages (categorized)
-│       ├── shell/         # Shell configuration (fish, aliases, etc.)
-│       ├── git/           # Git configuration
-│       ├── secrets/       # SOPS-encrypted secrets
-│       ├── editors/       # Text editors
-│       │   ├── default.nix # Imports ./nvim
-│       │   └── nvim/      # Neovim configuration
-│       ├── terminals/     # Terminal applications
-│       │   ├── default.nix # Imports ./tmux, ./wezterm
-│       │   ├── tmux/      # Terminal multiplexer
-│       │   └── wezterm/   # Terminal emulator
-│       ├── development/   # Development tools
-│       │   ├── default.nix # Imports language modules
-│       │   └── languages/ # Programming language configurations
-│       │       ├── go/    # Go development setup
-│       │       └── php/   # PHP development setup
-│       ├── ai/            # AI & Machine Learning tools
-│       │   ├── default.nix # Imports AI modules
-│       │   └── ollama.nix # Local LLM server configuration
-│       ├── darwin/        # macOS-specific user configurations
-│       │   ├── default.nix # Imports darwin features and packages
-│       │   ├── packages.nix # macOS-specific packages (categorized)
-│       │   └── keybindings/ # Keyboard shortcuts and window management
-│       │       ├── default.nix # Keyboard configuration
-│       │       ├── DefaultKeyBinding.dict # macOS key bindings
-│       │       └── hammerspoon/ # Lua-based automation
-│       └── linux/         # Linux-specific user configurations
-│           ├── default.nix # Imports linux features and packages
-│           └── packages.nix # Linux-specific packages (categorized)
+├── hosts/                         # System configurations per machine
+│   ├── zoidberg/                  # macOS system (nix-darwin)
+│   ├── farnsworth/                # Linux laptop (NixOS)
+│   └── shared/                    # Shared system configurations
+│       ├── determinate.nix        # Nix daemon configuration
+│       └── fonts.nix              # Font configuration
 │
-├── modules/               # System-level modules and configurations
-│   ├── darwin/            # macOS system modules (nix-darwin)
-│   │   ├── aerospace.nix  # Window manager configuration
-│   │   ├── brew.nix       # Homebrew package management
-│   │   └── system.nix     # System-level settings
-│   ├── nixos/             # Linux system modules (NixOS) 
-│   └── shared/            # Cross-platform system modules
+├── home/                          # Home Manager configurations
+│   ├── default.nix                # Base user configuration (imports ./features)
+│   ├── zoidberg.nix               # User-specific config (platform-specific)
+│   └── features/                  # Modular user feature configurations
+│       ├── default.nix            # Imports all feature modules
+│       ├── packages.nix           # Cross-platform packages
+│       ├── shell/                 # Shell configuration
+│       ├── git/                   # Git configuration
+│       ├── secrets/               # SOPS-encrypted secrets
+│       ├── editors/               # Text editors (nvim)
+│       ├── terminals/             # Terminal applications (tmux, wezterm)
+│       ├── development/           # Development tools (go, php)
+│       ├── ai/                    # AI & ML tools (ollama)
+│       ├── darwin/                # macOS-specific user configurations
+│       │   ├── default.nix        # Imports darwin features and packages
+│       │   ├── packages.nix       # macOS-specific packages
+│       │   ├── shell.nix          # macOS shell additions
+│       │   └── keybindings/       # Keyboard shortcuts and automation
+│       └── linux/                 # Linux-specific user configurations
+│           ├── default.nix        # Imports linux features and packages
+│           ├── packages.nix       # Linux-specific packages
+│           └── shell.nix          # Linux shell additions
 │
-├── scripts/               # Utility scripts and development tools
-├── lib/                   # Helper functions and utilities
-├── overlays/              # Package overlays and custom packages
-└── [config files]        # .sops.yaml, .gitignore, etc.
+└── modules/                       # System-level modules
+    └── darwin/                    # macOS system modules (nix-darwin)
+        ├── aerospace/             # Window manager configuration
+        ├── brew/                  # Homebrew package management
+        └── system/                # System-level settings
 ```
 
-## 🎯 Design Principles
+## Design Principles
 
-### 1. **Cross-Platform Support**
-- **Platform Detection**: Configurations automatically adapt based on `pkgs.stdenv.isDarwin`/`isLinux`
-- **Conditional Imports**: Platform-specific modules are only loaded when appropriate
-- **Shared Foundation**: Maximum code reuse through common configurations
+### 1. Cross-Platform Support
 
-### 2. **Scalable Organization**
-- **Two-Layer Rule**: Main configs import only second-layer (e.g., `./features` not `./features/packages.nix`)
-- **Default Entry Points**: Every folder has a `default.nix` that imports its components
-- **Simple vs Complex**: Files for simple configs (packages), folders for complex features (editors)
-- **Categorized Packages**: All packages organized by application categories with future-ready sections
-
-### 3. **Clear Separation of Concerns**
-- **System vs User**: Clear distinction between system-level (`modules/`, `hosts/`) and user-level (`home/`) configurations
-- **Package Placement**: GUI applications in Home Manager (`home/features/`), system tools in `environment.systemPackages`
-- **Host-Specific**: Machine-specific customizations are isolated in `hosts/` and user-specific files
-- **Feature Isolation**: Each feature (editor, shell, etc.) is self-contained
-- **Platform Separation**: OS-specific packages and features clearly separated
-
-## 🔧 Configuration Flow
-
-### System Configuration (nix-darwin/NixOS)
-```
-flake.nix → hosts/zoidberg/default.nix → modules/darwin/*.nix
+**Platform Detection:**
+Configurations adapt based on `pkgs.stdenv.isDarwin` / `pkgs.stdenv.isLinux`:
+```nix
+lib.mkIf pkgs.stdenv.isDarwin {
+  # macOS-specific config
+}
 ```
 
-### User Configuration (Home Manager)
+**Conditional Imports:**
+Platform-specific modules loaded at user level:
+```nix
+# home/zoidberg.nix (macOS user):
+imports = [
+  ./default.nix        # Shared base
+  ./features/darwin    # macOS features
+];
 ```
-hosts/zoidberg/default.nix → home/zoidberg.nix → home/default.nix → home/features/default.nix → individual features
+
+**Shared Foundation:**
+Maximum code reuse through common configurations in `home/features/`.
+
+### 2. Scalable Organization
+
+**Two-Layer Import Rule:**
+Main configs import only second-layer directories:
+```nix
+# Good: home/default.nix imports ./features
+imports = [ ./features ];
+
+# Not: home/default.nix imports ./features/packages.nix
 ```
 
-### Platform-Specific Logic
-- **System Level**: Handled in `hosts/` configurations and `modules/darwin/` vs `modules/nixos/`
-- **User Level**: Platform-specific imports in user files (e.g., `home/zoidberg.nix`)
-- **Packages**: Platform-specific packages in `home/features/darwin/packages.nix` and `home/features/linux/packages.nix`
+**Default Entry Points:**
+Every folder has `default.nix` that imports its components:
+```nix
+# home/features/default.nix
+imports = [
+  ./packages.nix
+  ./shell
+  ./editors
+  # ...
+];
+```
 
-## 📁 Key Configuration Files
+**Simple vs Complex:**
+- Simple configs: Single `.nix` files (e.g., `packages.nix`)
+- Complex features: Folders with `default.nix` (e.g., `editors/`)
 
-### Core Files
-- **`flake.nix`**: Defines inputs, outputs, and system configurations
-- **`home/default.nix`**: Base Home Manager configuration (imports `./features`)
-- **`home/zoidberg.nix`**: User-specific configuration with platform-specific imports
-- **`hosts/shared/determinate.nix`**: Determinate Systems Nix configuration (replaces traditional nix settings)
-- **`hosts/shared/fonts.nix`**: Font configuration shared across systems
+**Categorized Packages:**
+All packages organized by application categories with emoji headers.
 
-### Entry Points (All follow two-layer import rule)
-- **`home/features/default.nix`**: Imports all feature modules
-- **`home/features/editors/default.nix`**: Imports `./nvim`
-- **`home/features/terminals/default.nix`**: Imports `./tmux`, `./wezterm`
-- **`home/features/development/default.nix`**: Imports `./languages/go`, `./languages/php`
-- **`home/features/ai/default.nix`**: Imports `./ollama.nix`
-- **`home/features/darwin/default.nix`**: Imports `./packages.nix`, `./keybindings`
-- **`home/features/linux/default.nix`**: Imports `./packages.nix` (and future features)
+### 3. Clear Separation of Concerns
 
-### Package Files (Organized by Categories)
-- **`home/features/packages.nix`**: Cross-platform packages organized by:
-  - 📦 Development Environment & Package Managers
-  - 🔐 Security & Secrets Management  
-  - 🛠️ System Utilities & CLI Tools
-  - ☁️ Cloud & Infrastructure Tools
-  - 💻 Development Languages & Runtimes
-  - 🔧 Development Tools & Version Control
-  - 🤖 AI & Machine Learning (ollama, opencommit)
-  - And more...
+**System vs User:**
+- System level: `modules/`, `hosts/` - OS configuration, daemons
+- User level: `home/` - User packages, dotfiles
 
-- **`home/features/darwin/packages.nix`**: macOS-specific packages organized by:
-  - 💬 Communication & Collaboration
-  - 🤖 AI & Productivity Tools
-  - 💻 Development Environments & IDEs
-  - Plus prepared sections for design, mobile dev, utilities, etc.
+**Package Placement:**
+- GUI applications: Home Manager (`home/features/*/packages.nix`)
+- System tools: Only `environment.systemPackages` for daemons, core CLI tools
 
-- **`home/features/linux/packages.nix`**: Linux-specific packages organized by:
-  - 🌐 Browsers & Web Tools
-  - 💬 Communication & Collaboration
-  - 💻 Development Environments & IDEs
-  - 🖥️ Desktop Environment & Window Managers
-  - Plus prepared sections for design, productivity, gaming, etc.
+**Host-Specific:**
+Machine-specific customizations isolated in `hosts/` and user-specific files.
 
-## 🚀 Adding New Features
+**Feature Isolation:**
+Each feature (editor, shell, etc.) is self-contained in its own module.
 
-### Adding a New User Feature
-1. Create `home/features/new-feature/default.nix` (if complex) or `home/features/new-feature.nix` (if simple)
+**Platform Separation:**
+OS-specific packages and features clearly separated in `darwin/` and `linux/` directories.
+
+## Configuration Flow
+
+### System Configuration
+```
+flake.nix → hosts/{zoidberg,farnsworth} → modules/{darwin,nixos}
+```
+
+### User Configuration
+```
+hosts/*/default.nix → home/*-user.nix → home/default.nix → home/features/default.nix → individual features
+```
+
+### Platform-Specific Loading
+
+**System Level:**
+Handled in `hosts/` configurations and separate `modules/darwin/` vs `modules/nixos/` directories.
+
+**User Level:**
+Platform-specific imports in user files:
+```nix
+# home/zoidberg.nix (macOS):
+imports = [
+  ./default.nix
+  ./features/darwin    # macOS features only
+];
+
+# Future home/linux-user.nix:
+imports = [
+  ./default.nix
+  ./features/linux     # Linux features only
+];
+```
+
+**Defensive Programming:**
+Even with platform-specific imports, feature modules use `lib.mkIf` for safety:
+```nix
+# home/features/darwin/packages.nix
+lib.mkIf pkgs.stdenv.isDarwin {
+  home.packages = [ /* macOS packages */ ];
+}
+```
+
+## Package Organization
+
+### Cross-Platform (`packages.nix`)
+CLI tools, development runtimes, cloud/infrastructure tools that work identically across platforms:
+- 🛠️ Development Environment
+- 🔒 Security & Encryption
+- ☁️ Cloud & Infrastructure
+- 🔧 Languages & Runtimes
+- 🤖 AI & Machine Learning
+
+### Platform-Specific
+
+**macOS (`darwin/packages.nix`):**
+GUI applications, macOS-specific utilities:
+- 💬 Communication & Collaboration
+- 🤖 AI & Productivity Tools
+- 💻 Development Environments & IDEs
+- 🎨 Design & Creative Tools
+- 🛠️ System Utilities
+
+**Linux (`linux/packages.nix`):**
+Desktop environment tools, Linux-specific applications:
+- 🌐 Browsers & Web Tools
+- 💻 Development Environments & IDEs
+- 🖥️ Desktop Environment & Window Managers
+- 🎮 Games & Entertainment
+
+## Adding Features
+
+### New User Feature
+1. Create module:
+   - Simple: `home/features/feature-name.nix`
+   - Complex: `home/features/feature-name/default.nix`
 2. Add import to `home/features/default.nix`
 3. Implement feature-specific configuration
 
-### Adding Platform-Specific Features
-1. Create feature in `home/features/darwin/` or `home/features/linux/`
+### Platform-Specific Features
+1. Create in `home/features/darwin/` or `home/features/linux/`
 2. Add import to respective platform's `default.nix`
-3. Use `lib.mkIf pkgs.stdenv.isDarwin` for conditional activation if needed
+3. Use `lib.mkIf pkgs.stdenv.isDarwin` if needed (defensive programming)
 
-### Adding Packages
-1. **Cross-platform**: Add to appropriate category in `home/features/packages.nix`
-2. **macOS-specific**: Add to appropriate category in `home/features/darwin/packages.nix`
-3. **Linux-specific**: Add to appropriate category in `home/features/linux/packages.nix`
-4. **New categories**: Follow the established pattern with emoji headers and comment blocks
+### Packages
+1. **Cross-platform**: Add to `home/features/packages.nix`
+2. **macOS-specific**: Add to `home/features/darwin/packages.nix`
+3. **Linux-specific**: Add to `home/features/linux/packages.nix`
+4. **New categories**: Follow pattern with emoji headers
 
-**⚠️ Package Placement Rules:**
-- **GUI Applications**: Always use Home Manager (`home/features/*/packages.nix`)
-- **System Tools**: Only use `environment.systemPackages` for system daemons, core CLI tools
-- **User Tools**: Prefer Home Manager for better user-specific configuration
+**Package Placement Rules:**
+- GUI Applications → Home Manager (`home/features/*/packages.nix`)
+- System Tools → Only use `environment.systemPackages` for system daemons, core CLI tools
+- User Tools → Prefer Home Manager for better user-specific configuration
 
-### Adding System-Level Modules
-1. Create `modules/darwin/new-module.nix` or `modules/nixos/new-module.nix`
+### System-Level Modules
+1. Create `modules/darwin/new-module/` or `modules/nixos/new-module/`
 2. Import in appropriate host configuration (`hosts/*/default.nix`)
 
-### System Update Architecture
+## Secrets Management
 
-This configuration uses a **two-tier update model** with Determinate Systems Nix:
+SOPS (Secrets OPerationS) for encrypted secrets:
 
-#### Update Components
-1. **Determinate Systems Nix**: The underlying Nix installation and daemon
-2. **Flake Configuration**: Your dotfiles and package definitions
-3. **System Configuration**: Applied via nix-darwin (macOS) or NixOS (Linux)
+**Configuration:** `.sops.yaml` defines encryption rules
 
-#### Update Flow
+**Key Locations:**
+- macOS: `~/Library/Application Support/sops/age/keys.txt`
+- Linux: `~/.config/sops/age/keys.txt`
+
+**Usage:**
+```nix
+sops.secrets.api_key = {
+  sopsFile = ./secrets/secrets.yaml;
+  owner = "C.Hessel";
+};
+
+# Reference in config:
+programs.some-app.apiKey = config.sops.secrets.api_key.path;
 ```
-Determinate Systems → Flake Inputs → Configuration Validation → System Application → Health Verification
-```
 
-#### Operational Procedures
-- **Complete procedures**: See [System Updates](../README.md#3-system-updates) in README.md
-- **Automated script**: `./scripts/update-system.sh` handles the full workflow
-- **Manual steps**: Available in README.md for troubleshooting scenarios
+## System Updates
 
-#### Architecture Benefits
-- **Safe Updates**: Health checks before and after operations
-- **Rollback Capability**: Nix generations allow instant rollbacks
-- **Separation of Concerns**: System updates vs. configuration changes are distinct
-- **Platform Agnostic**: Same workflow applies to macOS and Linux
+Two-component update model:
 
-## 🛠️ Utility Scripts
-
-The `scripts/` directory contains development and maintenance tools:
-
-- **`update-system.sh`**: Implements the comprehensive system update workflow (see [System Updates](../README.md#3-system-updates) in README.md)
-- **`hot-benchmark.sh`**: AI model performance benchmarking tool for comparing ollama models with OpenCommit
-
-These scripts are not part of the Nix configuration but provide helpful automation for managing and testing the dotfiles setup. For detailed usage instructions, see the README.md.
-
-## 🔒 Secrets Management
-
-Uses **SOPS** (Secrets OPerationS) for encrypted secrets:
-- **Configuration**: `.sops.yaml` defines encryption rules
-- **Key Location**: 
-  - macOS: `~/Library/Application Support/sops/age/keys.txt`
-  - Linux: `~/.config/sops/age/keys.txt`
-- **Usage**: Secrets are imported via `home/features/secrets/`
-
-## 📦 Package Management Philosophy
-
-### Package Organization Strategy
-- **Cross-Platform First**: Common CLI tools and development dependencies in main `packages.nix`
-- **Platform-Specific GUI**: Desktop applications and OS-specific tools in platform folders
-- **Categorized Organization**: All packages grouped by purpose with clear emoji headers
-- **Future-Ready**: Prepared sections for easy expansion
-
-### Package Categories
-#### Cross-Platform (`packages.nix`)
-Focus on CLI tools, development runtimes, and cloud/infrastructure tools that work identically across platforms.
-
-#### Platform-Specific (`darwin/packages.nix`, `linux/packages.nix`)
-Focus on GUI applications, OS-specific utilities, and platform-optimized versions of cross-platform tools.
-
-## 🧪 Testing & Validation
-
-### Check Configuration
+**1. Nix Installation:**
 ```bash
-nix flake check
-```
-
-### Dry Run Build
-```bash
-nix build .#darwinConfigurations.zoidberg.system --dry-run
-```
-
-### Determinate Systems Management
-```bash
-# Check daemon status
-sudo determinate-nixd status
-
-# Upgrade Nix version
 sudo determinate-nixd upgrade
-
-# Check current version
-determinate-nixd version
-
-# Restart daemon if needed
-sudo launchctl kickstart -k system/org.nixos.nix-daemon
 ```
 
-### Configuration Files
-- **Determinate config**: `hosts/shared/determinate.nix` (your dotfiles)
-- **System config**: `/etc/nix/nix.conf` (managed by Determinate, read-only)
-- **Custom config**: `/etc/nix/nix.custom.conf` (for additional settings)
+**2. Configuration:**
+```bash
+nix flake update
+sudo darwin-rebuild switch --flake . --show-trace  # macOS
+sudo nixos-rebuild switch --flake . --show-trace   # Linux
+```
 
----
+See README.md for complete workflow.
 
-This architecture provides a scalable, maintainable foundation for managing configurations across multiple platforms while keeping complexity manageable through clear organizational principles and consistent categorization. 
+## Validation & Testing
+
+```bash
+# Validate syntax
+nix flake check
+
+# Test build
+nix build .#darwinConfigurations.zoidberg.system --dry-run  # macOS
+
+# Check daemon
+sudo determinate-nixd status
+```
+
+## Platform Support
+
+### macOS (Darwin)
+- **Status:** ✅ Fully implemented and operational
+- **System:** nix-darwin
+- **Host:** `hosts/zoidberg/`
+- **User:** `home/zoidberg.nix` → `home/features/darwin/`
+
+### Linux (NixOS)
+- **Status:** ⚠️ Template provided, ready for activation
+- **System:** NixOS
+- **Host:** `hosts/farnsworth/` (production-ready)
+- **User:** Create `home/linux-user.nix` → `home/features/linux/`
+
+### Standalone Home Manager
+- **Status:** ✅ Configured
+- **Use Case:** Non-NixOS Linux systems
+- **Config:** `homeConfigurations."C.Hessel"` in `flake.nix`
+
+## Configuration Files
+
+**Nix Daemon:**
+- System config: `/etc/nix/nix.conf` (managed by Determinate Systems)
+- Custom settings: `/etc/nix/nix.custom.conf`
+- Dotfiles config: `hosts/shared/determinate.nix`
+
+**Flake:**
+- Main entry: `flake.nix`
+- Lock file: `flake.lock` (auto-generated)
+
+## Best Practices
+
+1. **Follow two-layer import rule**
+2. **Use emoji categories for package organization**
+3. **Keep platform-specific code in platform folders**
+4. **Document complex configurations with comments**
+5. **Use SOPS for sensitive data**
+6. **Prefer Home Manager over system-level when possible**
+7. **Stage files with git before applying Nix configuration**
+
+This architecture provides a scalable, maintainable foundation for managing configurations across multiple platforms.

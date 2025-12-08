@@ -12,61 +12,47 @@ lib.mkIf pkgs.stdenv.isLinux {
     slack
     
     # ═══════════════════════════════════════════════════════════════════════════
+    # 🤖 AI & PRODUCTIVITY TOOLS (mirrored from macOS where available)
+    # ═══════════════════════════════════════════════════════════════════════════
+    # chatgpt - not available on Linux
+    # raycast - macOS only, use rofi/ulauncher as alternative
+    
+    # ═══════════════════════════════════════════════════════════════════════════
     # 💻 DEVELOPMENT ENVIRONMENTS & IDEs
     # ═══════════════════════════════════════════════════════════════════════════
     jetbrains.phpstorm
     code-cursor
+    hoppscotch
+    bruno  # Open-source IDE for exploring and testing APIs
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🖥️ DESKTOP ENVIRONMENT & WINDOW MANAGERS
     # ═══════════════════════════════════════════════════════════════════════════
-    # gnome.gnome-terminal
-    # ulauncher
+    # Hyprland and Waybar configured via modules
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🛠️ SYSTEM UTILITIES (Linux)
     # ═══════════════════════════════════════════════════════════════════════════
-    ksnip # Cross-platform screenshot tool with annotation features (Linux alternative to Lightshot)
-    # VPN & Network Management tools would go here
+    ksnip  # Screenshot tool (Linux alternative to Lightshot)
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🎨 DESIGN & CREATIVE TOOLS
     # ═══════════════════════════════════════════════════════════════════════════
-    # Add design tools (GIMP, Inkscape, Blender, etc.)
+    # Add design tools as needed (GIMP, Inkscape, Blender, etc.)
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 📊 PRODUCTIVITY & OFFICE
     # ═══════════════════════════════════════════════════════════════════════════
-    # Add LibreOffice, note-taking apps, etc.
+    obsidian  # Note-taking (mirrored from macOS)
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🎵 MULTIMEDIA & ENTERTAINMENT
     # ═══════════════════════════════════════════════════════════════════════════
-    # Add media players, audio/video tools, etc.
+    spotify  # Music streaming (mirrored from macOS)
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🔧 DEVELOPMENT TOOLS (Linux-specific builds)
     # ═══════════════════════════════════════════════════════════════════════════
-    mysql80  # Database client (equivalent to Homebrew mysql-client on macOS)
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # 🎮 GAMES & ENTERTAINMENT
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Add Steam, games, entertainment apps
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # 🔒 SECURITY TOOLS (Linux)
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Add Linux-specific security utilities
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # 📱 MOBILE DEVELOPMENT (Linux)
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Add Android development tools, emulators, etc.
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # 🌐 LINUX DISTRIBUTION SPECIFIC
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Add distribution-specific tools (apt alternatives, etc.)
+    mysql80  # Database client
   ];
 } 

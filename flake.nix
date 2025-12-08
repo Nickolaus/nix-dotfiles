@@ -17,6 +17,17 @@
     sops-nix.url = "github:Mic92/sops-nix";
 
     mac-app-util.url = "github:hraban/mac-app-util";
+
+    # Disko for declarative disk management
+    disko = {
+      url = "github:nix-community/disko";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Impermanence for tmpfs root
+    impermanence = {
+      url = "github:nix-community/impermanence";
+    };
   };
 
   outputs =
@@ -26,13 +37,15 @@
     , home-manager
     , devenv
     , sops-nix
+    , disko
+    , impermanence
     , ...
     }:
     let
-      supportedSystems = [ "x86_64-linux" "aarch64-darwin" ];
+      supportedSystems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
       extraArgs = {
-        inherit sops-nix;
+        inherit sops-nix disko impermanence;
         flake = self;
       };
     in
@@ -56,26 +69,52 @@
         };
       };
 
-      # NixOS configurations (for future Linux support)
-      # nixosConfigurations = {
-      #   # Example Linux configuration
-      #   linux-example = nixpkgs.lib.nixosSystem {
-      #     system = "x86_64-linux";
-      #     specialArgs = extraArgs;
-      #     modules = [
-      #       ./hosts/example-linux
-      #       home-manager.nixosModules.default
-      #       {
-      #         home-manager.useGlobalPkgs = true;
-      #         home-manager.useUserPackages = true;
-      #         home-manager.extraSpecialArgs = extraArgs;
-      #         home-manager.users."C.Hessel" = {
-      #           imports = [ ./home ];
-      #         };
-      #       }
-      #     ];
-      #   };
-      # };
+      # NixOS configurations (Linux support)
+      nixosConfigurations = {
+        # Farnsworth - Multi-arch development laptop
+        # Supports both ARM (primary) and x86_64 (secondary)
+        # Build with: nixos-rebuild switch --flake .#farnsworth
+        farnsworth = nixpkgs.lib.nixosSystem {
+          # Default to ARM, but configuration works on both architectures
+          system = "aarch64-linux";  # Change to "x86_64-linux" for x86_64 deployment
+          specialArgs = extraArgs;
+          modules = [
+            ./hosts/farnsworth
+            disko.nixosModules.disko
+            impermanence.nixosModules.impermanence
+            home-manager.nixosModules.default
+            {
+              home-manager.useGlobalPkgs = true;
+              home-manager.useUserPackages = true;
+              home-manager.extraSpecialArgs = extraArgs;
+              home-manager.users."C.Hessel" = {
+                imports = [ ./home/farnsworth.nix ];
+              };
+            }
+          ];
+        };
+
+        # Farnsworth x86_64 variant (explicit)
+        # Build with: nixos-rebuild switch --flake .#farnsworth-x86
+        farnsworth-x86 = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = extraArgs;
+          modules = [
+            ./hosts/farnsworth
+            disko.nixosModules.disko
+            impermanence.nixosModules.impermanence
+            home-manager.nixosModules.default
+            {
+              home-manager.useGlobalPkgs = true;
+              home-manager.useUserPackages = true;
+              home-manager.extraSpecialArgs = extraArgs;
+              home-manager.users."C.Hessel" = {
+                imports = [ ./home/farnsworth.nix ];
+              };
+            }
+          ];
+        };
+      };
 
       # Standalone home-manager configurations
       homeConfigurations = {
