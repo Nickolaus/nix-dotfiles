@@ -128,19 +128,20 @@
       };
 
       # Custom installer ISOs with SSH pre-enabled
-      # Build with: nix build .#isoImages.farnsworth-installer-arm
-      isoImages = {
+      # Build with: nix build .#packages.aarch64-linux.farnsworth-installer
+      # Or: nix build .#packages.x86_64-linux.farnsworth-installer
+      packages = {
         # ARM (aarch64) installer - for Apple Silicon and ARM laptops
-        farnsworth-installer-arm = nixpkgs.lib.nixosSystem {
+        aarch64-linux.farnsworth-installer = (nixpkgs.lib.nixosSystem {
           system = "aarch64-linux";
           modules = [ ./images/installer.nix ];
-        };
+        }).config.system.build.isoImage;
         
         # x86_64 installer - for Intel/AMD systems
-        farnsworth-installer-x86 = nixpkgs.lib.nixosSystem {
+        x86_64-linux.farnsworth-installer = (nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           modules = [ ./images/installer.nix ];
-        };
+        }).config.system.build.isoImage;
       };
     };
 }

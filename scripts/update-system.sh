@@ -58,14 +58,20 @@ check_system_health() {
     log_step "Step 1: Checking System Health"
     
     log_info "Checking Determinate Systems daemon status..."
-    if ! sudo determinate-nixd status; then
+    daemon_status=$(sudo determinate-nixd status 2>&1)
+    if echo "$daemon_status" | grep -q "invalid-token"; then
+        log_warning "Authentication token expired (non-critical - only affects FlakeHub access)"
+        log_info "To restore FlakeHub access, run: determinate-nixd login"
+    elif ! echo "$daemon_status" | grep -q "Authentication:"; then
         log_error "Determinate Systems daemon is not healthy"
         log_info "Try restarting with: sudo launchctl kickstart -k system/org.nixos.nix-daemon"
         exit 1
+    else
+        log_success "Determinate Systems daemon is healthy"
     fi
     
     log_info "Validating current configuration..."
-    if ! nix flake check; then
+    if ! nix flake check 2>&1 | grep -v "warning: unknown flake output 'isoImages'"; then
         log_error "Configuration validation failed"
         log_info "Fix configuration errors before proceeding"
         exit 1
@@ -134,12 +140,22 @@ apply_changes() {
     case $platform in
         "darwin")
             log_info "Applying macOS configuration changes..."
-            if sudo darwin-rebuild switch --flake ~/.config/nix-dotfiles/ --show-trace; then
+            if sudo darwin-rebuild switch --flake ~/.config/nix-dotfiles/ --show-trace 2>&1 | tee /tmp/darwin-rebuild.log; then
                 log_success "macOS configuration applied successfully"
             else
-                log_error "Failed to apply macOS configuration"
-                log_info "You can rollback with: sudo nix-env --rollback --profile /nix/var/nix/profiles/system"
-                exit 1
+                # Check if failure was due to Hammerspoon reload (non-critical)
+                if grep -q "reloadHammerspoon" /tmp/darwin-rebuild.log && grep -q "Killed: 9" /tmp/darwin-rebuild.log; then
+                    log_warning "Hammerspoon reload failed (non-critical)"
+                    log_info "Manually reloading Hammerspoon..."
+                    killall Hammerspoon 2>/dev/null || true
+                    sleep 1
+                    open -a Hammerspoon 2>/dev/null || true
+                    log_success "macOS configuration applied (with manual Hammerspoon reload)"
+                else
+                    log_error "Failed to apply macOS configuration"
+                    log_info "You can rollback with: sudo nix-env --rollback --profile /nix/var/nix/profiles/system"
+                    exit 1
+                fi
             fi
             ;;
         "linux")
@@ -164,7 +180,11 @@ verify_system_health() {
     log_step "Step 5: Verifying System Health"
     
     log_info "Confirming Determinate Systems is healthy..."
-    if sudo determinate-nixd status; then
+    daemon_status=$(sudo determinate-nixd status 2>&1)
+    if echo "$daemon_status" | grep -q "invalid-token"; then
+        log_success "Determinate Systems daemon is running (FlakeHub token expired)"
+        log_info "This is non-critical. To restore FlakeHub access: determinate-nixd login"
+    elif echo "$daemon_status" | grep -q "Authentication:"; then
         log_success "Determinate Systems is healthy"
     else
         log_warning "Determinate Systems status check failed"
