@@ -22,6 +22,7 @@ lib.mkIf pkgs.stdenv.isDarwin {
     jetbrains.phpstorm
     hoppscotch
     bruno # Open-source IDE for exploring and testing APIs
+    insomnia # API client for REST, GraphQL, and gRPC
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🎨 DESIGN & CREATIVE TOOLS
