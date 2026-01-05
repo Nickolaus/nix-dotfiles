@@ -305,7 +305,7 @@
     "tree" = "broot --height 20";               # Interactive directory navigator
     "json" = "jless";                           # Interactive JSON viewer
     "cut" = "choose";                           # Human-friendly cut replacement
-    "dig" = "dog";                              # Modern DNS lookup (dogdns)
+    "dig" = "dog";                              # Modern DNS lookup (doggo)
     "curl" = "httpie --print=HhBb";             # Modern HTTP client
   };
 }
