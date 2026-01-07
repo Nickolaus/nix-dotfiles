@@ -4,7 +4,7 @@ lib.mkIf pkgs.stdenv.isDarwin {
     # ═══════════════════════════════════════════════════════════════════════════
     # 📦 DEVELOPMENT TOOLS (Darwin-specific)
     # ═══════════════════════════════════════════════════════════════════════════
-    flake.inputs.devenv.packages.${system}.devenv  # Pinned version from flake
+    devenv  # Development environment (from nixpkgs)
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 💬 COMMUNICATION & COLLABORATION
