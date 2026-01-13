@@ -3,16 +3,6 @@ lib.mkIf pkgs.stdenv.isDarwin {
   # macOS-specific PhpStorm optimizations and system integration
   # Version-agnostic configuration for Apple Silicon and macOS
   
-  # macOS-specific environment variables
-  home.sessionVariables = {    
-    # PhpStorm-specific optimizations (won't affect system input)
-    "IDEA_CASE_SENSITIVE_FS" = "true";
-    "IDEA_DISABLE_SYSTEM_CRASH_REPORTS" = "true";
-    "IDEA_RETINA" = "true";
-    "IDEA_LOG_PERF_STATS" = "false";
-    "IDEA_LOG_SLOW_OPERATIONS" = "false";
-  };
-  
   # macOS-specific shell aliases
   home.shellAliases = {
     # System integration
@@ -76,110 +66,8 @@ lib.mkIf pkgs.stdenv.isDarwin {
       # Create necessary directories
       mkdir -p "$PHPSTORM_CONFIG_DIR/options"
       
-      # Create macOS-specific configuration files
-      cat > "$PHPSTORM_CONFIG_DIR/options/macos.xml" << 'EOF'
-<application>
-  <component name="MacOSSettings">
-    <!-- Native macOS integration -->
-    <option name="useNativeMenuBar" value="true" />
-    <option name="useNativeFileChooser" value="true" />
-    <option name="useNativeClipboard" value="true" />
-    <option name="useNativeNotifications" value="true" />
-    
-    <!-- Retina display optimizations -->
-    <option name="enableRetinaSupport" value="true" />
-    <option name="useRetinaGlyphs" value="true" />
-    <option name="retinaScaleFactor" value="2.0" />
-    
-    <!-- Touch Bar support (if available) -->
-    <option name="touchBarEnabled" value="false" />
-    <option name="touchBarShowFnKeys" value="true" />
-    
-    <!-- Mission Control integration -->
-    <option name="fullScreenMode" value="false" />
-    <option name="nativeFullScreen" value="false" />
-    
-    <!-- Dock integration -->
-    <option name="showInDock" value="true" />
-    <option name="dockBadgeEnabled" value="false" />
-    
-    <!-- Window management -->
-    <option name="windowTitleBarStyle" value="system" />
-    <option name="transparentTitleBar" value="false" />
-    <option name="unifiedTitleAndToolbar" value="true" />
-  </component>
-  
-  <component name="AppleScriptSettings">
-    <!-- Disable AppleScript for security and performance -->
-    <option name="enableAppleScript" value="false" />
-    <option name="allowAppleScriptExecution" value="false" />
-  </component>
-  
-  <component name="SecuritySettings">
-    <!-- macOS security optimizations -->
-    <option name="allowFileSystemAccess" value="true" />
-    <option name="requestPermissions" value="true" />
-    <option name="sandboxMode" value="false" />
-  </component>
-</application>
-EOF
-      
-      # Create keychain settings
-      cat > "$PHPSTORM_CONFIG_DIR/options/keychain.xml" << 'EOF'
-<application>
-  <component name="KeychainSettings">
-    <!-- Use macOS Keychain for secure credential storage -->
-    <option name="useSystemKeychain" value="true" />
-    <option name="storePasswordsInKeychain" value="true" />
-    <option name="keychainService" value="PhpStorm" />
-    
-    <!-- Git credential integration -->
-    <option name="useKeychainForGit" value="true" />
-    <option name="useKeychainForSvn" value="false" />
-    
-    <!-- Database credential storage -->
-    <option name="useKeychainForDatabase" value="true" />
-    
-    <!-- SSH key management -->
-    <option name="useKeychainForSsh" value="true" />
-    <option name="sshAgentIntegration" value="true" />
-  </component>
-</application>
-EOF
-      
-      # Create file system settings
-      cat > "$PHPSTORM_CONFIG_DIR/options/filesystem.xml" << 'EOF'
-<application>
-  <component name="FileSystemSettings">
-    <!-- APFS optimizations -->
-    <option name="useNativeFileWatcher" value="true" />
-    <option name="fileWatcherScanDepth" value="3" />
-    <option name="enableFileWatcher" value="true" />
-    
-    <!-- Exclude system directories for performance -->
-    <option name="excludeSystemDirectories" value="true" />
-    <option name="excludeHiddenFiles" value="true" />
-    <option name="excludeNodeModules" value="true" />
-    <option name="excludeVendor" value="false" />
-    
-    <!-- File indexing optimizations -->
-    <option name="maxFileSizeForIndexing" value="20480" />
-    <option name="indexOnlyProjectFiles" value="true" />
-    <option name="skipIndexingForLargeFiles" value="true" />
-    
-    <!-- Case sensitivity (APFS is case-sensitive) -->
-    <option name="caseSensitiveFileSystem" value="true" />
-    
-    <!-- Symlink handling -->
-    <option name="followSymlinks" value="true" />
-    <option name="resolveSymlinksInIncludes" value="true" />
-    
-    <!-- Temporary file handling -->
-    <option name="deleteTempFilesOnExit" value="true" />
-    <option name="tempFileLifetime" value="7" />
-  </component>
-</application>
-EOF
+      # Avoid writing IDE XML settings from a script; prefer IDE defaults and UI settings.
+      echo "ℹ️  No IDE XML settings written (prefer built-in defaults)"
       
       # Set up Spotlight indexing
       echo "🔍 Configuring Spotlight indexing..."
