@@ -54,7 +54,7 @@
       darwinConfigurations = {
         zoidberg = nix-darwin.lib.darwinSystem {
           specialArgs = extraArgs // {
-            remapKeys = false;
+            remapKeys = true;
           };
           system = "aarch64-darwin";
           modules = [
@@ -63,7 +63,7 @@
             {
               home-manager.useGlobalPkgs = true;
               home-manager.useUserPackages = true;
-              home-manager.extraSpecialArgs = extraArgs;
+              home-manager.extraSpecialArgs = extraArgs // { remapKeys = true; };
             }
           ];
         };

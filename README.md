@@ -517,33 +517,23 @@ Add to appropriate category:
 
 ### Key Remapping (Per-Keyboard Configuration)
 
-This configuration uses a **hybrid approach**: nix-darwin provides basic Option ↔ Command swap for Windows keyboard compatibility, while System Settings handles per-keyboard customization for optimal workflow.
+This configuration uses **per-keyboard modifier mappings** written by Home Manager. It does not use `userKeyMapping` because that overrides per-device mappings.
 
-#### Automatic Configuration (nix-darwin)
-The configuration automatically swaps Option ↔ Command via `userKeyMapping` to align Windows keyboards with Mac expectations:
-- **Physical Alt key** (Windows) → **Option key** (Mac)
-- **Physical Windows key** → **Command key** (Mac)
+#### Automatic Configuration (Home Manager)
+Per-keyboard modifier mappings are applied in `home/features/darwin/keybindings/default.nix`:
 
-#### Manual System Settings Configuration
-For optimal per-keyboard behavior, configure modifier keys manually:
+- **All Keyboards (default 0-0-0)**:
+  - **Control** → **Command** (Ctrl shortcuts)
+  - **Command** → **Control** (Windows key acts like Ctrl on external keyboards)
+  - **Option** unchanged
+- **Built-in keyboard override**:
+  - **Command** → **Option**
+  - **Option** → **Control**
+  - **Control** → **Command**
 
-**Path:** System Settings > Keyboard > Keyboard Shortcuts > Modifier Keys
-
-##### Internal MacBook Keyboard
-- **Control** → **Command** (⌘) - enables Ctrl+C/V for copy/paste
-- **Command** → **Control** - makes Cmd key useful for terminal
-- **Option** → **Option** (unchanged) - preserves AeroSpace shortcuts (Alt+1, Alt+2, etc.)
-- **Caps Lock** → **Caps Lock** (unchanged)
-
-**Result:** Simple Control ↔ Command swap while preserving AeroSpace workspace shortcuts
-
-##### External Windows Keyboard (CHERRY/Generic)
-- **Control** → **Command** (⌘) - enables Ctrl+C/V for copy/paste  
-- **Option** → **Control** - useful for terminal commands
-- **Command** → **Option** (⌥) - enables AeroSpace shortcuts via Windows key
-- **Caps Lock** → **Caps Lock** (unchanged)
-
-**Result:** Full Windows-to-Mac key mapping with consistent shortcuts across both keyboards
+#### Notes
+- Built-in modifier changes may require **logout/login** to take effect.
+- System Settings can be used to inspect the active modifier keys, but changes should be made in Nix for persistence.
 
 #### Verification
 Test your setup:

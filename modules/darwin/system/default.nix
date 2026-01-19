@@ -18,26 +18,6 @@
   };
   security.pam.services.sudo_local.touchIdAuth = true;
 
-  system.keyboard = {
-    enableKeyMapping = true;
-    swapLeftCommandAndLeftAlt = remapKeys;
-
-    # Windows keyboard layout alignment:
-    # On Windows keyboards: [Ctrl] [Win] [Alt] [Space] [Alt] [Win] [Menu] [Ctrl]
-    # On Mac we want:      [Ctrl] [Cmd] [Opt] [Space] [Opt] [Cmd] [Menu] [Ctrl]
-    # 
-    # This mapping swaps Option ↔ Command so that:
-    # - Physical Windows key acts as Mac Command (⌘) for system shortcuts
-    # - Physical Alt key acts as Mac Option (⌥) for special characters
-    # - Result: Alt+Tab = Option+Tab (app switching), Win+C = Command+C (copy)
-    userKeyMapping = [
-      {
-        HIDKeyboardModifierMappingSrc = 30064771300; # Left Option (Alt key on Windows keyboard)
-        HIDKeyboardModifierMappingDst = 30064771302; # Left Command (becomes ⌘)
-      }
-    ];
-  };
-
   system.defaults = {
     NSGlobalDomain.AppleShowAllExtensions = true;
     NSGlobalDomain.NSWindowShouldDragOnGesture = true;
