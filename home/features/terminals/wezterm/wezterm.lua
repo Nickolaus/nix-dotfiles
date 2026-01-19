@@ -23,8 +23,22 @@ config.keys = {{
       mods = "CTRL"
     }
 }, {
+    key = "p",
+    mods = "OPT",
+    action = action.SendKey {
+      key = "p",
+      mods = "CTRL"
+    }
+}, {
     key = 'n',
     mods = 'CMD',
+    action = action.SendKey {
+        key = 'n',
+        mods = 'CTRL'
+    }
+}, {
+    key = 'n',
+    mods = 'OPT',
     action = action.SendKey {
         key = 'n',
         mods = 'CTRL'
@@ -37,8 +51,22 @@ config.keys = {{
         mods = 'CTRL'
     }
 }, {
+    key = 'u',
+    mods = 'OPT',
+    action = action.SendKey {
+        key = 'u',
+        mods = 'CTRL'
+    }
+}, {
     key = 'l',
     mods = 'CMD',
+    action = action.SendKey {
+        key = 'l',
+        mods = 'CTRL'
+    }
+}, {
+    key = 'l',
+    mods = 'OPT',
     action = action.SendKey {
         key = 'l',
         mods = 'CTRL'
@@ -54,6 +82,13 @@ config.keys = {{
     key = 'C',
     mods = 'CMD',
     action = action.CopyTo 'Clipboard'
+}, {
+    key = 'r',
+    mods = 'OPT',
+    action = action.SendKey {
+        key = 'r',
+        mods = 'CTRL'
+    }
 }, {
     mods = "OPT",
     key = "LeftArrow",
@@ -84,6 +119,13 @@ config.keys = {{
     })
 }, {
     mods = "CMD",
+    key = "Backspace",
+    action = action.SendKey({
+        mods = "CTRL",
+        key = "u"
+    })
+}, {
+    mods = "OPT",
     key = "Backspace",
     action = action.SendKey({
         mods = "CTRL",
