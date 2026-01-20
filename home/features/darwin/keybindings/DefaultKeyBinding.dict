@@ -1,26 +1,34 @@
 {
-    "\UF729" = "moveToBeginningOfParagraph:";                     // Home
-    "\UF72B" = "moveToEndOfParagraph:";                           // End
-    "$\UF729" = "moveToBeginningOfParagraphAndModifySelection:"; // Shift + Home
-    "$\UF72B" = "moveToEndOfParagraphAndModifySelection:";       // Shift + End
+    "\UF729" = "moveToBeginningOfLine:";                          // Home
+    "\UF72B" = "moveToEndOfLine:";                                // End
+    "$\UF729" = "moveToBeginningOfLineAndModifySelection:";      // Shift + Home
+    "$\UF72B" = "moveToEndOfLineAndModifySelection:";            // Shift + End
 
-    "^\UF729" = "moveToBeginningOfDocument:";                    // Ctrl + Home
-    "^\UF72B" = "moveToEndOfDocument:";                          // Ctrl + End
-    "^$\UF729" = "moveToBeginningOfDocumentAndModifySelection:"; // Ctrl + Shift + Home
-    "^$\UF72B" = "moveToEndOfDocumentAndModifySelection:";       // Ctrl + Shift + End
+    "@\UF729" = "moveToBeginningOfDocument:";                    // Ctrl + Home
+    "@\UF72B" = "moveToEndOfDocument:";                          // Ctrl + End
+    "@$\UF729" = "moveToBeginningOfDocumentAndModifySelection:"; // Ctrl + Shift + Home
+    "@$\UF72B" = "moveToEndOfDocumentAndModifySelection:";       // Ctrl + Shift + End
 
-    "^\UF702" = "moveWordLeft:";                                 // Ctrl + Left
-    "^$\UF702" = "moveWordLeftAndModifySelection:";              // Ctrl + Shift + Left
-    "^\UF703" = "moveWordRight:";                                // Ctrl + Right
-    "^$\UF703" = "moveWordRightAndModifySelection:";             // Ctrl + Shift + Right
+    "@\UF702" = "moveWordLeft:";                                 // Ctrl + Left
+    "@$\UF702" = "moveWordLeftAndModifySelection:";              // Ctrl + Shift + Left
+    "@\UF703" = "moveWordRight:";                                // Ctrl + Right
+    "@$\UF703" = "moveWordRightAndModifySelection:";             // Ctrl + Shift + Right
 
-    "~\UF702" = "moveWordLeft:";                                 // Option + Left
-    "~$\UF702" = "moveWordLeftAndModifySelection:";              // Option + Shift + Left
-    "~\UF703" = "moveWordRight:";                                // Option + Right
-    "~$\UF703" = "moveWordRightAndModifySelection:";             // Option + Shift + Right
+    "@\UF700" = "moveParagraphBackward:";                        // Ctrl + Up
+    "@$\UF700" = "moveParagraphBackwardAndModifySelection:";     // Ctrl + Shift + Up
+    "@\UF701" = "moveParagraphForward:";                         // Ctrl + Down
+    "@$\UF701" = "moveParagraphForwardAndModifySelection:";      // Ctrl + Shift + Down
 
-    "@\UF702" = "moveToBeginningOfLine:";                        // Command + Left
-    "@$\UF702" = "moveToBeginningOfLineAndModifySelection:";     // Command + Shift + Left
-    "@\UF703" = "moveToEndOfLine:";                              // Command + Right
-    "@$\UF703" = "moveToEndOfLineAndModifySelection:";           // Command + Shift + Right
+    "@\b" = "deleteWordBackward:";                               // Ctrl + Backspace
+    "@\UF728" = "deleteWordForward:";                            // Ctrl + Delete
+
+    "^@\UF702" = "moveToBeginningOfLine:";                      // Ctrl+Alt + Left (built-in)
+    "^$@\UF702" = "moveToBeginningOfLineAndModifySelection:";    // Ctrl+Alt+Shift + Left (built-in)
+    "^@\UF703" = "moveToEndOfLine:";                            // Ctrl+Alt + Right (built-in)
+    "^$@\UF703" = "moveToEndOfLineAndModifySelection:";          // Ctrl+Alt+Shift + Right (built-in)
+
+    "~@\UF702" = "moveToBeginningOfLine:";                      // Ctrl+Alt + Left (external)
+    "~$@\UF702" = "moveToBeginningOfLineAndModifySelection:";    // Ctrl+Alt+Shift + Left (external)
+    "~@\UF703" = "moveToEndOfLine:";                            // Ctrl+Alt + Right (external)
+    "~$@\UF703" = "moveToEndOfLineAndModifySelection:";          // Ctrl+Alt+Shift + Right (external)
 }

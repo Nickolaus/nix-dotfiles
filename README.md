@@ -553,6 +553,10 @@ cat /etc/shells
 chsh -s /run/current-system/sw/bin/fish  # or your preferred shell
 ```
 
+### Application Configuration
+#### PhpStorm Keymap
+This setup expects the **XWin Keymap** plugin to be installed in PhpStorm (JetBrains Marketplace). The keymap CSV is managed in `home/features/editors/phpstorm/winx_keymap.csv`, but the plugin still needs a one-time manual install.
+
 ### 🖥️ Monitor Management (AeroSpace + Hammerspoon)
 
 This configuration includes intelligent monitor detection and automatic window layout management for external displays.

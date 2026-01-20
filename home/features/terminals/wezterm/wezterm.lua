@@ -16,6 +16,7 @@ config.window_close_confirmation = 'NeverPrompt'
 
 
 config.keys = {{
+    -- Map CMD/OPT to Emacs-style CTRL bindings (history/editing) for both layouts.
     key = "p",
     mods = "CMD",
     action = action.SendKey {
@@ -90,6 +91,7 @@ config.keys = {{
         mods = 'CTRL'
     }
 }, {
+    -- Word-wise navigation in shells/readline.
     mods = "OPT",
     key = "LeftArrow",
     action = action.SendKey({
@@ -104,7 +106,22 @@ config.keys = {{
         key = "f"
     })
 }, {
+    -- Line start/end (Ctrl+A / Ctrl+E) for CMD, plus Ctrl+Alt+Arrow across keyboards.
     mods = "CMD",
+    key = "LeftArrow",
+    action = action.SendKey({
+        mods = "CTRL",
+        key = "a"
+    })
+}, {
+    mods = "CMD|OPT",
+    key = "LeftArrow",
+    action = action.SendKey({
+        mods = "CTRL",
+        key = "a"
+    })
+}, {
+    mods = "CMD|CTRL",
     key = "LeftArrow",
     action = action.SendKey({
         mods = "CTRL",
@@ -118,6 +135,21 @@ config.keys = {{
         key = "e"
     })
 }, {
+    mods = "CMD|OPT",
+    key = "RightArrow",
+    action = action.SendKey({
+        mods = "CTRL",
+        key = "e"
+    })
+}, {
+    mods = "CMD|CTRL",
+    key = "RightArrow",
+    action = action.SendKey({
+        mods = "CTRL",
+        key = "e"
+    })
+}, {
+    -- Backspace/delete to start of line.
     mods = "CMD",
     key = "Backspace",
     action = action.SendKey({

@@ -13,6 +13,13 @@
     "nixos": {
       "command": "uvx",
       "args": ["mcp-nixos"]
+    },
+    "puppeteer": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-puppeteer"
+      ]
     }
   }
 }
