@@ -91,10 +91,21 @@ def main() -> int:
 
     with open(output_path, "w", encoding="utf-8") as out:
         out.write('<keymap version="1" name="WindowsLikeCtrl" parent="Default for XWin">\n')
-        for action_id in sorted(action_shortcuts):
+        action_mouse_shortcuts = {
+            # Ensure Cmd/Ctrl+Click navigation works after modifier remap.
+            "GotoDeclaration": {"meta button1"},
+            "GotoDeclarationOrUsage": {"meta button1"},
+            "GotoTypeDeclaration": {"meta button1"},
+            "GotoImplementation": {"meta button2"},
+            "ShowUsages": {"shift meta button2"},
+        }
+        all_action_ids = sorted(set(action_shortcuts) | set(action_mouse_shortcuts))
+        for action_id in all_action_ids:
             out.write(f'  <action id="{action_id}">\n')
-            for shortcut in sorted(action_shortcuts[action_id]):
+            for shortcut in sorted(action_shortcuts.get(action_id, set())):
                 out.write(f'    <keyboard-shortcut first-keystroke="{shortcut}" />\n')
+            for shortcut in sorted(action_mouse_shortcuts.get(action_id, set())):
+                out.write(f'    <mouse-shortcut keystroke="{shortcut}" />\n')
             out.write("  </action>\n")
         out.write("</keymap>\n")
 
