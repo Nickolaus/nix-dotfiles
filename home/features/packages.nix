@@ -97,6 +97,7 @@
     opencommit              # AI-powered commit message generator
     npm-check-updates       # Find newer versions of package dependencies
     ast-grep                 # Structural code search and rewriting
+    buf                      # Protocol Buffers CLI tool
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🧪 TESTING & QUALITY ASSURANCE
@@ -123,7 +124,7 @@
     # ═══════════════════════════════════════════════════════════════════════════
     # 📊 DATA & ANALYTICS
     # ═══════════════════════════════════════════════════════════════════════════
-    # Add data processing tools here
+    graphviz                 # Graph visualization and diagram generation tool
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🎨 MULTIMEDIA & CONTENT
