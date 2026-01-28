@@ -35,6 +35,14 @@
           '<dict><key>HIDKeyboardModifierMappingSrc</key><integer>30064771300</integer><key>HIDKeyboardModifierMappingDst</key><integer>30064771303</integer></dict>' \
           '<dict><key>HIDKeyboardModifierMappingSrc</key><integer>30064771303</integer><key>HIDKeyboardModifierMappingDst</key><integer>30064771300</integer></dict>'
 
+        # External keyboard (1130:269):
+        # Ctrl -> Command, Command -> Control (Alt unchanged)
+        run /usr/bin/defaults -currentHost write -g com.apple.keyboard.modifiermapping.1130-269-0 -array \
+          '<dict><key>HIDKeyboardModifierMappingSrc</key><integer>30064771296</integer><key>HIDKeyboardModifierMappingDst</key><integer>30064771299</integer></dict>' \
+          '<dict><key>HIDKeyboardModifierMappingSrc</key><integer>30064771299</integer><key>HIDKeyboardModifierMappingDst</key><integer>30064771296</integer></dict>' \
+          '<dict><key>HIDKeyboardModifierMappingSrc</key><integer>30064771300</integer><key>HIDKeyboardModifierMappingDst</key><integer>30064771303</integer></dict>' \
+          '<dict><key>HIDKeyboardModifierMappingSrc</key><integer>30064771303</integer><key>HIDKeyboardModifierMappingDst</key><integer>30064771300</integer></dict>'
+
         # Remove any stale built-in override key.
         run /usr/bin/defaults -currentHost delete -g com.apple.keyboard.modifiermapping.1452-858-0 || true
 
