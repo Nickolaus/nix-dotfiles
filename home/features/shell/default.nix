@@ -297,6 +297,14 @@
     enableFishIntegration = true;
   };
 
+  programs.mise = {
+    enable = true;
+    enableFishIntegration = true;
+    globalConfig.settings = {
+      experimental = true;
+    };
+  };
+
   home.shellAliases = {
     "cat" = "bat -pp";
     "k" = "kubectl";
