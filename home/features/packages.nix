@@ -111,6 +111,7 @@
     # 🏢 ENTERPRISE & IDENTITY TOOLS
     # ═══════════════════════════════════════════════════════════════════════════
     ory
+    acli                      # Atlassian Command Line Interface (Jira, Confluence, etc.)
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🤖 AI & MACHINE LEARNING
