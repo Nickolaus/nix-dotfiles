@@ -10,7 +10,7 @@
 
   home.activation = {
     reloadHammerspoon = lib.hm.dag.entryAfter ["writeBoundary"] ''
-        run  /opt/homebrew/bin/hs -c "hs.reload()"
+        run timeout 5 /opt/homebrew/bin/hs -c "hs.reload()" || true
     '';
   };
 

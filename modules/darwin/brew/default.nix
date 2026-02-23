@@ -50,6 +50,7 @@
       "corelocationcli"     # CLI tool for accessing Core Location services (requires location permissions)
       "boring-notch"        # Dynamic notch enhancement for MacBooks with notch display
       "libreoffice"         # Free office suite (not available in nixpkgs for Darwin)
+      "phpstorm"            # PHP IDE
     ];
   };
 }

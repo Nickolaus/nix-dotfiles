@@ -56,7 +56,7 @@ lib.mkIf pkgs.stdenv.isDarwin {
           run /usr/bin/perl -0pi -e 's|</application>|  <component name="EditorSettings">\n    <option name="IS_CAMEL_WORDS" value="false" />\n  </component>\n</application>|' "$editor_xml"
         fi
       else
-        run /bin/sh -c "/usr/bin/cat > \"$editor_xml\" << 'EOF'
+        run /bin/sh -c "/bin/cat > \"$editor_xml\" << 'EOF'
 <application>
   <component name=\"EditorSettings\">
     <option name=\"IS_CAMEL_WORDS\" value=\"false\" />
