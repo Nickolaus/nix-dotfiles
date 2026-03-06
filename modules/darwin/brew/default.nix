@@ -51,6 +51,7 @@
       "boring-notch"        # Dynamic notch enhancement for MacBooks with notch display
       "libreoffice"         # Free office suite (not available in nixpkgs for Darwin)
       "phpstorm"            # PHP IDE
+      "discord"             # Voice and text chat
     ];
   };
 }

@@ -1,4 +1,4 @@
-{ pkgs, flake, ... }: {
+{ pkgs, lib, flake, ... }: {
 
   home.packages = with pkgs; [
     # ═══════════════════════════════════════════════════════════════════════════
@@ -116,7 +116,7 @@
     # ═══════════════════════════════════════════════════════════════════════════
     # 🤖 AI & MACHINE LEARNING
     # ═══════════════════════════════════════════════════════════════════════════
-    ollama                   # Local LLM server
+    (lib.lowPrio ollama)     # Local LLM server (lowPrio: conflicts with symfony-cli's bin/generator)
     claude-code              # Agentic coding tool that lives in your terminal
     openai                   # OpenAI Python client library with CLI capabilities
     cursor-cli               # Cursor CLI agent for AI-powered code editing
