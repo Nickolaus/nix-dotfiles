@@ -16,7 +16,7 @@
     tldr
     commitizen
     opencommit
-    ast-grep
+    (ast-grep.overrideAttrs (old: { doCheck = false; }))
   ];
 
   programs.direnv = {

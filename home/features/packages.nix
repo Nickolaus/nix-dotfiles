@@ -96,7 +96,7 @@
     commitizen               # Interactive commit message builder
     opencommit              # AI-powered commit message generator
     npm-check-updates       # Find newer versions of package dependencies
-    ast-grep                 # Structural code search and rewriting
+    (ast-grep.overrideAttrs (old: { doCheck = false; }))  # Structural code search and rewriting (tests broken on macOS)
     buf                      # Protocol Buffers CLI tool
     
     # ═══════════════════════════════════════════════════════════════════════════
