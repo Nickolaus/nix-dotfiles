@@ -44,9 +44,15 @@
     let
       supportedSystems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+      # TODO: remove once nixpkgs updates devenv past 2.0.3
+      # Workaround for cachix/devenv#2576: bdwgc thread registration crash on aarch64-darwin
+      devenvOverlay = final: prev: {
+        devenv = devenv.packages.${final.system}.default;
+      };
       extraArgs = {
         inherit sops-nix disko impermanence;
         flake = self;
+        remapKeys = false;
       };
     in
     {
@@ -61,6 +67,7 @@
             ./hosts/zoidberg
             home-manager.darwinModules.default
             {
+              nixpkgs.overlays = [ devenvOverlay ];
               home-manager.useGlobalPkgs = true;
               home-manager.useUserPackages = true;
               home-manager.extraSpecialArgs = extraArgs // { remapKeys = true; };
@@ -84,6 +91,7 @@
             impermanence.nixosModules.impermanence
             home-manager.nixosModules.default
             {
+              nixpkgs.overlays = [ devenvOverlay ];
               home-manager.useGlobalPkgs = true;
               home-manager.useUserPackages = true;
               home-manager.extraSpecialArgs = extraArgs;
@@ -105,6 +113,7 @@
             impermanence.nixosModules.impermanence
             home-manager.nixosModules.default
             {
+              nixpkgs.overlays = [ devenvOverlay ];
               home-manager.useGlobalPkgs = true;
               home-manager.useUserPackages = true;
               home-manager.extraSpecialArgs = extraArgs;
@@ -115,18 +124,6 @@
           ];
         };
       };
-
-      # Standalone home-manager configurations
-      homeConfigurations = {
-        "C.Hessel" = home-manager.lib.homeManagerConfiguration {
-          pkgs = nixpkgs.legacyPackages.aarch64-darwin;
-          extraSpecialArgs = extraArgs;
-          modules = [
-            ./home
-          ];
-        };
-      };
-
       # Custom installer ISOs with SSH pre-enabled
       # Build with: nix build .#packages.aarch64-linux.farnsworth-installer
       # Or: nix build .#packages.x86_64-linux.farnsworth-installer

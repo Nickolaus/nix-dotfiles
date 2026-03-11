@@ -1,7 +1,9 @@
 {
   lib,
+  pkgs,
   ...
-}: {
+}:
+lib.mkIf pkgs.stdenv.isDarwin {
 
   home.file.".hammerspoon" = {
     source = ./config;
