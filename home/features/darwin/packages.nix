@@ -14,7 +14,7 @@ lib.mkIf pkgs.stdenv.isDarwin {
     # ═══════════════════════════════════════════════════════════════════════════
     # 🤖 AI & PRODUCTIVITY TOOLS
     # ═══════════════════════════════════════════════════════════════════════════
-    chatgpt
+    # chatgpt # DMG source URL unreliable, install via Homebrew
     raycast
     # ═══════════════════════════════════════════════════════════════════════════
     # 💻 DEVELOPMENT ENVIRONMENTS & IDEs
