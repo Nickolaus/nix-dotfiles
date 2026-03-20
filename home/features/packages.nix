@@ -68,7 +68,7 @@
     # ═══════════════════════════════════════════════════════════════════════════
     # 💻 DEVELOPMENT LANGUAGES & RUNTIMES
     # ═══════════════════════════════════════════════════════════════════════════
-    nodejs_22
+    nodejs_24
     cargo
     uv
     (python3.withPackages (ps: with ps; [ pyyaml ]))  # Python with pyyaml package

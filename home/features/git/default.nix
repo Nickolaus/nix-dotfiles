@@ -32,7 +32,13 @@
       pull.rebase = true;
       rebase.autoStash = true;
       fetch.prune = true;
+      fetch.writeCommitGraph = true;
       gpg.format = "ssh";
+      feature.manyFiles = true;
+      index.version = 4;
+      core.fsmonitor = true;
+      core.untrackedCache = true;
+      init.templateDir = "~/.config/git/templates";
     };
   };
 
@@ -52,5 +58,16 @@
 
   home.file = {
     ".ssh/allowed_signers".text = "c.hessel@shopware.com namespaces=\"git\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHBw37pfQ1qRRONPampA3kv/2AhcmZxgzdMPcXuRI9Ue";
+
+    ".config/git/templates/hooks/post-checkout" = {
+      executable = true;
+      text = ''
+        #!/bin/sh
+        # Bootstrap commit-graph on first checkout if not yet present
+        if [ ! -f "$(git rev-parse --git-dir)/objects/info/commit-graph" ]; then
+          git commit-graph write --reachable &
+        fi
+      '';
+    };
   };
 }
