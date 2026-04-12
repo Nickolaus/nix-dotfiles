@@ -15,6 +15,7 @@
     };
 
     signing.key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHBw37pfQ1qRRONPampA3kv/2AhcmZxgzdMPcXuRI9Ue";
+    signing.format = "ssh";
     signing.signByDefault = true;
 
     settings = {
@@ -33,7 +34,6 @@
       rebase.autoStash = true;
       fetch.prune = true;
       fetch.writeCommitGraph = true;
-      gpg.format = "ssh";
       feature.manyFiles = true;
       index.version = 4;
       core.fsmonitor = true;

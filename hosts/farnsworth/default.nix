@@ -165,6 +165,7 @@
 
   # Printing support (CUPS)
   services.printing.enable = true;
+  services.gvfs.enable = true; # MTP/GIO integration so Android phones appear in file managers
   services.avahi = {
     enable = true;
     nssmdns4 = true;
@@ -286,4 +287,3 @@
     dev.enable = false; # Development docs (large)
   };
 }
-

@@ -32,6 +32,7 @@
     coreutils
     pigz
     wget
+    sshpass
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🌐 NETWORK & MONITORING TOOLS
@@ -143,4 +144,3 @@
     # Add web-specific tools here
   ];
 }
-

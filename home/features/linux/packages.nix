@@ -44,6 +44,8 @@ lib.mkIf pkgs.stdenv.isLinux {
     # 🛠️ SYSTEM UTILITIES (Linux)
     # ═══════════════════════════════════════════════════════════════════════════
     ksnip  # Screenshot tool (Linux alternative to Lightshot)
+    android-file-transfer  # GUI file transfer for Android devices over MTP
+    jmtpfs  # Manual FUSE mount fallback for Android storage access
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🎨 DESIGN & CREATIVE TOOLS

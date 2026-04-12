@@ -38,6 +38,7 @@
       "cursor"              # AI-powered code editor; Nix package is broken/unmaintained (v0.47.8), Homebrew provides latest (v2.1.46+)
       "orbstack"            # Container management tool with better performance than the Nix version
       "utm"                 # Virtual machine manager for macOS (not available in nixpkgs)
+      "openmtp"             # Android MTP file transfer on macOS; use for phone storage access over USB
       "hammerspoon"         # Automation tool for macOS, requires system access
       "gitify"              # GitHub notifications app for macOS
       "sourcetree"          # Git GUI client, not available in nixpkgs
