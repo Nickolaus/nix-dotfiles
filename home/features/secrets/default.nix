@@ -1,8 +1,13 @@
 { sops
 , config
 , pkgs
+, lib
 , ...
 }: {
+  imports = [
+    ./homelab-gpg-signing.nix
+  ];
+
   sops = {
     age.keyFile = "${
     if pkgs.stdenv.hostPlatform.isDarwin
@@ -38,6 +43,11 @@
 
     secrets.github_token = {
       path = "${config.home.homeDirectory}/.config/nix/github_token";
+      format = "yaml";
+      mode = "0600";
+    };
+
+    secrets.homelab_gpg_signing_subkey = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
       format = "yaml";
       mode = "0600";
     };
