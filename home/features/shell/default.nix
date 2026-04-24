@@ -21,6 +21,9 @@
 
   programs.direnv = {
     enable = true;
+    package = pkgs.direnv.overrideAttrs (_: {
+      doCheck = false;
+    });
     nix-direnv.enable = true;
   };
 
@@ -299,6 +302,9 @@
 
   programs.mise = {
     enable = true;
+    package = pkgs.mise.overrideAttrs (_: {
+      doCheck = false;
+    });
     enableFishIntegration = true;
     globalConfig.settings = {
       experimental = true;
