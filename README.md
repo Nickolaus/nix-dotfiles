@@ -366,7 +366,7 @@ llm-run coding        # Interactive coding shell on the raw 64k coding backend
 llm-smoke coding      # Sanity-check the coding profile through the session proxy
 
 # Local coding agents
-llm-codex-local       # Launch Codex via ~/.codex/config.toml against the session proxy
+llm-codex-local       # Launch Codex via managed defaults against the session proxy
 llm-claude-local      # Launch Claude Code via ~/.claude/settings.json against the session proxy
 ```
 
@@ -415,16 +415,21 @@ oco-claude            # Auto-loads Claude key from encrypted secrets
 - `keep_alive=10m` means 10 minutes after the last completed request, not 10 minutes after startup.
 - Unsent typing in Cursor or Cline does not refresh residency; submitted requests do.
 - `llm-session finish coding` is the intended task-finished path when you want memory back immediately.
-- Codex, Claude Code, and Cursor all derive their user-level config from the shared `aiAgents` defaults.
-- User-level files managed from `aiAgents`:
-  - Codex: `~/.codex/config.toml`
-  - Cursor: `~/.cursor/mcp.json`
+- Codex, Claude Code, and Cursor all derive shared defaults from `aiAgents`.
+- Ownership is tool-specific:
+  - Codex shared defaults: `/etc/codex/managed_config.toml`
+  - Codex user state and trust: `~/.codex/config.toml`
+  - Cursor global MCP config: `~/.cursor/mcp.json`
   - Claude Code settings: `~/.claude/settings.json`
-- Claude Code MCPs are merged into the top-level `mcpServers` section of `~/.claude.json` so Claude runtime state stays intact.
+  - Claude Code global MCPs are merged into the top-level `mcpServers` section of `~/.claude.json`
 - Project-specific MCPs should stay tool-native and local to the project:
   - Codex: `.codex/config.toml`
   - Cursor: `.cursor/mcp.json`
   - Claude Code: `.mcp.json`
+- MCP transport schema in `aiAgents`:
+  - `type = "http"` uses `url` and optional `headers`
+  - `type = "stdio"` uses `command`, optional `args`, and optional `env`
+- GitHub MCP is HTTP, not stdio.
 - For Cline or Cursor local coding, point the provider to `http://127.0.0.1:11436`.
 - Prefer one local coding agent at a time on this machine. The coding endpoint is single-request (`NUM_PARALLEL=1`), so running Cline and Roo together turns waits into queue time very quickly.
 

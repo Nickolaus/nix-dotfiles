@@ -8,8 +8,6 @@ let
     else
       null;
 
-  tomlFormat = pkgs.formats.toml { };
-
   cursorEnvRef = name: "\${env:${name}}";
   enabledMcpServers =
     if aiCfg != null then
@@ -28,22 +26,6 @@ let
 
   renderEnvForInheritedSession = server: server.env;
 
-  renderMcpServerForCodex = _name: server:
-    if server.type == "http" then
-      {
-        url = server.url;
-      } // optionalAttrs (server.headers != { }) {
-        http_headers = server.headers;
-      }
-    else
-      {
-        command = server.command;
-      } // optionalAttrs (server.args != [ ]) {
-        args = server.args;
-      } // optionalAttrs (server.env != { }) {
-        env = server.env;
-      };
-
   renderMcpServerForJson = envRenderer: _name: server:
     if server.type == "http" then
       {
@@ -60,22 +42,6 @@ let
       } // optionalAttrs ((envRenderer server) != { }) {
         env = envRenderer server;
       };
-
-  codexConfig = {
-    model_providers.local_coding_ollama = {
-      name = "Ollama";
-      base_url = aiCfg.localCoding.openaiBaseUrl;
-    };
-
-    profiles.local-coding = {
-      model = aiCfg.localCoding.model;
-      model_provider = "local_coding_ollama";
-    };
-
-    mcp_servers = lib.mapAttrs renderMcpServerForCodex (
-      filterAttrs (_: server: serverEnabledFor "codex" server) enabledMcpServers
-    );
-  };
 
   claudeSettings = {
     model = aiCfg.localCoding.model;
@@ -100,10 +66,7 @@ let
 in
 {
   home.file =
-    lib.optionalAttrs (aiCfg != null && aiCfg.enable && aiCfg.targets.codex.enable) {
-      ".codex/config.toml".source = tomlFormat.generate "codex-config.toml" codexConfig;
-    }
-    // lib.optionalAttrs (aiCfg != null && aiCfg.enable && aiCfg.targets.claude.enable) {
+    lib.optionalAttrs (aiCfg != null && aiCfg.enable && aiCfg.targets.claude.enable) {
       ".claude/settings.json".text = builtins.toJSON claudeSettings;
       ".claude/ai-agents-mcp.json".text = builtins.toJSON claudeMcpSettings;
     }
@@ -132,6 +95,20 @@ in
           ${pkgs.jq}/bin/jq -n --slurpfile generated "$generated_mcp_file" \
             '{ mcpServers: ($generated[0].mcpServers // {}) }' > "$tmp_file"
           mv "$tmp_file" "$claude_state_file"
+        fi
+      '');
+
+  home.activation.restoreCodexUserConfig =
+    lib.mkIf (aiCfg != null && aiCfg.enable && aiCfg.targets.codex.enable)
+      (lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+        codex_dir="${config.home.homeDirectory}/.codex"
+        codex_config="$codex_dir/config.toml"
+        codex_backup="$codex_dir/config.toml.backup"
+
+        mkdir -p "$codex_dir"
+
+        if [ ! -e "$codex_config" ] && [ -f "$codex_backup" ]; then
+          cp "$codex_backup" "$codex_config"
         fi
       '');
 }

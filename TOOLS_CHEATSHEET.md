@@ -326,7 +326,7 @@ llm-smoke general
 llm-smoke coding    # Goes through the session-aware coding proxy
 
 # Local coding agents
-llm-codex-local      # Uses ~/.codex/config.toml via the session proxy
+llm-codex-local      # Uses managed Codex defaults via the session proxy
 llm-claude-local     # Uses ~/.claude/settings.json via the session proxy
 ```
 
@@ -359,15 +359,20 @@ llm-claude-local     # Uses ~/.claude/settings.json via the session proxy
 - Prefer one local coding agent at a time. Cline and Roo share the same single-request coding backend, so running both together mostly creates queueing, not throughput
 
 #### Agent Config Ownership
-- Shared user-level agent defaults come from `aiAgents`
-- Codex user config: `~/.codex/config.toml`
-- Cursor global MCP config: `~/.cursor/mcp.json`
-- Claude Code settings: `~/.claude/settings.json`
+- Shared defaults come from `aiAgents`
+- Codex shared defaults are rendered to `/etc/codex/managed_config.toml`
+- Codex keeps `~/.codex/config.toml` user-owned for trust state and project config layering
+- Cursor global MCP config is managed at `~/.cursor/mcp.json`
+- Claude Code settings are managed at `~/.claude/settings.json`
 - Claude Code global MCPs are merged into the top-level `mcpServers` section of `~/.claude.json`
 - Project-specific MCPs should remain project-local:
   - Codex: `.codex/config.toml`
   - Cursor: `.cursor/mcp.json`
   - Claude Code: `.mcp.json`
+- MCP transport schema:
+  - `type = "http"` uses `url` and optional `headers`
+  - `type = "stdio"` uses `command`, optional `args`, and optional `env`
+- GitHub MCP is HTTP, not stdio
 
 #### Troubleshooting
 ```bash

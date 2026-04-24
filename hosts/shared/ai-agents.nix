@@ -115,10 +115,8 @@ in
           inheritEnv = [ "CONTEXT7_API_KEY" ];
         };
         github = {
-          type = "stdio";
-          command = "${pkgs.nodejs}/bin/npx";
-          args = [ "-y" "@modelcontextprotocol/server-github" ];
-          inheritEnv = [ "GITHUB_PERSONAL_ACCESS_TOKEN" ];
+          type = "http";
+          url = "https://api.githubcopilot.com/mcp/";
         };
         chrome-devtools = {
           type = "stdio";
@@ -185,7 +183,7 @@ in
     };
 
     codex.managed.enable = mkEnableOption "system-managed Codex policy under /etc/codex" // {
-      default = false;
+      default = true;
     };
 
     claude.managedMcp = {
