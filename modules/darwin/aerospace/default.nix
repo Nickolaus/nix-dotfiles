@@ -23,7 +23,7 @@
 
       gaps = {
         outer.bottom = 0;
-        outer.top = 0;    # No gaps by default - SketchyBar config will override if enabled
+        outer.top = 0;
         outer.left = 1;
         outer.right = 1;
         inner.horizontal = 3;
@@ -250,4 +250,3 @@
     };
   };
 }
-

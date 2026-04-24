@@ -302,9 +302,6 @@
 
   programs.mise = {
     enable = true;
-    package = pkgs.mise.overrideAttrs (_: {
-      doCheck = false;
-    });
     enableFishIntegration = true;
     globalConfig.settings = {
       experimental = true;
