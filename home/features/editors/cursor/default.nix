@@ -1,5 +1,6 @@
 { ... }: {
-  home.file."Library/Application Support/Cursor/User/keybindings.json".text = ''
+  home.file = {
+    "Library/Application Support/Cursor/User/keybindings.json".text = ''
     // Minimal overrides for Windows-like navigation on a Cmd-remapped Ctrl.
     [
       // Double Shift for Command Palette (Search Everywhere equivalent).
@@ -145,4 +146,5 @@
       }
     ]
   '';
+  };
 }

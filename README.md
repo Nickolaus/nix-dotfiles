@@ -321,7 +321,7 @@ oco                    # Generate and commit with current provider
 # Preview messages without committing
 oco --dry-run         # See what message would be generated
 
-# Provider Management (Multiple Provider System) - Auto-configures models!
+# Provider management
 oco-local             # Switch to Ollama (local)
 oco-cloud             # Switch to OpenAI (cloud)
 oco-claude            # Switch to Claude (cloud)
@@ -330,6 +330,7 @@ oco-provider status   # Show detailed provider information
 # Health checks and configuration
 oco-check             # Validate setup and service status
 oco-provider          # Full provider management interface
+oco-profile           # Inspect or switch the local commit/general/coding profiles
 
 # Conventional commit types (works with any provider)
 oco-feat              # Generate feat: commit
@@ -337,19 +338,36 @@ oco-fix               # Generate fix: commit
 oco-docs              # Generate docs: commit
 ```
 
-### Ollama - Local LLM Server (Provider 1: Local & Private)
+### Local AI - Declarative Ollama Profiles
 ```bash
-# Check if local AI server is running
-ollama-health         # Service status and available models
-ollama-setup          # Initial setup and model download
+# Service and profile status
+llm-status            # Default backend, coding backend, session proxy, contexts, residency
+llm-models            # Declared profiles, service mapping, endpoints, install status
+llm-doctor            # Reachability, cloud-disable state, session proxy, profile/install checks
+llm-logs              # Tail all local AI logs
+llm-logs coding       # Tail only the coding-endpoint log
+llm-logs session      # Tail only the session-proxy log
 
-# Interactive AI chat
-ollama run [model] "Explain this code:"
-ollama run [model] "Help me debug this function:"
+# Coding-session lifecycle
+llm-session start coding    # Preload qwen3-coder on the coding backend
+llm-session refresh coding  # Extend the current coding idle window
+llm-session status coding   # Show residency, PROCESSOR, CONTEXT, UNTIL
+llm-session finish coding   # Explicitly unload the coding model
 
-# Model management
-ollama list           # Show downloaded models
-ollama pull [model]   # Download model
+# Explicit model installation
+llm-pull commit       # tavernari/git-commit-message:latest
+llm-pull general      # qwen3:8b-q4_K_M
+llm-pull coding       # qwen3-coder:30b-a3b-q4_K_M
+llm-pull all          # Pull all declared profiles
+
+# Interactive and one-shot usage
+llm-run general "Explain this code"
+llm-run coding        # Interactive coding shell on the raw 64k coding backend
+llm-smoke coding      # Sanity-check the coding profile through the session proxy
+
+# Local coding agents
+llm-codex-local       # Launch Codex via ~/.codex/config.toml against the session proxy
+llm-claude-local      # Launch Claude Code via ~/.claude/settings.json against the session proxy
 ```
 
 ### OpenAI & Claude - Cloud Providers (Providers 2 & 3: Premium Quality)
@@ -377,9 +395,38 @@ oco-claude            # Auto-loads Claude key from encrypted secrets
 | **Claude** | ⚡ 7s | 🧠 Advanced | 💰 ~$0.02/commit | ☁️ Cloud API | Complex reasoning, refactoring |
 
 ### Model Selection by Provider
-- **Ollama**: Local models optimized for different tasks (coding, commits, general purpose)
+- **Ollama**: Shared declarative local profiles for commit, general, and coding tasks
 - **OpenAI**: Range from cost-effective to premium models  
 - **Claude**: Fast and advanced reasoning models available
+
+### Local Profile Catalog
+- **`commit`**: `tavernari/git-commit-message:latest` for fast local commit generation
+- **`general`**: `qwen3:8b-q4_K_M` for lightweight local chat and explanations
+- **`coding`**: `qwen3-coder:30b-a3b-q4_K_M` for heavier local coding workflows on the dedicated 64k coding stack
+- **Unsupported locally on this machine**: `qwen3-coder:480b`
+- **Expected disk for declared models**: about `28.6 GB`
+
+### Session-Aware Coding Endpoint
+- **Default backend**: `http://127.0.0.1:11434`
+- **Raw coding backend**: `http://127.0.0.1:11435`
+- **Session-aware coding proxy**: `http://127.0.0.1:11436`
+- The proxy exists so coding-agent traffic refreshes model residency through real requests instead of relying only on a long static timeout.
+- The proxy also defaults Qwen coding traffic to non-thinking mode unless the client explicitly asks for reasoning.
+- `keep_alive=10m` means 10 minutes after the last completed request, not 10 minutes after startup.
+- Unsent typing in Cursor or Cline does not refresh residency; submitted requests do.
+- `llm-session finish coding` is the intended task-finished path when you want memory back immediately.
+- Codex, Claude Code, and Cursor all derive their user-level config from the shared `aiAgents` defaults.
+- User-level files managed from `aiAgents`:
+  - Codex: `~/.codex/config.toml`
+  - Cursor: `~/.cursor/mcp.json`
+  - Claude Code settings: `~/.claude/settings.json`
+- Claude Code MCPs are merged into the top-level `mcpServers` section of `~/.claude.json` so Claude runtime state stays intact.
+- Project-specific MCPs should stay tool-native and local to the project:
+  - Codex: `.codex/config.toml`
+  - Cursor: `.cursor/mcp.json`
+  - Claude Code: `.mcp.json`
+- For Cline or Cursor local coding, point the provider to `http://127.0.0.1:11436`.
+- Prefer one local coding agent at a time on this machine. The coding endpoint is single-request (`NUM_PARALLEL=1`), so running Cline and Roo together turns waits into queue time very quickly.
 
 **🔧 For detailed AI tools usage, see [TOOLS_CHEATSHEET.md](./TOOLS_CHEATSHEET.md#-ai--llm-tools)**
 
@@ -399,7 +446,7 @@ oco-claude            # Auto-loads Claude key from encrypted secrets
 
 The configuration includes comprehensive benchmarking tools for testing different models and providers:
 - Use `scripts/hot-benchmark.sh` for automated performance testing
-- Compare models with `oco-model-switch` for optimal selection
+- Compare local profiles with `llm-models`, `llm-smoke`, `llm-status`, and `oco-profile status`
 - Provider-specific optimization built into each configuration
 
 **📋 For detailed analysis and recommendations, see:** `results/benchmark-results-all.md`
@@ -609,7 +656,7 @@ Configure your MX Master 3S gesture button to trigger workspace and window manag
 | **← Left**  | Send Keys  | `Alt+Shift+P` | Previous workspace |
 | **→ Right** | Send Keys  | `Alt+Shift+N` | Next workspace |
 | **↑ Up**    | Send Keys  | `Cmd+Ctrl+F` | **Toggle Fullscreen** |
-| **↓ Down**  | Send Keys  | `Cmd+Shift+X` | **Flameshot** (macOS) / **ksnip** (Linux) |
+| **↓ Down**  | Send Keys  | `Cmd+Shift+X` | **Shottr** (macOS) / **ksnip** (Linux) |
 | **Click Only** | Send Keys  | `Ctrl+↑` | **Mission Control** (window overview) |
 
 #### 🎯 Why This Setup Works Great

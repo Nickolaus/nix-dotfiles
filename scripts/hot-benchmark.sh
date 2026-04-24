@@ -416,10 +416,20 @@ benchmark_model() {
     
     log "Testing ${PURPLE}$model${NC} on ${BLUE}$test_type${NC} file..." >&2
     
-    # Switch to the model using oco-model
-    if ! oco-model "$(get_model_size_from_name "$model")" >/dev/null 2>&1; then
-        warn "Failed to switch to model $model - using direct OCO_MODEL config" >&2
+    # Switch declared models via oco-profile; unmanaged models fall back to direct OCO_MODEL.
+    local declared_profile
+    declared_profile="$(get_declared_profile_for_model "$model")"
+
+    if [ -n "$declared_profile" ] && ! oco-profile "$declared_profile" >/dev/null 2>&1; then
+        warn "Failed to switch declared profile $declared_profile for model $model - using direct OCO_MODEL config" >&2
         # Fallback: set model directly
+        opencommit config set OCO_MODEL="$model" >/dev/null 2>&1 || {
+            error "Failed to configure model $model" >&2
+            echo "ERROR,ERROR"
+            return 1
+        }
+    elif [ -z "$declared_profile" ]; then
+        warn "Model $model is outside the declarative local AI catalog - using direct OCO_MODEL config" >&2
         opencommit config set OCO_MODEL="$model" >/dev/null 2>&1 || {
             error "Failed to configure model $model" >&2
             echo "ERROR,ERROR"
@@ -491,18 +501,14 @@ benchmark_model() {
     fi
 }
 
-# Map model names to oco-model size codes
-get_model_size_from_name() {
+# Map model names to declared local AI profiles when possible.
+get_declared_profile_for_model() {
     local model="$1"
     case "$model" in
-        "mistral:7b") echo "xs" ;;
-        "llama3.2:latest") echo "s" ;;
-        "tavernari/git-commit-message:latest") echo "m" ;;
-        "gemma3:4b") echo "l" ;;
-        "devstral:24b") echo "xl" ;;
-        "gemma3:12b") echo "xxl" ;;
-        "gemma3:27b") echo "xxxl" ;;
-        *) echo "" ;;  # Unknown model - will fallback to direct config
+        "tavernari/git-commit-message:latest") echo "commit" ;;
+        "qwen3:8b-q4_K_M") echo "general" ;;
+        "qwen3-coder:30b-a3b-q4_K_M") echo "coding" ;;
+        *) echo "" ;;  # Unmanaged model - will fallback to direct config
     esac
 }
 

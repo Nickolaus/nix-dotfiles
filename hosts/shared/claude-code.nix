@@ -1,0 +1,65 @@
+{ config, lib, pkgs, ... }:
+let
+  inherit (lib) filterAttrs mkIf mkMerge optionalAttrs recursiveUpdate;
+in
+{
+  config = mkIf (config.aiAgents.enable && config.aiAgents.targets.claude.enable && config.aiAgents.claude.managed.enable) (
+    let
+      cfg = config.aiAgents;
+
+      enabledMcpServers = filterAttrs (_: server: server.enabled && builtins.elem "claude" server.targets) cfg.mcpServers;
+
+      renderClaudeMcpServer = _name: server:
+        if server.type == "http" then
+          {
+            type = "http";
+            url = server.url;
+          } // optionalAttrs (server.headers != { }) {
+            headers = server.headers;
+          }
+        else
+          {
+            type = "stdio";
+            command = server.command;
+          } // optionalAttrs (server.args != [ ]) {
+            args = server.args;
+          } // optionalAttrs (server.env != { }) {
+            env = server.env;
+          };
+
+      managedSettingsFile = builtins.toFile "claude-code-managed-settings.json" (builtins.toJSON {
+        model = cfg.localCoding.model;
+        env = {
+          ANTHROPIC_BASE_URL = cfg.localCoding.anthropicBaseUrl;
+          ANTHROPIC_AUTH_TOKEN = "ollama";
+          ANTHROPIC_API_KEY = "";
+        };
+      });
+
+      managedMcpFile = builtins.toFile "claude-code-managed-mcp.json" (builtins.toJSON (
+        recursiveUpdate
+          {
+            mcpServers = lib.mapAttrs renderClaudeMcpServer enabledMcpServers;
+          }
+          cfg.claude.managedMcp.settings
+      ));
+    in
+    mkMerge [
+      (mkIf pkgs.stdenv.hostPlatform.isLinux {
+        environment.etc = {
+          "claude-code/managed-settings.json".source = managedSettingsFile;
+        } // optionalAttrs cfg.claude.managedMcp.enable {
+          "claude-code/managed-mcp.json".source = managedMcpFile;
+        };
+      })
+      (mkIf pkgs.stdenv.hostPlatform.isDarwin {
+        system.activationScripts.postActivation.text = ''
+          /bin/mkdir -p "/Library/Application Support/ClaudeCode"
+          /bin/ln -sfn "${managedSettingsFile}" "/Library/Application Support/ClaudeCode/managed-settings.json"
+        '' + lib.optionalString cfg.claude.managedMcp.enable ''
+          /bin/ln -sfn "${managedMcpFile}" "/Library/Application Support/ClaudeCode/managed-mcp.json"
+        '';
+      })
+    ]
+  );
+}

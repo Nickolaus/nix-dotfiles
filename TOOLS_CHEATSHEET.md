@@ -145,7 +145,7 @@ oco --dry-run        # See what message would be generated
 
 #### Provider Management (Core Feature)
 ```bash
-# Switch between providers (automatically sets optimal model!)
+# Switch between providers
 oco-local            # Switch to Ollama → tavernari/git-commit-message:latest
 oco-cloud            # Switch to OpenAI → gpt-4o-mini  
 oco-claude           # Switch to Claude → claude-3-5-haiku-20241022
@@ -159,12 +159,16 @@ oco-provider status  # Detailed provider information and diagnostics
 oco-provider setup   # Interactive API key configuration (OpenAI/Claude)
 ```
 
-#### 🎯 **Automatic Model Selection** (New!)
-When you switch providers, the system automatically configures the optimal model:
-- **No manual model configuration needed**
-- **Each provider gets its best-suited model**
-- **Prevents model compatibility issues**
-- **Seamless switching experience**
+#### Local Profile Selection
+```bash
+# Inspect or switch the local Ollama-backed profiles used by OpenCommit
+oco-profile          # Show current provider/model + commit/general/coding profiles
+oco-profile status
+oco-profile commit   # Reset to the declarative commit profile
+oco-profile general  # Use the lightweight general local profile
+oco-profile coding   # Use the heavier coding local profile
+oco-profile default  # Alias for commit
+```
 
 #### Core OpenCommit Commands
 ```bash
@@ -178,7 +182,7 @@ oco-hook-disable      # Disable git hook integration
 
 # Configuration and diagnostics
 oco-config           # View/edit opencommit settings
-oco-status           # Show current configuration
+oco-config-get       # Show current configuration
 ```
 
 #### Conventional Commit Types (Work with All Providers)
@@ -201,9 +205,10 @@ oco-chore            # chore: commit message
 oco-local                    # Automatically sets model: tavernari/git-commit-message:latest
 
 # Configuration:
-# - API URL: http://127.0.0.1:11434/v1 (local ollama)
+# - API URL: http://127.0.0.1:11434/api/chat (default local endpoint)
 # - Default Model: tavernari/git-commit-message:latest (commit-optimized)
-# - Alternative: llama3.2:latest, gemma3:4b (general purpose)
+# - Shared local profiles: commit / general / coding
+# - Coding profile route: http://127.0.0.1:11436 (raw backend: http://127.0.0.1:11435)
 # - Cost: 100% Free
 # - Privacy: 100% Local (never leaves your machine)
 # - Speed: 2-3 seconds (varies by model size)
@@ -278,77 +283,115 @@ Your opencommit system is pre-optimized with:
 #### Service Management
 ```bash
 # Health and status
-ollama-health        # Check service status and available models
-ollama-status        # Show running models (alias: ollama ps)
-ollama-setup         # Initial setup and model download
+llm-status           # Check default backend, coding backend, session proxy, and residency
+llm-models           # Show declarative local profiles and install state
+llm-doctor           # Check endpoints, session proxy, installs, cloud-disable state, codex/claude presence
+llm-logs             # Tail default, coding, and session-proxy logs
+llm-logs coding      # Tail the coding-endpoint log only
+llm-logs session     # Tail the session-proxy log only
 
-# Model management  
-ollama list          # List downloaded models
-ollama-list          # Alias for ollama list
-ollama pull <model>  # Download a model
-ollama-pull          # Alias for ollama pull
-ollama rm <model>    # Remove a model
-ollama-rm            # Alias for ollama rm
+# Coding session lifecycle
+llm-session start coding    # Preload qwen3-coder and start a warm coding session
+llm-session refresh coding  # Refresh the coding idle timer to 10m
+llm-session status coding   # Show residency, PROCESSOR, CONTEXT, UNTIL
+llm-session finish coding   # Explicitly unload the coding model
+
+# Model management
+llm-pull commit      # Pull tavernari/git-commit-message:latest
+llm-pull general     # Pull qwen3:8b-q4_K_M
+llm-pull coding      # Pull qwen3-coder:30b-a3b-q4_K_M
+llm-pull all         # Pull all declared profiles
 ```
 
-#### Quick Model Setup
+#### Declarative Profiles
 ```bash
-# Essential models for development
-ollama-setup-coding        # Download codellama:7b + llama3.2:3b
-ollama-setup-opencommit    # Download llama3.2:3b (optimized for commits)
-
-# Individual model downloads
-ollama pull qwen2.5-coder:3b  # Best for commit messages (code-specialized)
-ollama pull llama3.2:1b       # Ultra-fast for quick responses
-ollama pull qwen2.5-coder:7b  # Advanced code understanding
-ollama pull llama3.2:8b       # Detailed general responses
+# commit  -> tavernari/git-commit-message:latest via default endpoint (11434)
+# general -> qwen3:8b-q4_K_M via default endpoint (11434)
+# coding  -> qwen3-coder:30b-a3b-q4_K_M via session endpoint (11436), backed by coding endpoint (11435)
+# 480b is intentionally not part of the local profile catalog on this machine
 ```
 
 #### Interactive Usage
 ```bash
-# Start interactive chat with model
-ollama run llama3.2:3b
-ollama run codellama:7b
+# Run a declared profile
+llm-run general
+llm-run coding      # Interactive shell uses the raw coding backend
 
 # One-shot commands
-ollama run llama3.2:3b "Explain this bash command: ls -la"
-ollama run codellama:7b "Write a Python function to reverse a string"
+llm-run general "Explain this bash command: ls -la"
+llm-run coding "Write a Nix module for an Ollama model pin"
+
+# Smoke tests
+llm-smoke general
+llm-smoke coding    # Goes through the session-aware coding proxy
+
+# Local coding agents
+llm-codex-local      # Uses ~/.codex/config.toml via the session proxy
+llm-claude-local     # Uses ~/.claude/settings.json via the session proxy
 ```
 
 #### Service Configuration
 - **Host**: `127.0.0.1` (localhost only for security)
-- **Port**: `11434` (default ollama port)
-- **Acceleration**: CPU-only on macOS for stability
+- **Default Endpoint**: `11434` with `32768` context
+- **Raw Coding Endpoint**: `11435` with `65536` context
+- **Session Proxy Endpoint**: `11436`, forwarding to `11435`
+- **Idle Keep-Alive**: `10m` on both backends
+- **Parallel Requests**: `1`
+- **Max Loaded Models**: `1`
+- **Queue Limit**: `32`
+- **Coding Proxy Defaults**: injects `think=false` for native Ollama chat/generate and `reasoning_effort=none` for OpenAI-compatible chat unless the client overrides it
+- **Cloud Features**: disabled via `OLLAMA_NO_CLOUD=1` and `~/.ollama/server.json`
+- **Acceleration**: Apple Silicon Metal via the standard Ollama runtime; not forced to CPU-only
+- **Coding Flash Attention**: enabled
+- **Coding KV Cache**: `q8_0`
 - **Models**: Stored in `~/.ollama/models/`
-- **Logs**: Available via `launchctl` service logs
+- **Logs**:
+  - default endpoint: `~/.ollama/logs/server.log`
+  - coding endpoint: `~/.local/state/ollama/coding-server.log`
+  - session proxy: `~/.local/state/ollama/session-proxy.log`
+
+#### Session Behavior
+- `keep_alive=10m` means 10 minutes after the last completed request, not after service start
+- Submitted coding-agent requests through `11436` refresh residency automatically
+- Unsent editor typing does not refresh the model
+- The session proxy defaults the coding route to non-thinking mode so Qwen does not spend editor time on hidden reasoning unless a client opts in explicitly
+- Use `llm-session finish coding` when a task is done and you want to release memory immediately
+- Prefer one local coding agent at a time. Cline and Roo share the same single-request coding backend, so running both together mostly creates queueing, not throughput
+
+#### Agent Config Ownership
+- Shared user-level agent defaults come from `aiAgents`
+- Codex user config: `~/.codex/config.toml`
+- Cursor global MCP config: `~/.cursor/mcp.json`
+- Claude Code settings: `~/.claude/settings.json`
+- Claude Code global MCPs are merged into the top-level `mcpServers` section of `~/.claude.json`
+- Project-specific MCPs should remain project-local:
+  - Codex: `.codex/config.toml`
+  - Cursor: `.cursor/mcp.json`
+  - Claude Code: `.mcp.json`
 
 #### Troubleshooting
 ```bash
 # Check service status
-ollama-health
-
-# Restart ollama service
-launchctl restart org.nixos.ollama
+llm-status
+llm-doctor
 
 # View service logs
-launchctl list | grep ollama
-
-# Force reload service
-launchctl unload ~/Library/LaunchAgents/org.nixos.ollama.plist
-launchctl load ~/Library/LaunchAgents/org.nixos.ollama.plist
+llm-logs
+llm-logs coding
+llm-logs session
 
 # Check disk space (models can be large)
 df -h ~/.ollama/
 ```
 
-#### Model Presets (via oco-model)
-| Preset | Model | Use Case | Size |
+#### Local Profile Catalog
+| Profile | Model | Use Case | Size |
 |--------|-------|----------|------|
-| `fast` | llama3.2:1b | Ultra-fast responses | ~1GB |
-| `detailed` | llama3.2:8b | Detailed explanations | ~4.7GB |
-| `coding` | qwen2.5-coder:7b | Advanced code tasks | ~4GB |
-| `commits` | qwen2.5-coder:3b | Optimized for commit messages | ~2GB |
-| `creative` | llama3.2:3b | Creative writing | ~2GB |
+| `commit` | `tavernari/git-commit-message:latest` | Fast local commit messages | ~4.4GB |
+| `general` | `qwen3:8b-q4_K_M` | Lightweight chat and explanations | ~5.2GB |
+| `coding` | `qwen3-coder:30b-a3b-q4_K_M` | Local coding agents and heavier code tasks | ~19GB |
+
+**Total if you install all declared local profiles**: about `28.6 GB`
 
 #### Integration Examples
 ```bash
@@ -356,26 +399,26 @@ df -h ~/.ollama/
 git add .
 oco                  # Uses configured model for commit messages
 
-# Quick model switching for different tasks
-oco-model coding     # Switch to code-optimized model
+# Quick model switching for different local tasks
+oco-profile coding   # Temporarily use the coding profile and coding endpoint
 git add .
 oco                  # Generate commit with coding model
 
-oco-model fast       # Switch back to fast model for regular commits
+oco-profile commit   # Switch back to the default commit profile
 ```
 
 #### Advanced Configuration
 ```bash
 # Custom model setup for specific projects
-echo 'OCO_MODEL="qwen2.5-coder:7b"' > .env    # Project-specific model
+echo 'OCO_MODEL="qwen3-coder:30b-a3b-q4_K_M"' > .env    # Unmanaged ad hoc model override
 
 # Batch commit with different models
-oco-model commits && git add . && oco         # Use commit-optimized model
-oco-model coding && git add . && oco          # Use code-optimized model
+oco-profile commit && git add . && oco        # Use commit-optimized model
+oco-profile coding && git add . && oco        # Use code-optimized model
 
 # Performance monitoring
-time ollama run qwen2.5-coder:3b "test prompt"  # Check response time
-ollama-health                                    # Check service performance
+time llm-run general "test prompt"
+llm-status
 ```
 
 #### Privacy & Security

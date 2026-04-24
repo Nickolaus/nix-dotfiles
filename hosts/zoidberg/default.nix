@@ -6,7 +6,11 @@
 , ...
 }: {
   imports = [
+    ../shared/ai-agents.nix
+    ../shared/ai-agents-derived.nix
+    ../shared/claude-code.nix
     ../shared/determinate.nix
+    ../shared/codex.nix
     ../shared/fonts.nix
     ../../modules/darwin/aerospace
     ../../modules/darwin/brew

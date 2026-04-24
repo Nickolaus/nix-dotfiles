@@ -1,10 +1,136 @@
-{ pkgs, lib, ... }: {
-  
-  # OpenCommit initial configuration (only sets defaults if not already configured)
+{ config, pkgs, lib, ... }:
+let
+  llm = config.localAi;
+  defaultEndpoint = llm.endpoint;
+  codingEndpoint = llm.codingEndpoint;
+  localApiUrl = "${defaultEndpoint}/api/chat";
+  commitModel = llm.profiles.commit.model;
+  generalModel = llm.profiles.general.model;
+  codingModel = llm.profiles.coding.model;
+  commitService = llm.profiles.commit.service;
+  generalService = llm.profiles.general.service;
+  codingService = llm.profiles.coding.service;
+  commonShell = ''
+    set -euo pipefail
+
+    default_endpoint="${defaultEndpoint}"
+    coding_endpoint="${codingEndpoint}"
+    default_chat_endpoint="${defaultEndpoint}/api/chat"
+    coding_chat_endpoint="${codingEndpoint}/api/chat"
+    commit_model="${commitModel}"
+    general_model="${generalModel}"
+    coding_model="${codingModel}"
+    commit_service="${commitService}"
+    general_service="${generalService}"
+    coding_service="${codingService}"
+
+    current_config_value() {
+      opencommit config get "$1" 2>/dev/null | sed -n "s/^.*$1=//p" | tail -1
+    }
+
+    current_provider() {
+      current_config_value OCO_AI_PROVIDER
+    }
+
+    profile_model() {
+      case "$1" in
+        commit) echo "$commit_model" ;;
+        general) echo "$general_model" ;;
+        coding) echo "$coding_model" ;;
+        *)
+          echo "Unknown local AI profile: $1" >&2
+          return 1
+          ;;
+      esac
+    }
+
+    profile_service() {
+      case "$1" in
+        commit) echo "$commit_service" ;;
+        general) echo "$general_service" ;;
+        coding) echo "$coding_service" ;;
+        *)
+          echo "Unknown local AI profile: $1" >&2
+          return 1
+          ;;
+      esac
+    }
+
+    service_endpoint() {
+      case "$1" in
+        default) echo "$default_endpoint" ;;
+        coding) echo "$coding_endpoint" ;;
+        *)
+          echo "Unknown service: $1" >&2
+          return 1
+          ;;
+      esac
+    }
+
+    service_chat_endpoint() {
+      case "$1" in
+        default) echo "$default_chat_endpoint" ;;
+        coding) echo "$coding_chat_endpoint" ;;
+        *)
+          echo "Unknown service: $1" >&2
+          return 1
+          ;;
+      esac
+    }
+
+    endpoint_service() {
+      case "$1" in
+        "$default_endpoint") echo "default" ;;
+        "$coding_endpoint") echo "coding" ;;
+        *) echo "unmanaged" ;;
+      esac
+    }
+
+    current_endpoint() {
+      local api_url
+      api_url="$(current_config_value OCO_API_URL)"
+      if [[ -z "$api_url" ]]; then
+        echo ""
+      else
+        echo "''${api_url%/api/chat}"
+      fi
+    }
+
+    current_local_service() {
+      endpoint_service "$(current_endpoint)"
+    }
+
+    service_ready() {
+      local service="$1"
+      curl -fsS "$(service_endpoint "$service")/api/tags" >/dev/null 2>&1
+    }
+
+    installed_model_for_service() {
+      local service="$1"
+      local model="$2"
+
+      if ! service_ready "$service"; then
+        return 2
+      fi
+
+      curl -fsS "$(service_endpoint "$service")/api/tags" | ${pkgs.jq}/bin/jq -r '.models[]?.name' | grep -Fx -- "$model" >/dev/null
+    }
+
+    profile_for_model() {
+      case "$1" in
+        "$commit_model") echo "commit" ;;
+        "$general_model") echo "general" ;;
+        "$coding_model") echo "coding" ;;
+        *) echo "" ;;
+      esac
+    }
+  '';
+in {
   home.activation.opencommitConfig = lib.hm.dag.entryAfter ["writeBoundary"] ''
-    # Configure OpenCommit for local ollama usage with conventional commits
-    $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_API_URL=http://127.0.0.1:11434/v1
+    $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_AI_PROVIDER=ollama
+    $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_API_URL=${localApiUrl}
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_API_KEY=ollama
+    $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_MODEL=${commitModel}
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_TOKENS_MAX_INPUT=32768
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_TOKENS_MAX_OUTPUT=300
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_DESCRIPTION=false
@@ -13,509 +139,376 @@
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_GITPUSH=false
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_ONE_LINE_COMMIT=true
     $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_PROMPT_MODULE=conventional-commit
-    
-
-    
-    # Only set default model if not already configured
-    if ! ${pkgs.opencommit}/bin/opencommit config get OCO_MODEL >/dev/null 2>&1; then
-      $DRY_RUN_CMD ${pkgs.opencommit}/bin/opencommit config set OCO_MODEL=tavernari/git-commit-message:latest
-    fi
   '';
-  
-  # Environment variables for dynamic model switching
+
   home.sessionVariables = {
-    OCO_DEFAULT_MODEL = "tavernari/git-commit-message:latest";
+    OCO_DEFAULT_MODEL = commitModel;
   };
-  
-  # Simple aliases for opencommit usage
+
   home.shellAliases = {
-    # Main commands - OpenCommit with native conventional commits
     "oco" = "opencommit";
-    
-    # Jira integration
     "oco-jira" = "oco-jira-commit";
     "oco-ticket" = "oco-jira-commit";
-    
-    # Quick commit types (conventional)
     "oco-feat" = "opencommit --context='feat: feature implementation'";
     "oco-fix" = "opencommit --context='fix: bug fix'";
     "oco-docs" = "opencommit --context='docs: documentation update'";
     "oco-refactor" = "opencommit --context='refactor: code refactoring'";
     "oco-test" = "opencommit --context='test: testing changes'";
     "oco-chore" = "opencommit --context='chore: maintenance task'";
-    
-    # Provider management
     "oco-local" = "oco-provider ollama";
     "oco-cloud" = "oco-provider openai";
     "oco-claude" = "oco-provider claude";
     "oco-setup" = "oco-provider setup";
-    
-    # Configuration
     "oco-config" = "opencommit config";
-    "oco-status" = "opencommit config get";
+    "oco-config-get" = "opencommit config get";
+    "oco-status" = "oco-config-get";
+    "oco-model" = "oco-profile";
   };
-  
-  # Essential scripts only
+
   home.packages = with pkgs; [
-    # Enhanced health check with provider awareness
     (writeShellScriptBin "oco-check" ''
       #!/usr/bin/env bash
-      
-      echo "🔍 OpenCommit Health Check"
+      ${commonShell}
+
+      provider="$(current_provider)"
+      model="$(current_config_value OCO_MODEL)"
+      api_url="$(current_config_value OCO_API_URL)"
+      current_endpoint_value="$(current_endpoint)"
+      current_service="$(current_local_service)"
+      declared_profile="$(profile_for_model "$model")"
+
+      echo "OpenCommit health check"
       echo ""
-      
-      # Check current provider
-      current_url=$(opencommit config get OCO_API_URL 2>/dev/null | grep "OCO_API_URL=" | cut -d'=' -f2 || echo "not set")
-      current_model=$(opencommit config get OCO_MODEL 2>/dev/null | grep "OCO_MODEL=" | cut -d'=' -f2 || echo "not set")
-      
-      if [[ "$current_url" == *"11434"* ]]; then
-        echo "📍 Provider: Ollama (Local)"
-        echo "🤖 Model: $current_model"
-        echo ""
-        
-        # Check ollama service
-        if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-          echo "✅ Ollama: Running"
-          
-          # Check if current model exists
-          if curl -s http://127.0.0.1:11434/api/tags | ${jq}/bin/jq -r '.models[]?.name' | grep -q "^$current_model$"; then
-            echo "✅ Model: $current_model available"
-          else
-            echo "⚠️  Model: $current_model not found"
-            echo "💡 Run: ollama pull $current_model"
-          fi
-        else
-          echo "❌ Ollama: Not running"
-          echo "💡 Run: launchctl start org.nixos.ollama"
-        fi
-      elif [[ "$current_url" == *"openai"* ]]; then
-        echo "📍 Provider: OpenAI (Cloud)"
-        echo "🤖 Model: $current_model"
-        echo ""
-        
-        # Check API key
-        api_key=$(opencommit config get OCO_API_KEY 2>/dev/null | grep "OCO_API_KEY=" | cut -d'=' -f2)
-        if [[ -n "$api_key" && "$api_key" != "undefined" ]]; then
-          echo "✅ OpenAI: API key configured"
-          echo "🔑 Key: ''${api_key:0:8}...''${api_key: -4}"
-          echo "💰 Usage: Charged to your OpenAI account"
-        else
-          echo "❌ OpenAI: API key not configured"
-          echo "💡 Run: oco-provider setup"
-        fi
-      elif [[ "$current_url" == *"anthropic"* ]]; then
-        echo "📍 Provider: Claude (Anthropic)"
-        echo "🤖 Model: $current_model"
-        echo ""
-        
-        # Check API key
-        api_key=$(opencommit config get OCO_API_KEY 2>/dev/null | grep "OCO_API_KEY=" | cut -d'=' -f2)
-        if [[ -n "$api_key" && "$api_key" != "undefined" ]]; then
-          echo "✅ Claude: API key configured"
-          echo "🔑 Key: ''${api_key:0:8}...''${api_key: -4}"
-          echo "💰 Usage: Charged to your Anthropic account"
-        else
-          echo "❌ Claude: API key not configured"
-          echo "💡 Run: oco-provider setup"
-        fi
-      else
-        echo "📍 Provider: Unknown ($current_url)"
-        echo "💡 Run: oco-provider to configure"
+      echo "Provider: ''${provider:-unknown}"
+      echo "Model: ''${model:-unset}"
+      echo "API URL: ''${api_url:-unset}"
+      if [[ -n "$current_endpoint_value" ]]; then
+        echo "Endpoint: $current_endpoint_value"
       fi
-      
       echo ""
-      echo "🔧 Provider Management:"
-      echo "   oco-local    - Switch to Ollama"
-      echo "   oco-cloud    - Switch to OpenAI"
-      echo "   oco-claude   - Switch to Claude"
-      echo "   oco-provider - Full provider management"
-      
-      echo ""
-      # Check git repo
-      if git rev-parse --git-dir >/dev/null 2>&1; then
-        echo "✅ Git: Repository detected"
-        if git diff --cached --quiet; then
-          echo "ℹ️  Staged: No changes (run 'git add .' first)"
-        else
-          echo "✅ Staged: Ready for commit"
-        fi
-      else
-        echo "ℹ️  Git: Not in repository"
-      fi
-    '')
-    
-    # Enhanced model switcher with persistence - Updated for Qwen3
-    (writeShellScriptBin "oco-model" ''
-      #!/usr/bin/env bash
-      
-      declare -A models=(
-        # Model sizes from smallest/fastest to largest/slowest
-        ["xs"]="mistral:7b"                                     # 1.31s - Extra small, fastest
-        ["s"]="llama3.2:latest"                                 # 1.91s - Small, fast
-        ["m"]="tavernari/git-commit-message:latest"             # 1.96s - Medium, specialized (DEFAULT)
-        ["l"]="gemma3:4b"                                       # 4.47s - Large, balanced
-        ["xl"]="devstral:24b"                                   # 5.04s - Extra large, code-focused
-        ["xxl"]="gemma3:12b"                                    # 10.26s - Extra extra large, detailed
-        ["xxxl"]="gemma3:27b"                                   # 17.29s - Maximum size, comprehensive
-      )
-      
-      if [ $# -eq 0 ]; then
-        current=$(opencommit config get OCO_MODEL 2>/dev/null | grep "OCO_MODEL=" | cut -d'=' -f2 || echo "''${OCO_DEFAULT_MODEL:-not set}")
-        echo "🤖 Current model: $current"
-        echo "🏠 Default model: ''${OCO_DEFAULT_MODEL:-tavernari/git-commit-message:latest}"
+
+      if [[ "$provider" == "ollama" ]] || [[ "$api_url" == "$default_chat_endpoint" ]] || [[ "$api_url" == "$coding_chat_endpoint" ]]; then
+        echo "Declared local AI profiles"
+        for profile in commit general coding; do
+          service="$(profile_service "$profile")"
+          echo "  $profile -> $(profile_model "$profile") via $service at $(service_endpoint "$service")"
+        done
         echo ""
-        echo "Available model sizes (benchmark results):"
-        echo ""
-        echo "⚡ Fast Models (< 2s):"
-        echo "  xs: mistral:7b (1.31s) - Extra small, fastest"
-        echo "  s: llama3.2:latest (1.91s) - Small, fast"
-        echo "  m: tavernari/git-commit-message:latest (1.96s) - Medium, specialized ⭐ DEFAULT"
-        echo ""
-        echo "✅ Medium Models (2-6s):"
-        echo "  l: gemma3:4b (4.47s) - Large, balanced"
-        echo "  xl: devstral:24b (5.04s) - Extra large, code-focused"
-        echo ""
-        echo "🐌 Large Models (>10s) - High capability, slow response:"
-        echo "  xxl: gemma3:12b (10.26s) - Extra extra large, detailed"
-        echo "  xxxl: gemma3:27b (17.29s) - Maximum size, comprehensive"
-        echo ""
-        echo "Usage:"
-        echo "  oco-model <size>    - Switch to model size (xs/s/m/l/xl/xxl/xxxl)"
-        echo "  oco-model default   - Switch to default model (alias for 'm')"
-        echo "  oco-model reset     - Reset to default model"
-        echo "  oco-model status    - Show current configuration"
-        exit 0
-      fi
-      
-      case "$1" in
-        "reset")
-          default_model="''${OCO_DEFAULT_MODEL:-tavernari/git-commit-message:latest}"
-          echo "🔄 Resetting to default model: $default_model"
-          opencommit config set OCO_MODEL="$default_model"
-          echo "✅ Reset to default model"
-          ;;
-        "status")
-          current=$(opencommit config get OCO_MODEL 2>/dev/null | grep "OCO_MODEL=" | cut -d'=' -f2 || echo "not set")
-          echo "🤖 Current model: $current"
-          echo "🏠 Default model: ''${OCO_DEFAULT_MODEL:-tavernari/git-commit-message:latest}"
-          
-          # Check if model is available
-          if curl -s http://127.0.0.1:11434/api/tags | ${jq}/bin/jq -r '.models[]?.name' | grep -q "^$current$"; then
-            echo "✅ Model status: Available"
-          else
-            echo "⚠️  Model status: Not downloaded"
-            echo "💡 Run: ollama pull $current"
-          fi
-          ;;
-        *)
-          preset="$1"
-          
-          # Handle aliases
-          case "$preset" in
-            "default")
-              preset="m"
-              ;;
-          esac
-          
-          if [[ -n "''${models[$preset]}" ]]; then
-            model="''${models[$preset]}"
-            echo "🔄 Switching to $preset model: $model"
-            
-            # Pull model if needed
-            if ! curl -s http://127.0.0.1:11434/api/tags | ${jq}/bin/jq -r '.models[]?.name' | grep -q "^$model$"; then
-              echo "📦 Downloading model..."
-              ollama pull "$model" || {
-                echo "❌ Failed to download model"
-                exit 1
-              }
-            fi
-            
-            # Update config
-            opencommit config set OCO_MODEL="$model"
-            echo "✅ Model switched to: $model"
-            echo "💡 This setting persists across system rebuilds"
-          else
-            echo "❌ Unknown preset: $preset"
-            echo "Available sizes: xs s m l xl xxl xxxl"
-            echo "Aliases: default (→ m)"
-            echo "Commands: reset status"
-          fi
-          ;;
-      esac
-    '')
-    
-    # Provider switching (Ollama ↔ OpenAI)
-    (writeShellScriptBin "oco-provider" ''
-      #!/usr/bin/env bash
-      
-      if [ $# -eq 0 ]; then
-        current_url=$(opencommit config get OCO_API_URL 2>/dev/null | grep "OCO_API_URL=" | cut -d'=' -f2 || echo "not set")
-        current_key=$(opencommit config get OCO_API_KEY 2>/dev/null | grep "OCO_API_KEY=" | cut -d'=' -f2 || echo "not set")
-        
-        echo "🔗 OpenCommit Provider Management"
-        echo ""
-        
-        if [[ "$current_url" == *"11434"* ]]; then
-          echo "📍 Current provider: Ollama (Local)"
-          echo "🔗 API URL: $current_url"
-          echo "🔑 API Key: $current_key"
-          
-          # Check ollama status
-          if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-            echo "✅ Status: Ollama running"
-          else
-            echo "❌ Status: Ollama not running"
-          fi
-        elif [[ "$current_url" == *"openai"* ]] || [[ "$current_url" == *"api.openai.com"* ]]; then
-          echo "📍 Current provider: OpenAI (Cloud)"
-          echo "🔗 API URL: $current_url"
-          echo "🔑 API Key: ''${current_key:0:8}...''${current_key: -4} (masked)"
-          echo "✅ Status: Ready (API key configured)"
-        else
-          echo "📍 Current provider: Unknown"
-          echo "🔗 API URL: $current_url"
-        fi
-        
-        echo ""
-        echo "Available commands:"
-        echo "  oco-provider ollama   - Switch to local Ollama"
-        echo "  oco-provider openai   - Switch to OpenAI"
-        echo "  oco-provider claude   - Switch to Claude (Anthropic)"
-        echo "  oco-provider status   - Show detailed status"
-        echo "  oco-provider setup    - Setup OpenAI API key"
-        exit 0
-      fi
-      
-      case "$1" in
-        "ollama")
-          echo "🔄 Switching to Ollama provider..."
-          opencommit config set OCO_API_URL="http://127.0.0.1:11434/v1"
-          opencommit config set OCO_API_KEY="ollama"
-          opencommit config set OCO_MODEL="tavernari/git-commit-message:latest"  # Default to commit-optimized model
-          
-          # Check if ollama is running
-          if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-            echo "✅ Switched to Ollama (local models)"
-            echo "💡 Default model: tavernari/git-commit-message:latest (commit-optimized)"
-            echo "💡 Alternative models: llama3.2:latest, gemma3:4b"
-          else
-            echo "⚠️  Switched to Ollama, but service not running"
-            echo "💡 Start with: launchctl start org.nixos.ollama"
-          fi
-          ;;
-                 "openai")
-           echo "🔄 Switching to OpenAI provider..."
-           
-           # Check if API key is set (either from config or secrets)
-           api_key=$(opencommit config get OCO_OPENAI_API_KEY 2>/dev/null | grep "OCO_OPENAI_API_KEY=" | cut -d'=' -f2)
-           
-           # If not in config, try to load from secrets
-           if [[ -z "$api_key" || "$api_key" == "undefined" ]]; then
-             if [[ -f "$HOME/.config/opencommit/openai_api_key" ]]; then
-               secret_key=$(cat "$HOME/.config/opencommit/openai_api_key" 2>/dev/null | tr -d '\n')
-               if [[ -n "$secret_key" && "$secret_key" == sk-* ]]; then
-                 opencommit config set OCO_OPENAI_API_KEY="$secret_key"
-                 api_key="$secret_key"
-                 echo "✅ Loaded OpenAI API key from secrets"
-               fi
-             fi
-           fi
-           
-           # Final check
-           if [[ -z "$api_key" || "$api_key" == "undefined" ]]; then
-             echo "❌ OpenAI API key not configured"
-             echo "💡 Add to secrets: sops home/features/secrets/secrets.yaml"
-             echo "💡 Or run setup: oco-provider setup"
-             echo "💡 Or set manually: opencommit config set OCO_OPENAI_API_KEY=your_key_here"
-             exit 1
-           fi
-          
-          opencommit config set OCO_API_URL="https://api.openai.com/v1"
-          opencommit config set OCO_API_KEY="$api_key"
-          opencommit config set OCO_MODEL="gpt-4o-mini"  # Default to cost-effective model
-          
-          echo "✅ Switched to OpenAI"
-          echo "💡 Default model: gpt-4o-mini (cost-effective)"
-          echo "💡 Upgrade model: opencommit config set OCO_MODEL=gpt-4o"
-          ;;
-        "claude")
-          echo "🔄 Switching to Claude provider..."
-          
-          # Check if Claude API key is available in secrets
-          claude_key=""
-          if [[ -f "$HOME/.config/opencommit/claude_api_key" ]]; then
-            claude_key=$(cat "$HOME/.config/opencommit/claude_api_key" 2>/dev/null | tr -d '\n')
-            if [[ -n "$claude_key" && "$claude_key" == sk-ant-* ]]; then
-              echo "✅ Loaded Claude API key from secrets"
-            else
-              claude_key=""
-            fi
-          fi
-          
-          # Final check
-          if [[ -z "$claude_key" ]]; then
-            echo "❌ Claude API key not configured"
-            echo "💡 Add to secrets: sops home/features/secrets/secrets.yaml"
-            echo "💡 Key format: sk-ant-..."
-            echo "💡 Get key from: https://console.anthropic.com/"
-            exit 1
-          fi
-          
-          opencommit config set OCO_API_URL="https://api.anthropic.com/v1"
-          opencommit config set OCO_API_KEY="$claude_key"
-          opencommit config set OCO_MODEL="claude-3-5-haiku-20241022"  # Default to cost-effective model
-          
-          echo "✅ Switched to Claude"
-          echo "💡 Default model: claude-3-5-haiku-20241022 (cost-effective)"
-          echo "💡 Upgrade model: opencommit config set OCO_MODEL=claude-3-5-sonnet-20241022"
-          ;;
-        "status")
-          echo "🔍 Detailed Provider Status"
-          echo ""
-          
-          # Current configuration
-          url=$(opencommit config get OCO_API_URL 2>/dev/null | cut -d'=' -f2)
-          key=$(opencommit config get OCO_API_KEY 2>/dev/null | cut -d'=' -f2)
-          model=$(opencommit config get OCO_MODEL 2>/dev/null | cut -d'=' -f2)
-          
-          echo "📋 Current Configuration:"
-          echo "   URL: $url"
-          echo "   Model: $model"
-          
-          if [[ "$url" == *"11434"* ]]; then
-            echo "   Provider: Ollama"
-            echo ""
-            echo "🏠 Ollama Status:"
-            if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-              echo "   ✅ Service running"
-              echo "   📦 Available models:"
-              curl -s http://127.0.0.1:11434/api/tags | ${jq}/bin/jq -r '.models[]?.name' | sed 's/^/      /'
-            else
-              echo "   ❌ Service not running"
-            fi
-          elif [[ "$url" == *"openai"* ]]; then
-            echo "   Provider: OpenAI"
-            echo "   Key: ''${key:0:8}...''${key: -4}"
-            echo ""
-            echo "☁️  OpenAI Status:"
-            echo "   ✅ Ready for API calls"
-            echo "   💰 Usage charged to your OpenAI account"
-          elif [[ "$url" == *"anthropic"* ]]; then
-            echo "   Provider: Claude (Anthropic)"
-            echo "   Key: ''${key:0:8}...''${key: -4}"
-            echo ""
-            echo "🧠 Claude Status:"
-            echo "   ✅ Ready for API calls"
-            echo "   💰 Usage charged to your Anthropic account"
-          else
-            echo "   Provider: Unknown"
-            echo "   URL: $url"
-          fi
-          ;;
-        "setup")
-          echo "🔧 OpenAI API Key Setup"
-          echo ""
-          echo "To get your OpenAI API key:"
-          echo "1. Visit: https://platform.openai.com/account/api-keys"
-          echo "2. Create a new secret key"
-          echo "3. Copy the key (starts with sk-...)"
-          echo ""
-          read -p "🔑 Enter your OpenAI API key: " -r api_key
-          
-          if [[ -n "$api_key" && "$api_key" == sk-* ]]; then
-            opencommit config set OCO_OPENAI_API_KEY="$api_key"
-            echo "✅ OpenAI API key configured!"
-            echo "💡 Switch to OpenAI: oco-provider openai"
-          else
-            echo "❌ Invalid API key format (should start with sk-)"
-            echo "💡 Try again: oco-provider setup"
-          fi
-          ;;
-        *)
-          echo "❌ Unknown command: $1"
-          echo "💡 Run: oco-provider (without arguments for help)"
-          ;;
-      esac
-    '')
-    
-    # Jira integration - Simple context-based approach
-    (writeShellScriptBin "oco-jira-commit" ''
-      #!/usr/bin/env bash
-      
-      echo "🎫 OpenCommit with Jira Integration"
-      echo ""
-      
-      # Get current branch
-      branch=$(git rev-parse --abbrev-ref HEAD)
-      echo "📋 Current branch: $branch"
-      
-      # Extract Jira ticket from branch name (flexible patterns)
-      # Supports: task/ABC-1234, feature/PROJ-123-description, PROJ-123-description, etc.
-      jira_ticket=$(echo "$branch" | grep -oE '[A-Z]+-[0-9]+' | head -1)
-      
-      if [[ -n "$jira_ticket" ]]; then
-        echo "🎫 Found ticket: $jira_ticket"
-        echo "🤖 Running OpenCommit with Jira context..."
-        echo ""
-        
-        # Quick pre-check
-        if ! curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-          echo "❌ Ollama not running"
-          echo "💡 Start with: launchctl start org.nixos.ollama"
+
+        if [[ "$current_service" == "unmanaged" ]]; then
+          echo "Current endpoint is unmanaged by the declarative local AI catalog."
+          echo "Next step: oco-profile commit"
           exit 1
         fi
-        
-        # Use OpenCommit's command-line template feature directly
-        echo "🤖 Running OpenCommit with Jira template..."
-        
-        # Use the documented command-line template syntax: oco 'PROJ-123 - $msg'
-        opencommit "$jira_ticket - \$msg"
+
+        if service_ready "$current_service"; then
+          echo "Ollama: reachable on $current_service"
+          if [[ -n "$declared_profile" ]] && installed_model_for_service "$(profile_service "$declared_profile")" "$model"; then
+            echo "Model availability: installed"
+          elif [[ -n "$declared_profile" ]]; then
+            echo "Model availability: missing"
+            echo "Next step: llm-pull $declared_profile"
+          elif [[ -n "$model" ]] && installed_model_for_service "$current_service" "$model"; then
+            echo "Model availability: installed (unmanaged model)"
+          elif [[ -n "$model" ]]; then
+            echo "Model availability: missing (unmanaged model)"
+            echo "Next step: ollama pull $model"
+          fi
+        else
+          echo "Ollama: unavailable on $current_service"
+          echo "Next steps:"
+          echo "  1. Check the local AI service: llm-status"
+          echo "  2. Inspect logs: llm-logs $current_service"
+          exit 1
+        fi
+      elif [[ "$provider" == "openai" ]]; then
+        api_key="$(current_config_value OCO_API_KEY)"
+        if [[ -n "$api_key" && "$api_key" != "undefined" ]]; then
+          echo "OpenAI key: configured"
+        else
+          echo "OpenAI key: missing"
+          echo "Next step: oco-provider setup"
+          exit 1
+        fi
+      elif [[ "$provider" == "claude" ]] || [[ "$api_url" == *"anthropic"* ]]; then
+        api_key="$(current_config_value OCO_API_KEY)"
+        if [[ -n "$api_key" && "$api_key" != "undefined" ]]; then
+          echo "Claude key: configured"
+        else
+          echo "Claude key: missing"
+          echo "Next step: add claude_api_key to secrets and rerun oco-claude"
+          exit 1
+        fi
       else
-        echo "❌ No Jira ticket in branch: $branch"
-        echo ""
-        echo "💡 Supported formats:"
-        echo "   • task/ABC-1234"
-        echo "   • feature/PROJ-123-description"
-        echo "   • PROJ-123-description"
-        echo "   • bugfix/TEAM-456-fix"
-        echo "   • any-branch-with-TICKET-123-anywhere"
-        echo ""
-        echo "💡 Or use regular commit: oco"
-      fi
-    '')
-    
-    # Simple setup script
-    (writeShellScriptBin "opencommit-setup" ''
-      #!/usr/bin/env bash
-      
-      echo "🔧 OpenCommit Setup"
-      echo ""
-      
-      # Check ollama
-      if ! curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-        echo "❌ Ollama not running"
-        echo "💡 Start with: launchctl start org.nixos.ollama"
+        echo "OpenCommit is not configured for a supported provider."
+        echo "Next step: oco-provider ollama"
         exit 1
       fi
-      
-      # Check/pull model
-      model="tavernari/git-commit-message:latest"
-      if ! curl -s http://127.0.0.1:11434/api/tags | ${jq}/bin/jq -r '.models[]?.name' | grep -q "^$model$"; then
-        echo "📦 Pulling model: $model"
-        ollama pull "$model" || exit 1
+
+      echo ""
+      if git rev-parse --git-dir >/dev/null 2>&1; then
+        echo "Git repository: yes"
+        if git diff --cached --quiet; then
+          echo "Staged changes: none"
+        else
+          echo "Staged changes: ready"
+        fi
+      else
+        echo "Git repository: no"
       fi
-      
-      echo "✅ Setup complete!"
-      echo ""
-      echo "📖 Usage:"
-      echo "   1. Stage changes: git add ."
-      echo "   2. Generate commit: oco"
-      echo "   3. Jira integration: oco-jira"
-      echo ""
-      echo "🔧 Commands:"
-      echo "   • oco-check    - Health check"
-      echo "   • oco-model    - Switch models"
-      echo "   • oco-config   - View config"
+    '')
+
+    (writeShellScriptBin "oco-profile" ''
+      #!/usr/bin/env bash
+      ${commonShell}
+
+      show_status() {
+        current="$(current_config_value OCO_MODEL)"
+        provider="$(current_provider)"
+        api_url="$(current_config_value OCO_API_URL)"
+
+        echo "OpenCommit local model profiles"
+        echo ""
+        echo "Current provider: ''${provider:-unknown}"
+        echo "Current model: ''${current:-unset}"
+        echo "Current API URL: ''${api_url:-unset}"
+        echo "Default local model: $commit_model"
+        echo ""
+        echo "Profiles"
+
+        for profile in commit general coding; do
+          service="$(profile_service "$profile")"
+          endpoint="$(service_endpoint "$service")"
+          model="$(profile_model "$profile")"
+          printf "  %-7s -> %-36s service=%-7s endpoint=%s\n" "$profile" "$model" "$service" "$endpoint"
+
+          if installed_model_for_service "$service" "$model"; then
+            echo "           installed"
+          elif service_ready "$service"; then
+            echo "           missing (llm-pull $profile)"
+          else
+            echo "           unknown (service unavailable)"
+          fi
+        done
+      }
+
+      if [[ $# -eq 0 ]]; then
+        show_status
+        exit 0
+      fi
+
+      case "$1" in
+        status)
+          show_status
+          ;;
+        reset|default|commit|general|coding)
+          case "$1" in
+            reset|default)
+              profile="commit"
+              ;;
+            *)
+              profile="$1"
+              ;;
+          esac
+
+          service="$(profile_service "$profile")"
+          model="$(profile_model "$profile")"
+          api_url="$(service_chat_endpoint "$service")"
+
+          opencommit config set OCO_AI_PROVIDER=ollama
+          opencommit config set OCO_API_URL="$api_url"
+          opencommit config set OCO_API_KEY=ollama
+          opencommit config set OCO_MODEL="$model"
+
+          echo "OpenCommit local profile set to $profile -> $model"
+          echo "Service: $service"
+          echo "Endpoint: $(service_endpoint "$service")"
+          if service_ready "$service" && ! installed_model_for_service "$service" "$model"; then
+            echo "Model is not installed yet."
+            echo "Next step: llm-pull $profile"
+          fi
+          ;;
+        *)
+          echo "Usage: oco-profile [status|default|reset|commit|general|coding]"
+          exit 1
+          ;;
+      esac
+    '')
+
+    (writeShellScriptBin "oco-provider" ''
+      #!/usr/bin/env bash
+      ${commonShell}
+
+      show_status() {
+        provider="$(current_provider)"
+        url="$(current_config_value OCO_API_URL)"
+        model="$(current_config_value OCO_MODEL)"
+        local_service="$(current_local_service)"
+
+        echo "OpenCommit provider status"
+        echo ""
+        echo "Provider: ''${provider:-unknown}"
+        echo "API URL: ''${url:-unset}"
+        echo "Model: ''${model:-unset}"
+
+        if [[ "$provider" == "ollama" ]] || [[ "$url" == "$default_chat_endpoint" ]] || [[ "$url" == "$coding_chat_endpoint" ]]; then
+          echo "Local service: $local_service"
+          if [[ "$local_service" != "unmanaged" ]] && service_ready "$local_service"; then
+            echo "Ollama: reachable"
+          else
+            echo "Ollama: unavailable"
+            echo "Next step: llm-status"
+          fi
+        fi
+      }
+
+      if [[ $# -eq 0 ]]; then
+        show_status
+        echo ""
+        echo "Commands:"
+        echo "  oco-provider ollama"
+        echo "  oco-provider openai"
+        echo "  oco-provider claude"
+        echo "  oco-provider status"
+        echo "  oco-provider setup"
+        exit 0
+      fi
+
+      case "$1" in
+        ollama)
+          opencommit config set OCO_AI_PROVIDER=ollama
+          opencommit config set OCO_API_URL="$default_chat_endpoint"
+          opencommit config set OCO_API_KEY=ollama
+          opencommit config set OCO_MODEL="$commit_model"
+          echo "OpenCommit switched to Ollama."
+          echo "Default local profile: commit -> $commit_model"
+          echo "Endpoint: $default_endpoint"
+          if ! service_ready "default"; then
+            echo "Ollama is not reachable yet."
+            echo "Next step: llm-status"
+          fi
+          ;;
+        openai)
+          api_key="$(current_config_value OCO_OPENAI_API_KEY)"
+          if [[ -z "$api_key" || "$api_key" == "undefined" ]]; then
+            if [[ -f "${config.home.homeDirectory}/.config/opencommit/openai_api_key" ]]; then
+              api_key=$(tr -d '\n' < "${config.home.homeDirectory}/.config/opencommit/openai_api_key")
+              if [[ -n "$api_key" && "$api_key" == sk-* ]]; then
+                opencommit config set OCO_OPENAI_API_KEY="$api_key"
+              fi
+            fi
+          fi
+
+          if [[ -z "$api_key" || "$api_key" == "undefined" ]]; then
+            echo "OpenAI API key is not configured."
+            echo "Next step: oco-provider setup"
+            exit 1
+          fi
+
+          opencommit config set OCO_AI_PROVIDER=openai
+          opencommit config set OCO_API_URL=https://api.openai.com/v1
+          opencommit config set OCO_API_KEY="$api_key"
+          opencommit config set OCO_MODEL=gpt-4o-mini
+          echo "OpenCommit switched to OpenAI."
+          ;;
+        claude)
+          if [[ -f "${config.home.homeDirectory}/.config/opencommit/claude_api_key" ]]; then
+            claude_key=$(tr -d '\n' < "${config.home.homeDirectory}/.config/opencommit/claude_api_key")
+          else
+            claude_key=""
+          fi
+
+          if [[ -z "$claude_key" || "$claude_key" != sk-ant-* ]]; then
+            echo "Claude API key is not configured."
+            echo "Next step: add claude_api_key to secrets and rerun oco-claude"
+            exit 1
+          fi
+
+          opencommit config set OCO_AI_PROVIDER=claude
+          opencommit config set OCO_API_URL=https://api.anthropic.com/v1
+          opencommit config set OCO_API_KEY="$claude_key"
+          opencommit config set OCO_MODEL=claude-3-5-haiku-20241022
+          echo "OpenCommit switched to Claude."
+          ;;
+        status)
+          show_status
+          ;;
+        setup)
+          echo "OpenAI API key setup"
+          echo ""
+          echo "Get a key from https://platform.openai.com/account/api-keys"
+          read -r -p "Enter your OpenAI API key: " api_key
+          if [[ -n "$api_key" && "$api_key" == sk-* ]]; then
+            opencommit config set OCO_OPENAI_API_KEY="$api_key"
+            echo "Stored the OpenAI API key."
+            echo "Next step: oco-provider openai"
+          else
+            echo "Invalid OpenAI key format."
+            exit 1
+          fi
+          ;;
+        *)
+          echo "Unknown command: $1"
+          echo "Run: oco-provider"
+          exit 1
+          ;;
+      esac
+    '')
+
+    (writeShellScriptBin "oco-jira-commit" ''
+      #!/usr/bin/env bash
+      ${commonShell}
+
+      branch=$(git rev-parse --abbrev-ref HEAD)
+      jira_ticket=$(echo "$branch" | grep -oE '[A-Z]+-[0-9]+' | head -1 || true)
+
+      if [[ -z "$jira_ticket" ]]; then
+        echo "No Jira ticket found in branch name: $branch"
+        echo "Expected something like PROJ-123 in the branch name."
+        exit 1
+      fi
+
+      provider="$(current_provider)"
+      local_service="$(current_local_service)"
+      if [[ "$provider" == "ollama" ]] && [[ "$local_service" != "unmanaged" ]] && ! service_ready "$local_service"; then
+        echo "OpenCommit is configured for Ollama but the local service is unavailable."
+        echo "Next step: llm-status"
+        exit 1
+      fi
+
+      opencommit "$jira_ticket - \$msg"
+    '')
+
+    (writeShellScriptBin "opencommit-setup" ''
+      #!/usr/bin/env bash
+      ${commonShell}
+
+      opencommit config set OCO_AI_PROVIDER=ollama
+      opencommit config set OCO_API_URL="$default_chat_endpoint"
+      opencommit config set OCO_API_KEY=ollama
+      opencommit config set OCO_MODEL="$commit_model"
+
+      echo "OpenCommit is configured for the local commit profile."
+      echo "Commit profile: $commit_model"
+      echo "Endpoint: $default_endpoint"
+
+      if ! service_ready "default"; then
+        echo "Ollama is not reachable."
+        echo "Next step: llm-status"
+        exit 1
+      fi
+
+      if ! installed_model_for_service "$(profile_service commit)" "$commit_model"; then
+        echo "Commit profile is not installed."
+        echo "Next step: llm-pull commit"
+        exit 1
+      fi
+
+      echo "Ready."
+      echo "Usage:"
+      echo "  1. git add ."
+      echo "  2. oco"
+      echo "  3. oco-jira"
     '')
   ];
-} 
+}

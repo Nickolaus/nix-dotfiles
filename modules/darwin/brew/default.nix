@@ -47,7 +47,7 @@
       "logi-options+"       # For hardware settings (DPI, etc.) - disable gesture features to avoid conflicts with Hammerspoon
       "ddpm"                # Dell Display and Peripheral Manager for Dell monitors and webcams
       "fathom"              # AI meeting notetaker and analytics app, not available in nixpkgs
-      "flameshot"           # Open-source cross-platform screenshot tool with annotation and CLI support
+      "shottr"              # Lightweight screenshot tool with URL scheme API support
       "corelocationcli"     # CLI tool for accessing Core Location services (requires location permissions)
       "boring-notch"        # Dynamic notch enhancement for MacBooks with notch display
       "libreoffice"         # Free office suite (not available in nixpkgs for Darwin)
