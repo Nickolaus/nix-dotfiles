@@ -120,6 +120,11 @@ in
           args = [ "-y" "@modelcontextprotocol/server-github" ];
           inheritEnv = [ "GITHUB_PERSONAL_ACCESS_TOKEN" ];
         };
+        chrome-devtools = {
+          type = "stdio";
+          command = "${pkgs.nodejs}/bin/npx";
+          args = [ "-y" "chrome-devtools-mcp@latest" ];
+        };
         fetch = {
           type = "stdio";
           command = "${pkgs.uv}/bin/uvx";
