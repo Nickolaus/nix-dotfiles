@@ -10,10 +10,10 @@
   imports = [
     "${modulesPath}/installer/cd-dvd/installation-cd-minimal.nix"
   ];
-  
+
   # Disable ZFS to avoid kernel compatibility issues in unstable
   boot.supportedFilesystems = lib.mkForce [ "btrfs" "ext4" "vfat" "ntfs" "xfs" ];
-  
+
   # Enable SSH by default (no manual configuration needed)
   services.openssh = {
     enable = true;
@@ -22,14 +22,20 @@
       PasswordAuthentication = true;
     };
   };
-  
+
   # Set known passwords for installer (only for installation phase)
-  users.users.root.initialPassword = "nixos";
-  users.users.nixos.initialPassword = "nixos";
-  
+  users.users.root = {
+    initialHashedPassword = lib.mkForce null;
+    initialPassword = "nixos";
+  };
+  users.users.nixos = {
+    initialHashedPassword = lib.mkForce null;
+    initialPassword = "nixos";
+  };
+
   # Auto-start SSH on boot
   systemd.services.sshd.wantedBy = lib.mkForce [ "multi-user.target" ];
-  
+
   # Show helpful information on console
   services.getty.helpLine = lib.mkAfter ''
     
@@ -53,7 +59,7 @@
     📚 Docs: ~/.config/nix-dotfiles/FARNSWORTH_INSTALLATION.md
     
   '';
-  
+
   # Include useful tools in installer
   environment.systemPackages = with pkgs; [
     git
@@ -63,12 +69,11 @@
     wget
     curl
   ];
-  
+
   # Use latest kernel for best hardware support
   boot.kernelPackages = pkgs.linuxPackages_latest;
-  
+
   # Ensure network works out of the box
-  networking.wireless.enable = false; # Use NetworkManager instead
+  networking.wireless.enable = lib.mkForce false; # Use NetworkManager instead
   networking.networkmanager.enable = true;
 }
-

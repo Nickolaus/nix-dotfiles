@@ -38,7 +38,7 @@ in
               content = {
                 type = "luks";
                 name = "cryptroot";
-                
+
                 # Password provided via nixos-anywhere: --disk-encryption-keys flag
                 #
                 # Modern LUKS2 defaults (automatically applied by cryptsetup):
@@ -59,23 +59,24 @@ in
                 #
                 # Note: Defaults are secure for most use cases. Only customize
                 # if you have specific compliance or performance requirements.
-                
+
                 content = {
                   type = "btrfs";
                   extraArgs = [ "-f" ]; # Force overwrite
-                  
+
                   # Btrfs subvolumes for impermanence
                   subvolumes = {
-                    # Root subvolume - will be ephemeral via tmpfs overlay
+                    # Root subvolume - persistent unless a separate ephemeral-root
+                    # strategy is added outside this disko layout.
                     "@root" = {
                       mountpoint = "/";
-                      mountOptions = [ 
+                      mountOptions = [
                         "compress=zstd"
                         "noatime"
                         "space_cache=v2"
                       ];
                     };
-                    
+
                     # Nix store - persistent, read-mostly
                     "@nix" = {
                       mountpoint = "/nix";
@@ -85,7 +86,7 @@ in
                         "space_cache=v2"
                       ];
                     };
-                    
+
                     # Home directories - persistent
                     "@home" = {
                       mountpoint = "/home";
@@ -95,7 +96,7 @@ in
                         "space_cache=v2"
                       ];
                     };
-                    
+
                     # Persistent system state
                     "@persist" = {
                       mountpoint = "/persist";
@@ -105,7 +106,7 @@ in
                         "space_cache=v2"
                       ];
                     };
-                    
+
                     # System logs - persistent (optional)
                     "@log" = {
                       mountpoint = "/var/log";
@@ -115,7 +116,7 @@ in
                         "space_cache=v2"
                       ];
                     };
-                    
+
                     # Snapshots directory
                     "@snapshots" = {
                       mountpoint = "/.snapshots";
@@ -139,13 +140,6 @@ in
   fileSystems."/persist".neededForBoot = true;
   fileSystems."/var/log".neededForBoot = true;
 
-  # Btrfs-specific options
-  services.btrfs.autoScrub = {
-    enable = true;
-    interval = "monthly";
-    fileSystems = [ "/" ];
-  };
-
   # Note: Actual impermanence configuration is in modules/nixos/impermanence
+  # Note: Btrfs maintenance is in modules/nixos/btrfs-maintenance
 }
-

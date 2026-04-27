@@ -45,9 +45,15 @@
 
     # Initrd modules for encryption and performance
     initrd = {
-      availableKernelModules = [ 
-        "xhci_pci" "nvme" "usb_storage" "sd_mod" "rtsx_pci_sdmmc"
-        "ahci" "usbhid" "uas"
+      availableKernelModules = [
+        "xhci_pci"
+        "nvme"
+        "usb_storage"
+        "sd_mod"
+        "rtsx_pci_sdmmc"
+        "ahci"
+        "usbhid"
+        "uas"
       ];
       systemd.enable = true; # Modern systemd-based initrd
     };
@@ -101,30 +107,30 @@
       enable = true;
       wifi.powersave = true; # Battery optimization
     };
-    
+
     # Firewall configuration with toggleable groups
     firewall = {
       enable = true; # Toggle: set to false to disable
-      
+
       # Core services
       allowedTCPPorts = [
-        22    # SSH
-        80    # HTTP
-        443   # HTTPS
+        22 # SSH
+        80 # HTTP
+        443 # HTTPS
       ];
-      
+
       # Development ports (toggleable via config)
       allowedTCPPortRanges = [
-        { from = 3000; to = 3001; }  # Node.js dev
-        { from = 4000; to = 4001; }  # Alt dev
-        { from = 5000; to = 5001; }  # Flask/misc
-        { from = 8000; to = 8080; }  # Various dev servers
-        { from = 9000; to = 9001; }  # Alt services
+        { from = 3000; to = 3001; } # Node.js dev
+        { from = 4000; to = 4001; } # Alt dev
+        { from = 5000; to = 5001; } # Flask/misc
+        { from = 8000; to = 8080; } # Various dev servers
+        { from = 9000; to = 9001; } # Alt services
       ];
-      
+
       # Database ports (comment out if not needed)
       # allowedTCPPorts = [ 3306 5432 6379 27017 ];
-      
+
       # UDP ports for mDNS and development
       allowedUDPPorts = [ 5353 ];
     };
@@ -198,7 +204,7 @@
       experimental-features = [ "nix-command" "flakes" ];
       trusted-users = [ "root" "C.Hessel" ];
       auto-optimise-store = true;
-      
+
       # Binary cache configuration
       substituters = [
         "https://cache.nixos.org"
@@ -211,7 +217,7 @@
         "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIBMioiJM7ypFP8PwtkuGc="
       ];
     };
-    
+
     # Garbage collection
     gc = {
       automatic = true;
@@ -228,7 +234,7 @@
     curl
     htop
     cryptsetup # For LUKS management
-    tpm2-tools  # For TPM2 operations
+    tpm2-tools # For TPM2 operations
   ];
 
   # Laptop power management
@@ -263,7 +269,7 @@
   # Enable location services for automatic timezone
   services.geoclue2.enable = true;
 
-  # System update notifications (manual execution)
+  # Flake input update notifications (manual execution)
   systemd.timers."nixos-update-check" = {
     wantedBy = [ "timers.target" ];
     timerConfig = {
@@ -275,8 +281,26 @@
 
   systemd.services."nixos-update-check" = {
     script = ''
-      ${pkgs.nix}/bin/nix-channel --update
-      ${pkgs.libnotify}/bin/notify-send "System Update" "Updates available. Run: sudo nixos-rebuild switch"
+      set -euo pipefail
+
+      flake_dir="/home/C.Hessel/.config/nix-dotfiles"
+      if [ ! -f "$flake_dir/flake.nix" ] || [ ! -f "$flake_dir/flake.lock" ]; then
+        exit 0
+      fi
+
+      tmp_dir="$(${pkgs.coreutils}/bin/mktemp -d)"
+      trap '${pkgs.coreutils}/bin/rm -rf "$tmp_dir"' EXIT
+      tmp_lock="$tmp_dir/flake.lock"
+
+      ${pkgs.coreutils}/bin/cp "$flake_dir/flake.lock" "$tmp_lock"
+
+      if ${pkgs.nix}/bin/nix flake update --flake "$flake_dir" --output-lock-file "$tmp_lock" >/dev/null 2>&1; then
+        if ! ${pkgs.diffutils}/bin/cmp -s "$flake_dir/flake.lock" "$tmp_lock"; then
+          ${pkgs.libnotify}/bin/notify-send "System Update" "Flake inputs have updates. Run: cd ~/.config/nix-dotfiles && ./scripts/update-system.sh"
+        fi
+      else
+        ${pkgs.libnotify}/bin/notify-send -u low "System Update" "Could not check flake input updates."
+      fi
     '';
     serviceConfig = {
       Type = "oneshot";

@@ -56,7 +56,7 @@ check_directory() {
 # Step 1: Check System Health
 check_system_health() {
     log_step "Step 1: Checking System Health"
-    
+
     log_info "Checking Determinate Systems daemon status..."
     daemon_status=$(sudo determinate-nixd status 2>&1)
     if echo "$daemon_status" | grep -q "invalid-token"; then
@@ -69,33 +69,33 @@ check_system_health() {
     else
         log_success "Determinate Systems daemon is healthy"
     fi
-    
+
     log_info "Validating current configuration..."
-    if ! nix flake check 2>&1 | grep -v "warning: unknown flake output 'isoImages'"; then
+    if ! ./scripts/check-config.sh; then
         log_error "Configuration validation failed"
         log_info "Fix configuration errors before proceeding"
         exit 1
     fi
-    
+
     log_success "System health check passed"
 }
 
 # Step 2: Update Determinate Systems
 update_determinate() {
     log_step "Step 2: Updating Determinate Systems"
-    
+
     log_info "Checking current Determinate Nix version..."
     current_version=$(determinate-nixd version 2>/dev/null || echo "unknown")
     log_info "Current version: $current_version"
-    
+
     log_info "Upgrading Determinate Nix to latest version..."
     if sudo determinate-nixd upgrade; then
         log_success "Determinate Systems upgraded successfully"
-        
+
         # Check new version
         new_version=$(determinate-nixd version 2>/dev/null || echo "unknown")
         log_info "New version: $new_version"
-        
+
         # Verify upgrade
         log_info "Verifying upgrade completed successfully..."
         if sudo determinate-nixd status; then
@@ -113,7 +113,7 @@ update_determinate() {
 # Step 3: Update Configuration
 update_configuration() {
     log_step "Step 3: Updating Configuration"
-    
+
     log_info "Updating flake inputs to latest versions..."
     if nix flake update; then
         log_success "Flake inputs updated successfully"
@@ -121,9 +121,9 @@ update_configuration() {
         log_error "Failed to update flake inputs"
         exit 1
     fi
-    
+
     log_info "Validating updated configuration..."
-    if nix flake check; then
+    if ./scripts/check-config.sh; then
         log_success "Updated configuration is valid"
     else
         log_error "Updated configuration validation failed"
@@ -132,11 +132,54 @@ update_configuration() {
     fi
 }
 
-# Step 4: Apply Changes
+# Step 4: Update Homebrew
+update_homebrew() {
+    local platform=$1
+
+    if [[ "$platform" != "darwin" ]]; then
+        return 0
+    fi
+
+    log_step "Step 4: Updating Homebrew"
+
+    if ! command -v brew >/dev/null 2>&1; then
+        log_warning "Homebrew is not installed; skipping Homebrew update"
+        return 0
+    fi
+
+    local brewfile
+    brewfile=$(mktemp -t nix-dotfiles-Brewfile.XXXXXX)
+
+    log_info "Rendering declarative Brewfile from the updated flake..."
+    if ! nix eval --raw .#darwinConfigurations.zoidberg.config.homebrew.brewfile >"$brewfile"; then
+        rm -f "$brewfile"
+        log_error "Failed to render Homebrew Brewfile from nix-darwin configuration"
+        exit 1
+    fi
+
+    log_info "Updating Homebrew metadata..."
+    if ! brew update; then
+        rm -f "$brewfile"
+        log_error "Homebrew update failed"
+        exit 1
+    fi
+
+    log_info "Installing/upgrading declared Homebrew packages..."
+    if HOMEBREW_NO_AUTO_UPDATE=1 brew bundle --file="$brewfile" --upgrade --cleanup; then
+        rm -f "$brewfile"
+        log_success "Homebrew packages updated successfully"
+    else
+        rm -f "$brewfile"
+        log_error "Homebrew bundle update failed"
+        exit 1
+    fi
+}
+
+# Step 5: Apply Changes
 apply_changes() {
     local platform=$1
-    log_step "Step 4: Applying Changes"
-    
+    log_step "Step 5: Applying Changes"
+
     case $platform in
         "darwin")
             log_info "Applying macOS configuration changes..."
@@ -175,10 +218,10 @@ apply_changes() {
     esac
 }
 
-# Step 5: Verify System Health
+# Step 6: Verify System Health
 verify_system_health() {
-    log_step "Step 5: Verifying System Health"
-    
+    log_step "Step 6: Verifying System Health"
+
     log_info "Confirming Determinate Systems is healthy..."
     daemon_status=$(sudo determinate-nixd status 2>&1)
     if echo "$daemon_status" | grep -q "invalid-token"; then
@@ -190,14 +233,14 @@ verify_system_health() {
         log_warning "Determinate Systems status check failed"
         log_info "System may still be functional, but check daemon logs"
     fi
-    
+
     log_info "Checking current system generation..."
     if sudo nix-env --list-generations --profile /nix/var/nix/profiles/system | tail -3; then
         log_success "System generation information displayed above"
     else
         log_warning "Could not retrieve system generation information"
     fi
-    
+
     log_success "System update completed successfully!"
     log_info "Test your applications and tools to ensure everything works correctly"
 }
@@ -205,7 +248,7 @@ verify_system_health() {
 # Cleanup old generations
 cleanup_generations() {
     log_step "Cleanup: Removing Old Generations"
-    
+
     log_info "Cleaning up old generations (keeping last 90 days)..."
     if nix-collect-garbage --delete-older-than 90d; then
         log_success "Old generations cleaned up"
@@ -218,12 +261,13 @@ cleanup_generations() {
 main() {
     echo -e "${GREEN}🚀 nix-dotfiles System Update${NC}"
     echo -e "${BLUE}Comprehensive update workflow for Determinate Systems Nix + nix-darwin/NixOS${NC}\n"
-    
+
     # Pre-flight checks
     check_directory
-    local platform=$(detect_platform)
+    local platform
+    platform=$(detect_platform)
     log_info "Detected platform: $platform"
-    
+
     # Ask for confirmation
     read -p "Do you want to proceed with the system update? (y/N): " -n 1 -r
     echo
@@ -231,21 +275,22 @@ main() {
         log_info "Update cancelled by user"
         exit 0
     fi
-    
+
     # Execute update workflow
     check_system_health
     update_determinate
     update_configuration
+    update_homebrew "$platform"
     apply_changes "$platform"
     verify_system_health
-    
+
     # Optional cleanup
     read -p "Do you want to clean up old generations? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         cleanup_generations
     fi
-    
+
     echo -e "\n${GREEN}✅ System update completed successfully!${NC}"
     echo -e "${BLUE}Your nix-dotfiles configuration is now up to date.${NC}"
 }
@@ -262,20 +307,22 @@ case "${1:-}" in
         echo "  --dry-run     Show what would be done without executing"
         echo
         echo "This script performs a comprehensive system update:"
-        echo "1. Check system health"
+        echo "1. Check system health and evaluate declared host configurations"
         echo "2. Update Determinate Systems Nix"
-        echo "3. Update flake inputs"
-        echo "4. Apply configuration changes"
-        echo "5. Verify system health"
+        echo "3. Update flake inputs and re-evaluate declared host configurations"
+        echo "4. Update Homebrew packages on macOS"
+        echo "5. Apply configuration changes"
+        echo "6. Verify system health"
         exit 0
         ;;
     "--dry-run")
         echo "DRY RUN: Would perform the following steps:"
-        echo "1. Check Determinate Systems daemon status"
+        echo "1. Check Determinate Systems daemon status and evaluate declared host configurations"
         echo "2. Upgrade Determinate Nix to latest version"
-        echo "3. Update flake inputs (nix flake update)"
-        echo "4. Apply configuration changes (darwin-rebuild/nixos-rebuild)"
-        echo "5. Verify system health"
+        echo "3. Update flake inputs (nix flake update) and re-evaluate declared host configurations"
+        echo "4. Update Homebrew packages on macOS"
+        echo "5. Apply configuration changes (darwin-rebuild/nixos-rebuild)"
+        echo "6. Verify system health"
         exit 0
         ;;
     "")
@@ -286,4 +333,4 @@ case "${1:-}" in
         echo "Use --help for usage information"
         exit 1
         ;;
-esac 
+esac

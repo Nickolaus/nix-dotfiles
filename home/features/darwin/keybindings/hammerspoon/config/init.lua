@@ -1,11 +1,13 @@
 local SwipeGestures = require('SwipeGestures')
 local MonitorManager = require('MonitorManager')
+local ScreenshotShortcuts = require('ScreenshotShortcuts')
 
 ipc = require("hs.ipc")
 ipc.cliInstall()
 
 -- Start MonitorManager for workspace state persistence
 MonitorManager.start()
+ScreenshotShortcuts.start()
 
 -- Make MonitorManager globally accessible for debugging
 _G.MonitorManager = MonitorManager

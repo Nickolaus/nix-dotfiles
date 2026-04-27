@@ -7,20 +7,20 @@ lib.mkIf pkgs.stdenv.isLinux {
   wayland.windowManager.hyprland = {
     enable = true;
     xwayland.enable = true;
-    
+
     settings = {
       # Monitor configuration - adjust per hardware
       monitor = [
-        ",preferred,auto,1"  # Auto-detect monitors
+        ",preferred,auto,1" # Auto-detect monitors
       ];
 
       # Autostart applications
       exec-once = [
-        "waybar"                    # Status bar
-        "mako"                      # Notification daemon
-        "nm-applet --indicator"     # Network manager tray
-        "blueman-applet"            # Bluetooth tray
-        "${pkgs.wl-clipboard}/bin/wl-paste --type text --watch ${pkgs.wl-clipboard}/bin/cliphist store"  # Clipboard manager
+        "waybar" # Status bar
+        "mako" # Notification daemon
+        "nm-applet --indicator" # Network manager tray
+        "blueman-applet" # Bluetooth tray
+        "${pkgs.wl-clipboard}/bin/wl-paste --type text --watch ${pkgs.wl-clipboard}/bin/cliphist store" # Clipboard manager
       ];
 
       # Environment variables
@@ -36,15 +36,15 @@ lib.mkIf pkgs.stdenv.isLinux {
         kb_model = "";
         kb_options = "";
         kb_rules = "";
-        
+
         follow_mouse = 1;
-        
+
         touchpad = {
           natural_scroll = true;
           disable_while_typing = true;
           tap-to-click = true;
         };
-        
+
         sensitivity = 0; # -1.0 - 1.0, 0 means no modification
       };
 
@@ -55,23 +55,23 @@ lib.mkIf pkgs.stdenv.isLinux {
         border_size = 2;
         "col.active_border" = "rgba(33ccffee) rgba(00ff99ee) 45deg";
         "col.inactive_border" = "rgba(595959aa)";
-        
+
         layout = "dwindle"; # or "master"
-        
+
         allow_tearing = false;
       };
 
       # Decoration settings
       decoration = {
         rounding = 10;
-        
+
         blur = {
           enabled = true;
           size = 3;
           passes = 1;
           vibrancy = 0.1696;
         };
-        
+
         drop_shadow = true;
         shadow_range = 4;
         shadow_render_power = 3;
@@ -81,11 +81,11 @@ lib.mkIf pkgs.stdenv.isLinux {
       # Animation settings (smooth and modern)
       animations = {
         enabled = true;
-        
+
         bezier = [
           "myBezier, 0.05, 0.9, 0.1, 1.05"
         ];
-        
+
         animation = [
           "windows, 1, 7, myBezier"
           "windowsOut, 1, 7, default, popin 80%"
@@ -113,11 +113,11 @@ lib.mkIf pkgs.stdenv.isLinux {
         "float,class:(nm-connection-editor)"
         "float,class:(blueman-manager)"
         "float,title:(Picture-in-Picture)"
-        
+
         # Opacity rules
         "opacity 0.9 0.9,class:^(thunar)$"
         "opacity 0.95 0.95,class:^(wezterm)$"
-        
+
         # Workspace assignments
         "workspace 2,class:^(firefox)$"
         "workspace 3,class:^(Slack)$"
@@ -137,13 +137,13 @@ lib.mkIf pkgs.stdenv.isLinux {
 
       # Keybindings (similar to AeroSpace style)
       "$mod" = "SUPER";
-      
+
       bind = [
         # Application launchers
         "$mod, RETURN, exec, wezterm"
         "$mod, D, exec, rofi -show drun"
         "$mod, E, exec, thunar"
-        
+
         # Window management
         "$mod, Q, killactive,"
         "$mod SHIFT, Q, exit,"
@@ -151,19 +151,19 @@ lib.mkIf pkgs.stdenv.isLinux {
         "$mod, F, fullscreen,"
         "$mod, P, pseudo," # dwindle
         "$mod, J, togglesplit," # dwindle
-        
+
         # Focus movement (vim-style)
         "$mod, H, movefocus, l"
         "$mod, L, movefocus, r"
         "$mod, K, movefocus, u"
         "$mod, J, movefocus, d"
-        
+
         # Window movement
         "$mod SHIFT, H, movewindow, l"
         "$mod SHIFT, L, movewindow, r"
         "$mod SHIFT, K, movewindow, u"
         "$mod SHIFT, J, movewindow, d"
-        
+
         # Workspace switching
         "$mod, 1, workspace, 1"
         "$mod, 2, workspace, 2"
@@ -175,7 +175,7 @@ lib.mkIf pkgs.stdenv.isLinux {
         "$mod, 8, workspace, 8"
         "$mod, 9, workspace, 9"
         "$mod, 0, workspace, 10"
-        
+
         # Move window to workspace
         "$mod SHIFT, 1, movetoworkspace, 1"
         "$mod SHIFT, 2, movetoworkspace, 2"
@@ -187,22 +187,23 @@ lib.mkIf pkgs.stdenv.isLinux {
         "$mod SHIFT, 8, movetoworkspace, 8"
         "$mod SHIFT, 9, movetoworkspace, 9"
         "$mod SHIFT, 0, movetoworkspace, 10"
-        
+
         # Special workspace (scratchpad)
         "$mod, S, togglespecialworkspace, magic"
         "$mod SHIFT, S, movetoworkspace, special:magic"
-        
+
         # Scroll through workspaces
         "$mod, mouse_down, workspace, e+1"
         "$mod, mouse_up, workspace, e-1"
-        
+
         # Screenshots
         ", Print, exec, grim -g \"$(slurp)\" - | wl-copy"
+        "SHIFT, Print, exec, grim -g \"$(slurp)\" - | swappy -f -"
         "$mod, Print, exec, grim -g \"$(slurp)\" ~/Pictures/screenshot-$(date +%Y%m%d-%H%M%S).png"
-        
+
         # Lock screen
         "$mod, Escape, exec, swaylock"
-        
+
         # Media keys
         ", XF86AudioRaiseVolume, exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"
         ", XF86AudioLowerVolume, exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
@@ -226,18 +227,18 @@ lib.mkIf pkgs.stdenv.isLinux {
     grim
     slurp
     swappy
-    
+
     # Clipboard manager
     cliphist
-    
+
     # Brightness control
     brightnessctl
-    
+
     # Color picker
     hyprpicker
-    
+
     # Wallpaper
-    swww
+    awww
   ];
 
   # Swaylock configuration
@@ -257,14 +258,13 @@ lib.mkIf pkgs.stdenv.isLinux {
     enable = true;
     timeouts = [
       {
-        timeout = 300;  # 5 minutes
+        timeout = 300; # 5 minutes
         command = "${pkgs.swaylock}/bin/swaylock -f";
       }
       {
-        timeout = 600;  # 10 minutes
+        timeout = 600; # 10 minutes
         command = "${pkgs.systemd}/bin/systemctl suspend";
       }
     ];
   };
 }
-

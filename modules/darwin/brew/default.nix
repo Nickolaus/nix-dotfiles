@@ -12,47 +12,50 @@
 
   homebrew = {
     enable = true;
+    global = {
+      autoUpdate = false;
+    };
     onActivation = {
-      autoUpdate = true;
-      cleanup = "zap";
-      upgrade = true;
+      autoUpdate = false;
+      cleanup = "uninstall";
+      upgrade = false;
     };
 
     taps = [
       "aws/tap"
-      "TheBoredTeam/boring-notch"  # Required tap for boring-notch cask
+      "TheBoredTeam/boring-notch" # Required tap for boring-notch cask
     ];
 
     # CLI tools not available or problematic in Nix
     brews = [
-      "nx"                      # Nx CLI via Homebrew; prefer brew for global CLI convenience
-      "docker-credential-helper"  # Docker credential helper for secure storage of Docker credentials
-      "argocd"                   # Declarative continuous delivery tool for Kubernetes
-      "mysql-client"             # MySQL client for interacting with MySQL databases
-      "television"               # Terminal-based TV streaming application
-      "angular-cli"              # Angular CLI for creating and building Angular projects (not available in nixpkgs)
+      "nx" # Nx CLI via Homebrew; prefer brew for global CLI convenience
+      "docker-credential-helper" # Docker credential helper for secure storage of Docker credentials
+      "argocd" # Declarative continuous delivery tool for Kubernetes
+      "mysql-client" # MySQL client for interacting with MySQL databases
+      "television" # Terminal-based TV streaming application
+      "angular-cli" # Angular CLI for creating and building Angular projects (not available in nixpkgs)
     ];
 
     # GUI applications and system integrations
     casks = [
-      "cursor"              # AI-powered code editor; Nix package is broken/unmaintained (v0.47.8), Homebrew provides latest (v2.1.46+)
-      "orbstack"            # Container management tool with better performance than the Nix version
-      "utm"                 # Virtual machine manager for macOS (not available in nixpkgs)
-      "openmtp"             # Android MTP file transfer on macOS; use for phone storage access over USB
-      "hammerspoon"         # Automation tool for macOS, requires system access
-      "gitify"              # GitHub notifications app for macOS
-      "sourcetree"          # Git GUI client, not available in nixpkgs
-      "babeledit"           # Localization editor for translating apps and websites
-      "steam"               # Gaming platform, not properly available in nixpkgs for Darwin
-      "logi-options+"       # For hardware settings (DPI, etc.) - disable gesture features to avoid conflicts with Hammerspoon
-      "ddpm"                # Dell Display and Peripheral Manager for Dell monitors and webcams
-      "fathom"              # AI meeting notetaker and analytics app, not available in nixpkgs
-      "shottr"              # Lightweight screenshot tool with URL scheme API support
-      "corelocationcli"     # CLI tool for accessing Core Location services (requires location permissions)
-      "boring-notch"        # Dynamic notch enhancement for MacBooks with notch display
-      "libreoffice"         # Free office suite (not available in nixpkgs for Darwin)
-      "phpstorm"            # PHP IDE
-      "discord"             # Voice and text chat
+      "cursor" # AI-powered code editor; Nix package is broken/unmaintained (v0.47.8), Homebrew provides latest (v2.1.46+)
+      "orbstack" # Container management tool with better performance than the Nix version
+      "utm" # Virtual machine manager for macOS (not available in nixpkgs)
+      "openmtp" # Android MTP file transfer on macOS; use for phone storage access over USB
+      "hammerspoon" # Automation tool for macOS, requires system access
+      "gitify" # GitHub notifications app for macOS
+      "sourcetree" # Git GUI client, not available in nixpkgs
+      "babeledit" # Localization editor for translating apps and websites
+      "steam" # Gaming platform, not properly available in nixpkgs for Darwin
+      "logi-options+" # For hardware settings (DPI, etc.) - disable gesture features to avoid conflicts with Hammerspoon
+      "ddpm" # Dell Display and Peripheral Manager for Dell monitors and webcams
+      "fathom" # AI meeting notetaker and analytics app, not available in nixpkgs
+      "shottr" # Lightweight screenshot tool with URL scheme API support
+      "corelocationcli" # CLI tool for accessing Core Location services (requires location permissions)
+      "boring-notch" # Dynamic notch enhancement for MacBooks with notch display
+      "libreoffice" # Free office suite (not available in nixpkgs for Darwin)
+      "phpstorm" # PHP IDE
+      "discord" # Voice and text chat
     ];
   };
 }

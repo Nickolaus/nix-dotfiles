@@ -39,31 +39,65 @@
     , ...
     }:
     let
-      supportedSystems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
-      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
       extraArgs = {
         inherit sops-nix disko impermanence;
         flake = self;
         remapKeys = false;
       };
-    in
-    {
-      # macOS configurations
-      darwinConfigurations = {
-        zoidberg = nix-darwin.lib.darwinSystem {
+      mkDarwinSystem =
+        { system
+        , hostModule
+        , remapKeys ? false
+        }:
+        nix-darwin.lib.darwinSystem {
+          inherit system;
           specialArgs = extraArgs // {
-            remapKeys = true;
+            inherit remapKeys;
           };
-          system = "aarch64-darwin";
           modules = [
-            ./hosts/zoidberg
+            hostModule
             home-manager.darwinModules.default
             {
               home-manager.useGlobalPkgs = true;
               home-manager.useUserPackages = true;
-              home-manager.extraSpecialArgs = extraArgs // { remapKeys = true; };
+              home-manager.extraSpecialArgs = extraArgs // {
+                inherit remapKeys;
+              };
             }
           ];
+        };
+      mkFarnsworthSystem = system:
+        nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = extraArgs;
+          modules = [
+            ./hosts/farnsworth
+            disko.nixosModules.disko
+            impermanence.nixosModules.impermanence
+            home-manager.nixosModules.default
+            {
+              home-manager.useGlobalPkgs = true;
+              home-manager.useUserPackages = true;
+              home-manager.extraSpecialArgs = extraArgs;
+              home-manager.users."C.Hessel" = {
+                imports = [ ./home/farnsworth.nix ];
+              };
+            }
+          ];
+        };
+      mkInstaller = system:
+        (nixpkgs.lib.nixosSystem {
+          inherit system;
+          modules = [ ./images/installer.nix ];
+        }).config.system.build.isoImage;
+    in
+    {
+      # macOS configurations
+      darwinConfigurations = {
+        zoidberg = mkDarwinSystem {
+          system = "aarch64-darwin";
+          hostModule = ./hosts/zoidberg;
+          remapKeys = true;
         };
       };
 
@@ -72,62 +106,21 @@
         # Farnsworth - Multi-arch development laptop
         # Supports both ARM (primary) and x86_64 (secondary)
         # Build with: nixos-rebuild switch --flake .#farnsworth
-        farnsworth = nixpkgs.lib.nixosSystem {
-          # Default to ARM, but configuration works on both architectures
-          system = "aarch64-linux";  # Change to "x86_64-linux" for x86_64 deployment
-          specialArgs = extraArgs;
-          modules = [
-            ./hosts/farnsworth
-            disko.nixosModules.disko
-            impermanence.nixosModules.impermanence
-            home-manager.nixosModules.default
-            {
-              home-manager.useGlobalPkgs = true;
-              home-manager.useUserPackages = true;
-              home-manager.extraSpecialArgs = extraArgs;
-              home-manager.users."C.Hessel" = {
-                imports = [ ./home/farnsworth.nix ];
-              };
-            }
-          ];
-        };
+        farnsworth = mkFarnsworthSystem "aarch64-linux";
 
         # Farnsworth x86_64 variant (explicit)
         # Build with: nixos-rebuild switch --flake .#farnsworth-x86
-        farnsworth-x86 = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = extraArgs;
-          modules = [
-            ./hosts/farnsworth
-            disko.nixosModules.disko
-            impermanence.nixosModules.impermanence
-            home-manager.nixosModules.default
-            {
-              home-manager.useGlobalPkgs = true;
-              home-manager.useUserPackages = true;
-              home-manager.extraSpecialArgs = extraArgs;
-              home-manager.users."C.Hessel" = {
-                imports = [ ./home/farnsworth.nix ];
-              };
-            }
-          ];
-        };
+        farnsworth-x86 = mkFarnsworthSystem "x86_64-linux";
       };
       # Custom installer ISOs with SSH pre-enabled
       # Build with: nix build .#packages.aarch64-linux.farnsworth-installer
       # Or: nix build .#packages.x86_64-linux.farnsworth-installer
       packages = {
         # ARM (aarch64) installer - for Apple Silicon and ARM laptops
-        aarch64-linux.farnsworth-installer = (nixpkgs.lib.nixosSystem {
-          system = "aarch64-linux";
-          modules = [ ./images/installer.nix ];
-        }).config.system.build.isoImage;
-        
+        aarch64-linux.farnsworth-installer = mkInstaller "aarch64-linux";
+
         # x86_64 installer - for Intel/AMD systems
-        x86_64-linux.farnsworth-installer = (nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          modules = [ ./images/installer.nix ];
-        }).config.system.build.isoImage;
+        x86_64-linux.farnsworth-installer = mkInstaller "x86_64-linux";
       };
     };
 }

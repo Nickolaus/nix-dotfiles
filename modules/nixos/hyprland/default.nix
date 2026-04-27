@@ -4,6 +4,9 @@
 # Modern tiling window manager with animations and effects
 
 {
+  programs.thunar.enable = true;
+  programs.xfconf.enable = true;
+
   # Enable Hyprland
   programs.hyprland = {
     enable = true;
@@ -24,41 +27,38 @@
   # Required packages for Hyprland
   environment.systemPackages = with pkgs; [
     # Wayland utilities
-    wl-clipboard    # Clipboard manager
-    wlr-randr       # Display configuration
-    grim            # Screenshot utility
-    slurp           # Region selector
-    swappy          # Screenshot editor
-    
+    wl-clipboard # Clipboard manager
+    wlr-randr # Display configuration
+    grim # Screenshot utility
+    slurp # Region selector
+    swappy # Screenshot editor
+
     # Notification daemon
-    mako            # Lightweight notification daemon
-    libnotify       # Send notifications
-    
+    mako # Lightweight notification daemon
+    libnotify # Send notifications
+
     # Application launcher
-    rofi            # App launcher (wayland support built-in)
-    
-    # File manager
-    xfce.thunar     # GUI file manager
-    
+    rofi # App launcher (wayland support built-in)
+
     # Terminal
-    wezterm         # Configured via Home Manager
-    
+    wezterm # Configured via Home Manager
+
     # Screen locker
     swaylock-effects
-    
+
     # Idle management
     swayidle
-    
+
     # Network management GUI (for NetworkManager)
     networkmanagerapplet
-    
+
     # Bluetooth GUI (already enabled in main config)
     # blueman is enabled system-wide
-    
+
     # Qt Wayland support
     qt5.qtwayland
     qt6.qtwayland
-    
+
     # GTK portal for file chooser dialogs
     xdg-desktop-portal-gtk
   ];
@@ -81,14 +81,14 @@
     QT_QPA_PLATFORM = "wayland";
     SDL_VIDEODRIVER = "wayland";
     _JAVA_AWT_WM_NONREPARENTING = "1"; # Java GUI compatibility
-    
+
     # XDG compliance
     XDG_SESSION_TYPE = "wayland";
     XDG_CURRENT_DESKTOP = "Hyprland";
   };
 
   # Security - allow Hyprland to use realtime priority
-  security.pam.services.swaylock = {};
+  security.pam.services.swaylock = { };
 
   # Enable polkit for privilege escalation
   security.polkit.enable = true;
@@ -119,4 +119,3 @@
   # Note: User-specific Hyprland configuration is in home/features/linux/hyprland/
   # This includes keybindings, colors, animations, etc.
 }
-

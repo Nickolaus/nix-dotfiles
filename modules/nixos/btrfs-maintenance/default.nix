@@ -118,9 +118,9 @@
 
   # Helper script for manual operations
   environment.systemPackages = with pkgs; [
-    btrfs-progs  # Btrfs utilities
-    compsize     # Check compression ratio
-    
+    btrfs-progs # Btrfs utilities
+    compsize # Check compression ratio
+
     # Create helper script
     (writeShellScriptBin "btrfs-snapshot" ''
       # Create a manual snapshot
@@ -129,7 +129,7 @@
       echo "Created snapshot: $SNAPSHOT_NAME"
       echo "Snapshots location: /.snapshots/"
     '')
-    
+
     (writeShellScriptBin "btrfs-status" ''
       # Show Btrfs filesystem status
       echo "=== Btrfs Filesystem Usage ==="

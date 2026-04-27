@@ -5,6 +5,7 @@
 , ...
 }:
 let
+  githubTokenPath = "${config.home.homeDirectory}/.config/nix/github_token";
   mcpEnvExport = pkgs.writeShellScriptBin "hm-export-mcp-env" ''
     #!${pkgs.bash}/bin/bash
     set -euo pipefail
@@ -19,9 +20,13 @@ let
     /bin/launchctl setenv INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET "$(trim_secret ${lib.escapeShellArg config.sops.secrets.infisical_universal_auth_client_secret.path})"
     /bin/launchctl setenv RESEND_API_KEY "$(trim_secret ${lib.escapeShellArg config.sops.secrets.resend_api_key.path})"
     /bin/launchctl setenv CONTEXT7_API_KEY "$(trim_secret ${lib.escapeShellArg config.sops.secrets.context7_api_key.path})"
-    /bin/launchctl setenv GITHUB_PERSONAL_ACCESS_TOKEN "$(trim_secret ${lib.escapeShellArg config.sops.secrets.github_token.path})"
+    github_token="$(trim_secret ${lib.escapeShellArg githubTokenPath})"
+    /bin/launchctl setenv GH_TOKEN "$github_token"
+    /bin/launchctl setenv GITHUB_TOKEN "$github_token"
+    /bin/launchctl setenv GITHUB_PERSONAL_ACCESS_TOKEN "$github_token"
   '';
-in {
+in
+{
   imports = [
     ./homelab-gpg-signing.nix
   ];
@@ -60,7 +65,7 @@ in {
     };
 
     secrets.github_token = {
-      path = "${config.home.homeDirectory}/.config/nix/github_token";
+      path = githubTokenPath;
       format = "yaml";
       mode = "0600";
     };
@@ -114,6 +119,16 @@ in {
   home.file = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
     "Library/Logs/mcp-env/.keep".text = "";
   };
+
+  programs.fish.shellInit = ''
+    set -l github_token_path ${lib.escapeShellArg githubTokenPath}
+    if test -r "$github_token_path"
+      set -l github_token (${pkgs.coreutils}/bin/tr -d '\n' < "$github_token_path")
+      set -gx GH_TOKEN "$github_token"
+      set -gx GITHUB_TOKEN "$github_token"
+      set -gx GITHUB_PERSONAL_ACCESS_TOKEN "$github_token"
+    end
+  '';
 
   home.activation.exportMcpEnv = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin
     (lib.hm.dag.entryAfter [ "sops-nix" ] ''

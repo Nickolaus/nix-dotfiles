@@ -661,7 +661,7 @@ Configure your MX Master 3S gesture button to trigger workspace and window manag
 | **← Left**  | Send Keys  | `Alt+Shift+P` | Previous workspace |
 | **→ Right** | Send Keys  | `Alt+Shift+N` | Next workspace |
 | **↑ Up**    | Send Keys  | `Cmd+Ctrl+F` | **Toggle Fullscreen** |
-| **↓ Down**  | Send Keys  | `Cmd+Shift+X` | **Shottr** (macOS) / **ksnip** (Linux) |
+| **↓ Down**  | Send Keys  | `Cmd+Shift+X` | **Shottr area capture** |
 | **Click Only** | Send Keys  | `Ctrl+↑` | **Mission Control** (window overview) |
 
 #### 🎯 Why This Setup Works Great
@@ -677,8 +677,45 @@ Configure your MX Master 3S gesture button to trigger workspace and window manag
 #### 🔄 Alternative Options (If You Prefer Different Actions)
 
 **Screenshot Alternatives:**
-- **Down**: `Cmd+Shift+A` → Full screen screenshot (instead of selection)
+- **Down**: `Cmd+Ctrl+Shift+X` → Full screen Shottr capture
+- **Down**: `Cmd+Ctrl+Shift+W` → Window Shottr capture
 - **Down**: `Cmd+Shift+4` → Native macOS screenshot selection
+
+#### Screenshot Shortcuts
+
+**macOS (Shottr via Hammerspoon):**
+- `Cmd+Shift+X`: area capture
+- `Cmd+Ctrl+Shift+X`: fullscreen capture
+- `Cmd+Ctrl+Shift+W`: window capture
+- `Cmd+Ctrl+Shift+S`: scrolling capture
+- `Cmd+Ctrl+Shift+R`: repeat previous area capture
+- `Cmd+Ctrl+Shift+O`: OCR
+
+These are logical macOS shortcuts as seen by Hammerspoon after the keyboard modifier mappings in `home/features/darwin/keybindings/default.nix` have been applied. Logitech Options+ should send the shortcut shown in macOS, for example `Cmd+Shift+X` for the mouse down gesture, even if the physical keyboard has Control and Command remapped.
+
+Configuration lives in:
+- `home/features/darwin/keybindings/hammerspoon/config/ScreenshotShortcuts.lua`: Shottr URL bindings
+- `home/features/darwin/keybindings/hammerspoon/config/init.lua`: loads the screenshot shortcut module
+- `home/features/darwin/keybindings/hammerspoon/default.nix`: links `~/.hammerspoon` and reloads Hammerspoon when the config source changes
+
+The Hammerspoon activation hook reloads through `hs.ipc` when available. If IPC is unavailable, it restarts Hammerspoon and only records the reload marker after IPC responds again. This prevents a failed reload from being treated as successfully applied.
+
+Useful checks:
+```bash
+# Confirm the generated Hammerspoon files are linked
+ls -la ~/.hammerspoon/init.lua ~/.hammerspoon/ScreenshotShortcuts.lua
+
+# Confirm Hammerspoon IPC is available
+hs -c 'return "hammerspoon-ok"'
+
+# List active Shottr hotkeys
+hs -c 'for _, h in ipairs(hs.hotkey.getHotkeys()) do if h.msg and string.match(h.msg, "Shottr") then print(h.idx .. " " .. h.msg) end end'
+```
+
+**Linux (Hyprland):**
+- `Print`: area capture to clipboard
+- `Shift+Print`: area capture to Swappy for annotation
+- `Super+Print`: area capture saved to `~/Pictures`
 
 **Window Management Alternatives:**
 - **Up**: `Alt+Shift+Space` → Toggle floating/tiling layout (Aerospace-specific)
