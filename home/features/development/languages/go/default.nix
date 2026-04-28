@@ -1,10 +1,25 @@
-{ pkgs, config, ... }: {
+{ pkgs, config, ... }:
+let
+  goPath = "${config.home.homeDirectory}/.go";
+in
+{
 
   programs.go = {
     enable = true;
     package = pkgs.go;
     env = {
-      GOPATH = "${config.home.homeDirectory}/.go";
+      GOPATH = goPath;
     };
   };
+
+  home.sessionVariables = {
+    GOPATH = goPath;
+  };
+
+  home.packages = with pkgs; [
+    gopls
+    delve
+    golangci-lint
+    go-tools
+  ];
 }

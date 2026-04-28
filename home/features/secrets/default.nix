@@ -6,6 +6,7 @@
 }:
 let
   githubTokenPath = "${config.home.homeDirectory}/.config/nix/github_token";
+  cloudflareMcpTokenPath = "${config.home.homeDirectory}/.config/mcp/cloudflare_mcp_token";
   mcpEnvExport = pkgs.writeShellScriptBin "hm-export-mcp-env" ''
     #!${pkgs.bash}/bin/bash
     set -euo pipefail
@@ -14,16 +15,61 @@ let
       ${pkgs.coreutils}/bin/tr -d '\n' < "$1"
     }
 
-    /bin/launchctl setenv UNIFI_NETWORK_USERNAME "$(trim_secret ${lib.escapeShellArg config.sops.secrets.unifi_mcp_username.path})"
-    /bin/launchctl setenv UNIFI_NETWORK_PASSWORD "$(trim_secret ${lib.escapeShellArg config.sops.secrets.unifi_mcp_password.path})"
-    /bin/launchctl setenv PROXMOX_MCP_CONFIG ${lib.escapeShellArg config.sops.secrets.proxmox_mcp_config_json.path}
-    /bin/launchctl setenv INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET "$(trim_secret ${lib.escapeShellArg config.sops.secrets.infisical_universal_auth_client_secret.path})"
-    /bin/launchctl setenv RESEND_API_KEY "$(trim_secret ${lib.escapeShellArg config.sops.secrets.resend_api_key.path})"
-    /bin/launchctl setenv CONTEXT7_API_KEY "$(trim_secret ${lib.escapeShellArg config.sops.secrets.context7_api_key.path})"
-    github_token="$(trim_secret ${lib.escapeShellArg githubTokenPath})"
-    /bin/launchctl setenv GH_TOKEN "$github_token"
-    /bin/launchctl setenv GITHUB_TOKEN "$github_token"
-    /bin/launchctl setenv GITHUB_PERSONAL_ACCESS_TOKEN "$github_token"
+    wait_for_secret() {
+      local path="$1"
+      local attempt
+
+      for attempt in {1..20}; do
+        if [[ -s "$path" ]]; then
+          return 0
+        fi
+        ${pkgs.coreutils}/bin/sleep 0.25
+      done
+
+      return 1
+    }
+
+    set_secret_env() {
+      local name="$1"
+      local path="$2"
+
+      if ! wait_for_secret "$path"; then
+        echo "Skipping $name; secret file is not available yet: $path" >&2
+        return 0
+      fi
+
+      /bin/launchctl setenv "$name" "$(trim_secret "$path")"
+    }
+
+    set_file_env() {
+      local name="$1"
+      local path="$2"
+
+      if ! wait_for_secret "$path"; then
+        echo "Skipping $name; secret file is not available yet: $path" >&2
+        return 0
+      fi
+
+      /bin/launchctl setenv "$name" "$path"
+    }
+
+    set_secret_env UNIFI_NETWORK_USERNAME ${lib.escapeShellArg config.sops.secrets.unifi_mcp_username.path}
+    set_secret_env UNIFI_NETWORK_PASSWORD ${lib.escapeShellArg config.sops.secrets.unifi_mcp_password.path}
+    set_file_env PROXMOX_MCP_CONFIG ${lib.escapeShellArg config.sops.secrets.proxmox_mcp_config_json.path}
+    set_secret_env INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET ${lib.escapeShellArg config.sops.secrets.infisical_universal_auth_client_secret.path}
+    set_secret_env RESEND_API_KEY ${lib.escapeShellArg config.sops.secrets.resend_api_key.path}
+    set_secret_env GRAFANA_SERVICE_ACCOUNT_TOKEN ${lib.escapeShellArg config.sops.secrets.grafana_service_account_token.path}
+    set_secret_env CONTEXT7_API_KEY ${lib.escapeShellArg config.sops.secrets.context7_api_key.path}
+    set_secret_env CLOUDFLARE_MCP_TOKEN ${lib.escapeShellArg cloudflareMcpTokenPath}
+
+    if wait_for_secret ${lib.escapeShellArg githubTokenPath}; then
+      github_token="$(trim_secret ${lib.escapeShellArg githubTokenPath})"
+      /bin/launchctl setenv GH_TOKEN "$github_token"
+      /bin/launchctl setenv GITHUB_TOKEN "$github_token"
+      /bin/launchctl setenv GITHUB_PERSONAL_ACCESS_TOKEN "$github_token"
+    else
+      echo "Skipping GitHub token exports; secret file is not available yet: ${githubTokenPath}" >&2
+    fi
   '';
 in
 {
@@ -76,6 +122,12 @@ in
       mode = "0600";
     };
 
+    secrets.cloudflare_mcp_token = {
+      path = cloudflareMcpTokenPath;
+      format = "yaml";
+      mode = "0600";
+    };
+
     secrets.unifi_mcp_username = {
       path = "${config.home.homeDirectory}/.config/mcp/unifi_username";
       format = "yaml";
@@ -106,6 +158,12 @@ in
       mode = "0600";
     };
 
+    secrets.grafana_service_account_token = {
+      path = "${config.home.homeDirectory}/.config/mcp/grafana_service_account_token";
+      format = "yaml";
+      mode = "0600";
+    };
+
     secrets.homelab_gpg_signing_subkey = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
       format = "yaml";
       mode = "0600";
@@ -128,6 +186,11 @@ in
       set -gx GITHUB_TOKEN "$github_token"
       set -gx GITHUB_PERSONAL_ACCESS_TOKEN "$github_token"
     end
+
+    set -l cloudflare_mcp_token_path ${lib.escapeShellArg cloudflareMcpTokenPath}
+    if test -r "$cloudflare_mcp_token_path"
+      set -gx CLOUDFLARE_MCP_TOKEN (${pkgs.coreutils}/bin/tr -d '\n' < "$cloudflare_mcp_token_path")
+    end
   '';
 
   home.activation.exportMcpEnv = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin
@@ -147,7 +210,9 @@ in
         config.sops.secrets.proxmox_mcp_config_json.path
         config.sops.secrets.infisical_universal_auth_client_secret.path
         config.sops.secrets.resend_api_key.path
+        config.sops.secrets.grafana_service_account_token.path
         config.sops.secrets.context7_api_key.path
+        config.sops.secrets.cloudflare_mcp_token.path
         config.sops.secrets.github_token.path
       ];
       ProcessType = "Background";

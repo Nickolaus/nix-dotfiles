@@ -153,8 +153,9 @@
       set -gx VOLTA_HOME $HOME/.volta
       fish_add_path $VOLTA_HOME/bin
 
-      # Go Binaries
-      fish_add_path $GOPATH/bin
+      # Go binaries installed with `go install`; keep after Nix-managed tools.
+      set -q GOPATH; or set -gx GOPATH $HOME/.go
+      fish_add_path --path --move --append $GOPATH/bin
 
       # Cargo
       fish_add_path $HOME/.cargo/bin
