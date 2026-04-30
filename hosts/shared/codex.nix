@@ -13,6 +13,8 @@ let
         url = server.url;
       } // optionalAttrs (server.headers != { }) {
         http_headers = server.headers;
+      } // optionalAttrs (server.bearerTokenEnvVar != null) {
+        bearer_token_env_var = server.bearerTokenEnvVar;
       }
     else
       {

@@ -53,6 +53,12 @@ let
         description = "Static headers for HTTP MCP servers.";
       };
 
+      bearerTokenEnvVar = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Environment variable containing a bearer token for HTTP MCP servers that do not support OAuth login.";
+      };
+
       inheritEnv = mkOption {
         type = types.listOf types.str;
         default = [ ];
@@ -117,6 +123,7 @@ in
         github = {
           type = "http";
           url = "https://api.githubcopilot.com/mcp/";
+          bearerTokenEnvVar = "GH_TOKEN";
         };
         chrome-devtools = {
           type = "stdio";
