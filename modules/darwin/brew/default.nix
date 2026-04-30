@@ -47,7 +47,10 @@
       "sourcetree" # Git GUI client, not available in nixpkgs
       "babeledit" # Localization editor for translating apps and websites
       "steam" # Gaming platform, not properly available in nixpkgs for Darwin
-      "logi-options+" # For hardware settings (DPI, etc.) - disable gesture features to avoid conflicts with Hammerspoon
+      {
+        name = "logi-options+";
+        greedy = true; # Include in cask upgrades despite Logitech's auto-updater marker.
+      }
       "ddpm" # Dell Display and Peripheral Manager for Dell monitors and webcams
       "fathom" # AI meeting notetaker and analytics app, not available in nixpkgs
       "shottr" # Lightweight screenshot tool with URL scheme API support
