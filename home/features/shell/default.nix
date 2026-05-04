@@ -318,6 +318,5 @@
     "json" = "jless";                           # Interactive JSON viewer
     "cut" = "choose";                           # Human-friendly cut replacement
     "dig" = "dog";                              # Modern DNS lookup (doggo)
-    "curl" = "httpie --print=HhBb";             # Modern HTTP client
   };
 }

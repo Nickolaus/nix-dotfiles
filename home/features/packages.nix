@@ -40,7 +40,6 @@
     nmap
     bandwhich
     doggo                    # Modern dig replacement for DNS queries
-    httpie                   # User-friendly HTTP client (modern curl)
     tailscale                # VPN mesh network CLI client
   ] ++ [
     
