@@ -51,8 +51,8 @@
         name = "logi-options+";
         greedy = true; # Include in cask upgrades despite Logitech's auto-updater marker.
       }
+      "tigervnc" # VNC client/server app; nixpkgs package is currently marked broken on Darwin
       "ddpm" # Dell Display and Peripheral Manager for Dell monitors and webcams
-      "fathom" # AI meeting notetaker and analytics app, not available in nixpkgs
       "shottr" # Lightweight screenshot tool with URL scheme API support
       "corelocationcli" # CLI tool for accessing Core Location services (requires location permissions)
       "boring-notch" # Dynamic notch enhancement for MacBooks with notch display
