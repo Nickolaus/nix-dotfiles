@@ -59,6 +59,7 @@
       "libreoffice" # Free office suite (not available in nixpkgs for Darwin)
       "phpstorm" # PHP IDE
       "discord" # Voice and text chat
+      "zed" # Fast native code editor; Homebrew cask tracks current macOS app releases
     ];
   };
 }
