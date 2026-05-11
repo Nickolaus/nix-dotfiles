@@ -565,7 +565,12 @@ Add to appropriate category:
 ### Keyboard Layout
 1. Go to "System Settings > Keyboard > Text Input"
 2. Click "Edit" to change layout
-3. Add "German - Standard" layout if using German keyboard
+3. Add "German - Standard" layout for German external keyboards
+
+Check the active input source:
+```bash
+defaults read com.apple.HIToolbox AppleCurrentKeyboardLayoutInputSourceID
+```
 
 ### Key Remapping (Per-Keyboard Configuration)
 
@@ -575,24 +580,30 @@ This configuration uses **per-keyboard modifier mappings** written by Home Manag
 Per-keyboard modifier mappings are applied in `home/features/darwin/keybindings/default.nix`:
 
 - **All Keyboards (default 0-0-0)**:
-  - **Control** → **Command** (Ctrl shortcuts)
-  - **Command** → **Control** (Windows key acts like Ctrl on external keyboards)
-  - **Option** unchanged
-- **Built-in keyboard override**:
-  - **Command** → **Option**
-  - **Option** → **Control**
-  - **Control** → **Command**
+  - **Command** -> **Option**
+  - **Option** -> **Control**
+  - **Control** -> **Command**
+- **Home-office CHERRY keyboard (`046A:00DF`, macOS profile `1130-223-0`)**:
+  - **Control** <-> **Command**
+  - **Alt/Option** unchanged
+- **Office Logitech MX Keys (`046D:B35B`, macOS profile `1133-45915-0`)**:
+  - **Control** <-> **Command**
+  - **Alt/Option** unchanged
+  - **Caps Lock** explicitly remains **Caps Lock**
 
 #### Notes
 - Built-in modifier changes may require **logout/login** to take effect.
 - System Settings can be used to inspect the active modifier keys, but changes should be made in Nix for persistence.
+- The `zoidberg` host enables these mappings with `remapKeys = true`.
+- Global `hidutil UserKeyMapping` should remain unset. If `ioreg` shows a live per-device `UserKeyMapping` for MX Keys, check Logi Options+ or reconnect the keyboard after activation.
 
 #### Verification
-Test your setup:
+Inspect the declared per-device mappings:
 ```bash
-# Internal keyboard: Ctrl+C, Option+2 (workspace switch)
-# External keyboard: Ctrl+C, Win+2 (workspace switch)
-# Both keyboards: Consistent copy/paste behavior
+defaults -currentHost read -g com.apple.keyboard.modifiermapping.1130-223-0
+defaults -currentHost read -g com.apple.keyboard.modifiermapping.1133-45915-0
+hidutil property --get UserKeyMapping
+hidutil list --matching '{"Product":"MX Keys"}'
 ```
 
 ### Shell Configuration
