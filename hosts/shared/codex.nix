@@ -78,6 +78,12 @@ let
       };
 
   managedConfigSettings = {
+    shell_environment_policy.exclude = [
+      "GH_TOKEN"
+      "GITHUB_TOKEN"
+      "GITHUB_PERSONAL_ACCESS_TOKEN"
+    ];
+
     model_providers.local_coding_ollama = {
       name = "Ollama";
       base_url = cfg.localCoding.openaiBaseUrl;
@@ -86,7 +92,8 @@ let
     profiles.local-coding = {
       model = cfg.localCoding.model;
       model_provider = "local_coding_ollama";
-  };
+    };
+
     mcp_servers = lib.mapAttrs renderCodexMcpServer enabledMcpServers;
   };
 in

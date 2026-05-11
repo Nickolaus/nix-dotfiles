@@ -5,7 +5,6 @@
 , ...
 }:
 let
-  githubTokenPath = "${config.home.homeDirectory}/.config/nix/github_token";
   cloudflareMcpTokenPath = "${config.home.homeDirectory}/.config/mcp/cloudflare_mcp_token";
   mcpEnvExport = pkgs.writeShellScriptBin "hm-export-mcp-env" ''
     #!${pkgs.bash}/bin/bash
@@ -61,15 +60,6 @@ let
     set_secret_env GRAFANA_SERVICE_ACCOUNT_TOKEN ${lib.escapeShellArg config.sops.secrets.grafana_service_account_token.path}
     set_secret_env CONTEXT7_API_KEY ${lib.escapeShellArg config.sops.secrets.context7_api_key.path}
     set_secret_env CLOUDFLARE_MCP_TOKEN ${lib.escapeShellArg cloudflareMcpTokenPath}
-
-    if wait_for_secret ${lib.escapeShellArg githubTokenPath}; then
-      github_token="$(trim_secret ${lib.escapeShellArg githubTokenPath})"
-      /bin/launchctl setenv GH_TOKEN "$github_token"
-      /bin/launchctl setenv GITHUB_TOKEN "$github_token"
-      /bin/launchctl setenv GITHUB_PERSONAL_ACCESS_TOKEN "$github_token"
-    else
-      echo "Skipping GitHub token exports; secret file is not available yet: ${githubTokenPath}" >&2
-    fi
   '';
 in
 {
@@ -106,12 +96,6 @@ in
 
     secrets.claude_api_key = {
       path = "${config.home.homeDirectory}/.config/opencommit/claude_api_key";
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.github_token = {
-      path = githubTokenPath;
       format = "yaml";
       mode = "0600";
     };
@@ -179,14 +163,6 @@ in
   };
 
   programs.fish.shellInit = ''
-    set -l github_token_path ${lib.escapeShellArg githubTokenPath}
-    if test -r "$github_token_path"
-      set -l github_token (${pkgs.coreutils}/bin/tr -d '\n' < "$github_token_path")
-      set -gx GH_TOKEN "$github_token"
-      set -gx GITHUB_TOKEN "$github_token"
-      set -gx GITHUB_PERSONAL_ACCESS_TOKEN "$github_token"
-    end
-
     set -l cloudflare_mcp_token_path ${lib.escapeShellArg cloudflareMcpTokenPath}
     if test -r "$cloudflare_mcp_token_path"
       set -gx CLOUDFLARE_MCP_TOKEN (${pkgs.coreutils}/bin/tr -d '\n' < "$cloudflare_mcp_token_path")
@@ -213,7 +189,6 @@ in
         config.sops.secrets.grafana_service_account_token.path
         config.sops.secrets.context7_api_key.path
         config.sops.secrets.cloudflare_mcp_token.path
-        config.sops.secrets.github_token.path
       ];
       ProcessType = "Background";
       StandardOutPath = "${config.home.homeDirectory}/Library/Logs/mcp-env/launchd.log";

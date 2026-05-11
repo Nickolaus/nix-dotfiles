@@ -135,7 +135,7 @@ in
         github = {
           type = "http";
           url = "https://api.githubcopilot.com/mcp/";
-          bearerTokenEnvVar = "GH_TOKEN";
+          bearerTokenEnvVar = "CODEX_GITHUB_TOKEN";
         };
         chrome-devtools = {
           type = "stdio";

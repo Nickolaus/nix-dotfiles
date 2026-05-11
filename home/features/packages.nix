@@ -1,4 +1,20 @@
-{ pkgs, lib, flake, ... }: {
+{ pkgs, lib, flake, ... }:
+let
+  codexWithGithubMcpToken = pkgs.writeShellScriptBin "codex" ''
+    set -euo pipefail
+
+    unset GH_TOKEN GITHUB_TOKEN GITHUB_PERSONAL_ACCESS_TOKEN CODEX_GITHUB_TOKEN
+
+    if github_token="$(${pkgs.coreutils}/bin/env -u GH_TOKEN -u GITHUB_TOKEN -u GITHUB_PERSONAL_ACCESS_TOKEN ${pkgs.gh}/bin/gh auth token 2>/dev/null)"; then
+      if [[ -n "$github_token" ]]; then
+        export CODEX_GITHUB_TOKEN="$github_token"
+      fi
+    fi
+
+    exec ${pkgs.codex}/bin/codex "$@"
+  '';
+in
+{
 
   home.packages = with pkgs; [
     # ═══════════════════════════════════════════════════════════════════════════
@@ -119,7 +135,7 @@
     claude-code              # Agentic coding tool that lives in your terminal
     openai                   # OpenAI Python client library with CLI capabilities
     cursor-cli               # Cursor CLI agent for AI-powered code editing
-    codex                    # OpenAI's coding agent that runs in your terminal
+    codexWithGithubMcpToken  # OpenAI's coding agent with GitHub MCP auth derived from gh login
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 📊 DATA & ANALYTICS
