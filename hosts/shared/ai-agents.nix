@@ -47,6 +47,18 @@ let
         description = "Environment variables for stdio MCP servers.";
       };
 
+      isolateWorkingDirectory = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Whether to launch this stdio MCP server from a stable per-server state directory instead of the invoking project directory.";
+      };
+
+      workingDirectory = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Explicit working directory for stdio MCP servers. When unset and isolateWorkingDirectory is enabled, a per-server state directory is used.";
+      };
+
       headers = mkOption {
         type = types.attrsOf types.str;
         default = { };
@@ -129,6 +141,13 @@ in
           type = "stdio";
           command = "${pkgs.nodejs}/bin/npx";
           args = [ "-y" "chrome-devtools-mcp@latest" ];
+        };
+        puppeteer = {
+          type = "stdio";
+          command = "${pkgs.nodejs}/bin/npx";
+          args = [ "-y" "puppeteer-mcp-server@latest" ];
+          isolateWorkingDirectory = true;
+          targets = [ "codex" ];
         };
         fetch = {
           type = "stdio";
@@ -222,6 +241,18 @@ in
               "aiAgents.mcpServers.${name}.url must be set for HTTP MCP servers."
             else
               "aiAgents.mcpServers.${name}.command must be set for stdio MCP servers.";
+        })
+        config.aiAgents.mcpServers
+      ++ lib.mapAttrsToList
+        (name: server: {
+          assertion = server.type == "stdio" || (!server.isolateWorkingDirectory && server.workingDirectory == null);
+          message = "aiAgents.mcpServers.${name}.isolateWorkingDirectory and workingDirectory are only supported for stdio MCP servers.";
+        })
+        config.aiAgents.mcpServers
+      ++ lib.mapAttrsToList
+        (name: server: {
+          assertion = server.workingDirectory == null || builtins.substring 0 1 server.workingDirectory == "/";
+          message = "aiAgents.mcpServers.${name}.workingDirectory must be an absolute path.";
         })
         config.aiAgents.mcpServers;
   };

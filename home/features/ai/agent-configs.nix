@@ -1,6 +1,6 @@
 { config, lib, osConfig ? { }, pkgs, ... }:
 let
-  inherit (lib) filterAttrs optionalAttrs;
+  inherit (lib) escapeShellArg filterAttrs optionalAttrs;
 
   aiCfg =
     if osConfig ? aiAgents then
@@ -26,7 +26,60 @@ let
 
   renderEnvForInheritedSession = server: server.env;
 
-  renderMcpServerForJson = envRenderer: _name: server:
+  isolatedStdioLauncher = name: server:
+    pkgs.writeShellScript "ai-agent-mcp-${name}" (
+      ''
+        set -eu
+
+        if [ -n "''${AI_AGENTS_MCP_STATE_DIR:-}" ]; then
+          state_root="$AI_AGENTS_MCP_STATE_DIR"
+        else
+          if [ -z "''${HOME:-}" ]; then
+            echo "HOME must be set to derive the MCP state directory" >&2
+            exit 1
+          fi
+
+          case "$(${pkgs.coreutils}/bin/uname -s 2>/dev/null || uname -s)" in
+            Darwin)
+              state_root="$HOME/Library/Logs/ai-agents/mcp"
+              ;;
+            *)
+              state_root="''${XDG_STATE_HOME:-$HOME/.local/state}/ai-agents/mcp"
+              ;;
+          esac
+        fi
+
+        server_name=${escapeShellArg name}
+      '' + (
+        if server.workingDirectory != null then
+          ''
+            run_dir=${escapeShellArg server.workingDirectory}
+          ''
+        else
+          ''
+            run_dir="$state_root/$server_name"
+          ''
+      ) + ''
+
+        ${pkgs.coreutils}/bin/mkdir -p "$run_dir"
+        cd "$run_dir"
+        exec ${escapeShellArg server.command} "$@"
+      ''
+    );
+
+  renderStdioCommand = name: server:
+    let
+      useIsolatedWorkingDirectory = server.isolateWorkingDirectory || server.workingDirectory != null;
+    in
+    {
+      command =
+        if useIsolatedWorkingDirectory then
+          "${isolatedStdioLauncher name server}"
+        else
+          server.command;
+    };
+
+  renderMcpServerForJson = envRenderer: name: server:
     if server.type == "http" then
       {
         type = "http";
@@ -35,9 +88,8 @@ let
         headers = server.headers;
       }
     else
-      {
-        command = server.command;
-      } // optionalAttrs (server.args != [ ]) {
+      renderStdioCommand name server
+      // optionalAttrs (server.args != [ ]) {
         args = server.args;
       } // optionalAttrs ((envRenderer server) != { }) {
         env = envRenderer server;
