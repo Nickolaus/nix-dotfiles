@@ -7,6 +7,11 @@ lib.mkIf pkgs.stdenv.isDarwin {
     devenv # Development environment (from nixpkgs)
 
     # ═══════════════════════════════════════════════════════════════════════════
+    # 🔐 SECURITY & SECRETS MANAGEMENT
+    # ═══════════════════════════════════════════════════════════════════════════
+    keepassxc # Offline password manager
+
+    # ═══════════════════════════════════════════════════════════════════════════
     # 💬 COMMUNICATION & COLLABORATION
     # ═══════════════════════════════════════════════════════════════════════════
     # slack # Managed by Microsoft Company Portal

@@ -68,7 +68,7 @@ let
       bearerTokenEnvVar = mkOption {
         type = types.nullOr types.str;
         default = null;
-        description = "Environment variable containing a bearer token for HTTP MCP servers that do not support OAuth login.";
+        description = "Environment variable containing a bearer token for HTTP MCP servers that require bearer-token authentication.";
       };
 
       inheritEnv = mkOption {
@@ -135,7 +135,7 @@ in
         github = {
           type = "http";
           url = "https://api.githubcopilot.com/mcp/";
-          bearerTokenEnvVar = "CODEX_GITHUB_TOKEN";
+          bearerTokenEnvVar = "GITHUB_MCP_PAT";
         };
         chrome-devtools = {
           type = "stdio";

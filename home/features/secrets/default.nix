@@ -6,6 +6,7 @@
 }:
 let
   cloudflareMcpTokenPath = "${config.home.homeDirectory}/.config/mcp/cloudflare_mcp_token";
+  githubMcpPatPath = "${config.home.homeDirectory}/.config/mcp/github_mcp_pat";
   mcpEnvExport = pkgs.writeShellScriptBin "hm-export-mcp-env" ''
     #!${pkgs.bash}/bin/bash
     set -euo pipefail
@@ -60,6 +61,7 @@ let
     set_secret_env GRAFANA_SERVICE_ACCOUNT_TOKEN ${lib.escapeShellArg config.sops.secrets.grafana_service_account_token.path}
     set_secret_env CONTEXT7_API_KEY ${lib.escapeShellArg config.sops.secrets.context7_api_key.path}
     set_secret_env CLOUDFLARE_MCP_TOKEN ${lib.escapeShellArg cloudflareMcpTokenPath}
+    set_secret_env GITHUB_MCP_PAT ${lib.escapeShellArg githubMcpPatPath}
   '';
 in
 {
@@ -108,6 +110,12 @@ in
 
     secrets.cloudflare_mcp_token = {
       path = cloudflareMcpTokenPath;
+      format = "yaml";
+      mode = "0600";
+    };
+
+    secrets.github_mcp_pat = {
+      path = githubMcpPatPath;
       format = "yaml";
       mode = "0600";
     };
@@ -167,6 +175,11 @@ in
     if test -r "$cloudflare_mcp_token_path"
       set -gx CLOUDFLARE_MCP_TOKEN (${pkgs.coreutils}/bin/tr -d '\n' < "$cloudflare_mcp_token_path")
     end
+
+    set -l github_mcp_pat_path ${lib.escapeShellArg githubMcpPatPath}
+    if test -r "$github_mcp_pat_path"
+      set -gx GITHUB_MCP_PAT (${pkgs.coreutils}/bin/tr -d '\n' < "$github_mcp_pat_path")
+    end
   '';
 
   home.activation.exportMcpEnv = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin
@@ -189,6 +202,7 @@ in
         config.sops.secrets.grafana_service_account_token.path
         config.sops.secrets.context7_api_key.path
         config.sops.secrets.cloudflare_mcp_token.path
+        config.sops.secrets.github_mcp_pat.path
       ];
       ProcessType = "Background";
       StandardOutPath = "${config.home.homeDirectory}/Library/Logs/mcp-env/launchd.log";

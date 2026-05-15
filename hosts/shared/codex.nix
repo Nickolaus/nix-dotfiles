@@ -82,6 +82,8 @@ let
       "GH_TOKEN"
       "GITHUB_TOKEN"
       "GITHUB_PERSONAL_ACCESS_TOKEN"
+      "CODEX_GITHUB_TOKEN"
+      "GITHUB_MCP_PAT"
     ];
 
     model_providers.local_coding_ollama = {
