@@ -1,0 +1,12 @@
+---
+name: Linux switch
+command: cd ~/.config/nix-dotfiles && sudo nixos-rebuild switch --flake .#{{host}}
+tags:
+  - nix-dotfiles
+  - linux
+description: Rebuild and activate a NixOS host configuration.
+arguments:
+  - name: host
+    description: NixOS host flake target.
+    default_value: farnsworth
+shells: []

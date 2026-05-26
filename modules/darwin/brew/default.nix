@@ -61,6 +61,7 @@
       "phpstorm" # PHP IDE
       "discord" # Voice and text chat
       "zed" # Fast native code editor; Homebrew cask tracks current macOS app releases
+      "warp" # Agent-enabled terminal trial; Homebrew cask tracks current macOS app releases
     ];
   };
 }

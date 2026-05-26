@@ -117,10 +117,12 @@ lib.mkIf pkgs.stdenv.isLinux {
         # Opacity rules
         "opacity 0.9 0.9,class:^(thunar)$"
         "opacity 0.95 0.95,class:^(wezterm)$"
+        "opacity 0.95 0.95,class:^(dev.warp.Warp|Warp)$"
 
         # Workspace assignments
         "workspace 2,class:^(firefox)$"
         "workspace 3,class:^(Slack)$"
+        "workspace 7,class:^(dev.warp.Warp|Warp)$"
       ];
 
       # Gestures
@@ -141,6 +143,7 @@ lib.mkIf pkgs.stdenv.isLinux {
       bind = [
         # Application launchers
         "$mod, RETURN, exec, wezterm"
+        "$mod SHIFT, RETURN, exec, warp-terminal"
         "$mod, D, exec, rofi -show drun"
         "$mod, E, exec, thunar"
 

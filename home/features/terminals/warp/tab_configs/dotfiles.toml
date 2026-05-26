@@ -1,0 +1,31 @@
+name = "Dotfiles"
+color = "blue"
+
+[[panes]]
+id = "root"
+split = "horizontal"
+children = ["editor", "ops"]
+
+[[panes]]
+id = "editor"
+type = "terminal"
+directory = "~/.config/nix-dotfiles"
+commands = ["nvim ."]
+is_focused = true
+
+[[panes]]
+id = "ops"
+split = "vertical"
+children = ["status", "commands"]
+
+[[panes]]
+id = "status"
+type = "terminal"
+directory = "~/.config/nix-dotfiles"
+commands = ["git status --short"]
+
+[[panes]]
+id = "commands"
+type = "terminal"
+directory = "~/.config/nix-dotfiles"
+commands = ["printf 'Checks: ./scripts/check-config.sh\\nUpdate: ./scripts/update-system.sh\\nDarwin switch: darwin-rebuild switch --flake .#zoidberg\\nLinux switch: sudo nixos-rebuild switch --flake .#farnsworth\\n'"]

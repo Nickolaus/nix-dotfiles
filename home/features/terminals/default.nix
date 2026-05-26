@@ -2,5 +2,6 @@
   imports = [
     ./tmux
     ./wezterm
+    ./warp
   ];
-} 
+}

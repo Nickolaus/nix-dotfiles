@@ -1,20 +1,19 @@
-{
-  pkgs,
-  ...
+{ pkgs
+, ...
 }: {
   services.aerospace = {
     enable = true;
     package = pkgs.aerospace;
 
-    settings= {
+    settings = {
       enable-normalization-flatten-containers = true;
       enable-normalization-opposite-orientation-for-nested-containers = true;
 
-      on-focused-monitor-changed = ["move-mouse monitor-lazy-center"];
+      on-focused-monitor-changed = [ "move-mouse monitor-lazy-center" ];
       on-focus-changed = [
         "move-mouse window-lazy-center"
       ];
-      
+
       automatically-unhide-macos-hidden-apps = false;
 
       accordion-padding = 30;
@@ -43,10 +42,10 @@
         "3" = "main";
         "4" = "main";
         "5" = "main";
-        "6" = ["LG HDR 4K" "main"];
-        "7" = ["LG HDR 4K" "main"];
-        "8" = ["built-in" "main"];
-        "9" = ["built-in" "main"];
+        "6" = [ "LG HDR 4K" "main" ];
+        "7" = [ "LG HDR 4K" "main" ];
+        "8" = [ "built-in" "main" ];
+        "9" = [ "built-in" "main" ];
       };
 
       key-mapping.preset = "qwerty";
@@ -65,15 +64,15 @@
         ctrl-shift-n = "workspace --wrap-around next";
 
         # Move windows to workspaces and follow
-        ctrl-shift-1 = ["move-node-to-workspace 1" "workspace 1"];
-        ctrl-shift-2 = ["move-node-to-workspace 2" "workspace 2"];
-        ctrl-shift-3 = ["move-node-to-workspace 3" "workspace 3"];
-        ctrl-shift-4 = ["move-node-to-workspace 4" "workspace 4"];
-        ctrl-shift-5 = ["move-node-to-workspace 5" "workspace 5"];
-        ctrl-shift-f1 = ["move-node-to-workspace 6" "workspace 6"];
-        ctrl-shift-f2 = ["move-node-to-workspace 7" "workspace 7"];
-        ctrl-shift-f3 = ["move-node-to-workspace 8" "workspace 8"];
-        ctrl-shift-f4 = ["move-node-to-workspace 9" "workspace 9"];
+        ctrl-shift-1 = [ "move-node-to-workspace 1" "workspace 1" ];
+        ctrl-shift-2 = [ "move-node-to-workspace 2" "workspace 2" ];
+        ctrl-shift-3 = [ "move-node-to-workspace 3" "workspace 3" ];
+        ctrl-shift-4 = [ "move-node-to-workspace 4" "workspace 4" ];
+        ctrl-shift-5 = [ "move-node-to-workspace 5" "workspace 5" ];
+        ctrl-shift-f1 = [ "move-node-to-workspace 6" "workspace 6" ];
+        ctrl-shift-f2 = [ "move-node-to-workspace 7" "workspace 7" ];
+        ctrl-shift-f3 = [ "move-node-to-workspace 8" "workspace 8" ];
+        ctrl-shift-f4 = [ "move-node-to-workspace 9" "workspace 9" ];
 
         # Window focus navigation
         ctrl-left = "focus --boundaries-action wrap-around-the-workspace left";
@@ -100,19 +99,20 @@
         ctrl-f = "layout floating tiling";
 
         # Manual layout switching shortcuts
-        ctrl-t = "exec-and-forget /run/current-system/sw/bin/aerospace layout tiles horizontal vertical";    # Force layout switch
+        ctrl-t = "exec-and-forget /run/current-system/sw/bin/aerospace layout tiles horizontal vertical"; # Force layout switch
 
         # MonitorManager integration - applies all workspace layouts based on monitor setup
         ctrl-m = "exec-and-forget /opt/homebrew/bin/hs -c 'MonitorManager.fix()'";
 
         # Development-focused app launches
         ctrl-enter = "exec-and-forget open -na WezTerm";
+        ctrl-shift-enter = "exec-and-forget open -na Warp";
         ctrl-b = "exec-and-forget open -na \"Google Chrome\" --args --new-window";
 
         # System utilities
         ctrl-l = "exec-and-forget pmset displaysleepnow";
         ctrl-shift-q = "close --quit-if-last-window";
-        
+
         # Disable unwanted cmd+letter bindings that conflict with apps
         # cmd-b = []; # Disable default workspace B binding
         # cmd-l = []; # Disable default workspace L binding
@@ -157,9 +157,9 @@
         esc = "mode main";
         enter = "mode main";
         # Quick workspace assignments per monitor
-        "1" = "move-node-to-monitor 1";  # Ultra-wide
-        "2" = "move-node-to-monitor 2";  # Laptop
-        "3" = "move-node-to-monitor 3";  # QHD
+        "1" = "move-node-to-monitor 1"; # Ultra-wide
+        "2" = "move-node-to-monitor 2"; # Laptop
+        "3" = "move-node-to-monitor 3"; # QHD
         # Focus monitor directly (horizontal only)
         left = "focus-monitor left";
         right = "focus-monitor right";
@@ -170,7 +170,7 @@
         # PRIMARY CODING APPS
         {
           "if" = {
-            "app-id" = "com.todesktop.230313mzl4w4u92";  # Cursor
+            "app-id" = "com.todesktop.230313mzl4w4u92"; # Cursor
           };
           "run" = "move-node-to-workspace 1";
         }
@@ -186,7 +186,7 @@
           };
           "run" = "move-node-to-workspace 1";
         }
-        
+
         # TERMINAL - Goes to coding workspace
         {
           "if" = {
@@ -194,7 +194,13 @@
           };
           "run" = "move-node-to-workspace 7";
         }
-        
+        {
+          "if" = {
+            "app-id" = "dev.warp.Warp-Stable";
+          };
+          "run" = "move-node-to-workspace 7";
+        }
+
         # BROWSERS
         {
           "if".app-name-regex-substring = "Google.Chrome";
@@ -212,7 +218,7 @@
           };
           "run" = "move-node-to-workspace 6";
         }
-        
+
         # COMMUNICATION
         {
           "if" = {
@@ -232,7 +238,7 @@
           };
           "run" = "move-node-to-workspace 9";
         }
-        
+
         # UTILITIES
         {
           "if" = {

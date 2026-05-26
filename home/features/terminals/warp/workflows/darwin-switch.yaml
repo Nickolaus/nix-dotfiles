@@ -1,0 +1,9 @@
+---
+name: Darwin switch
+command: cd ~/.config/nix-dotfiles && darwin-rebuild switch --flake .#zoidberg
+tags:
+  - nix-dotfiles
+  - darwin
+description: Rebuild and activate the zoidberg Darwin configuration.
+arguments: []
+shells: []

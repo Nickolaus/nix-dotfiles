@@ -1,0 +1,9 @@
+---
+name: Dotfiles check
+command: cd ~/.config/nix-dotfiles && ./scripts/check-config.sh
+tags:
+  - nix-dotfiles
+  - nix
+description: Run the repository configuration checks.
+arguments: []
+shells: []
