@@ -3,6 +3,7 @@
 }: {
   environment.etc."nix/nix.custom.conf".text = ''
     lazy-trees = true
+    auto-optimise-store = true
     trusted-users = root C.Hessel
     extra-substituters = https://devenv.cachix.org
     trusted-substituters = https://cachix.cachix.org https://nixpkgs.cachix.org https://devenv.cachix.org
