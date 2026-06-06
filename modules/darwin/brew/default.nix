@@ -18,6 +18,7 @@
     onActivation = {
       autoUpdate = false;
       cleanup = "uninstall";
+      extraFlags = [ "--force-cleanup" ];
       upgrade = false;
     };
 

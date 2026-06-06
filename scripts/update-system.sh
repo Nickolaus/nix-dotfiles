@@ -165,7 +165,7 @@ update_homebrew() {
     fi
 
     log_info "Installing/upgrading declared Homebrew packages..."
-    if HOMEBREW_NO_AUTO_UPDATE=1 brew bundle --file="$brewfile" --upgrade --cleanup; then
+    if HOMEBREW_NO_AUTO_UPDATE=1 brew bundle --file="$brewfile" --upgrade --cleanup --force-cleanup; then
         rm -f "$brewfile"
         log_success "Homebrew packages updated successfully"
     else
@@ -245,15 +245,116 @@ verify_system_health() {
     log_info "Test your applications and tools to ensure everything works correctly"
 }
 
+# Remove macOS user-intent ACL markers from dead app bundles before GC.
+scrub_macl_from_dead_apps() {
+    if [[ "$(detect_platform)" != "darwin" ]]; then
+        return 0
+    fi
+
+    local dead_paths_file
+    dead_paths_file=$(mktemp -t nix-dotfiles-dead-paths.XXXXXX)
+
+    log_info "Scanning dead Nix store paths for macOS app access-control metadata..."
+    if ! nix-store --gc --print-dead >"$dead_paths_file"; then
+        rm -f "$dead_paths_file"
+        log_warning "Could not list dead store paths; skipping com.apple.macl scrub"
+        return 0
+    fi
+
+    local scrubbed=0
+    local prepared=0
+    local dead_path
+    local app_path
+    while IFS= read -r dead_path; do
+        [[ -d "$dead_path" ]] || continue
+
+        while IFS= read -r -d '' app_path; do
+            if xattr -p com.apple.macl "$app_path" >/dev/null 2>&1; then
+                log_info "Removing com.apple.macl from dead app bundle: $app_path"
+                if sudo xattr -d com.apple.macl "$app_path"; then
+                    scrubbed=$((scrubbed + 1))
+                else
+                    log_warning "Could not remove com.apple.macl from: $app_path"
+                fi
+            fi
+
+            log_info "Making dead app bundle directories writable for GC: $app_path"
+            if sudo find "$app_path" -type d -exec chmod u+w {} +; then
+                prepared=$((prepared + 1))
+            else
+                log_warning "Could not prepare app bundle directories for GC: $app_path"
+            fi
+        done < <(find "$dead_path" -type d -name "*.app" -prune -print0 2>/dev/null)
+    done <"$dead_paths_file"
+
+    rm -f "$dead_paths_file"
+
+    if [[ "$scrubbed" -gt 0 ]]; then
+        log_success "Removed com.apple.macl from $scrubbed dead app bundle(s)"
+    else
+        log_info "No com.apple.macl attributes found on dead app bundles"
+    fi
+
+    if [[ "$prepared" -gt 0 ]]; then
+        log_success "Prepared $prepared dead app bundle(s) for garbage collection"
+    fi
+}
+
 # Cleanup old generations
 cleanup_generations() {
     log_step "Cleanup: Removing Old Generations"
 
-    log_info "Cleaning up old generations (keeping last 90 days)..."
-    if nix-collect-garbage --delete-older-than 90d; then
-        log_success "Old generations cleaned up"
+    local retention="180d"
+    local user_profile="/nix/var/nix/profiles/per-user/$USER/profile"
+
+    log_info "Cleaning up old generations (keeping last $retention)..."
+
+    if command -v nh >/dev/null 2>&1; then
+        log_info "Removing old generations with nh..."
+        if ! nh clean all --keep-since "$retention" --elevation-strategy auto --no-gc; then
+            log_warning "nh generation cleanup failed (non-critical)"
+        fi
+
+        scrub_macl_from_dead_apps
+
+        log_info "Running Nix store garbage collection and optimisation with nh..."
+        if nh clean all --keep-since "$retention" --elevation-strategy auto --optimise; then
+            log_success "Old generations cleaned up, unreachable store paths deleted, and store optimised"
+        else
+            log_warning "nh store garbage collection failed (non-critical)"
+        fi
+
+        return 0
+    fi
+
+    if [[ -e /nix/var/nix/profiles/system ]]; then
+        log_info "Removing system profile history older than $retention..."
+        if ! sudo nix profile wipe-history --profile /nix/var/nix/profiles/system --older-than "$retention"; then
+            log_warning "System profile history cleanup failed (non-critical)"
+        fi
+    fi
+
+    if [[ -e "$user_profile" ]]; then
+        log_info "Removing user profile history older than $retention..."
+        if ! nix profile wipe-history --profile "$user_profile" --older-than "$retention"; then
+            log_warning "User profile history cleanup failed (non-critical)"
+        fi
+    fi
+
+    scrub_macl_from_dead_apps
+
+    log_info "Running Nix store garbage collection..."
+    if sudo nix store gc; then
+        log_success "Old generations cleaned up and unreachable store paths deleted"
     else
-        log_warning "Generation cleanup failed (non-critical)"
+        log_warning "Store garbage collection failed (non-critical)"
+    fi
+
+    log_info "Optimising Nix store..."
+    if sudo nix store optimise; then
+        log_success "Nix store optimised"
+    else
+        log_warning "Nix store optimisation failed (non-critical)"
     fi
 }
 
@@ -305,6 +406,7 @@ case "${1:-}" in
         echo "Options:"
         echo "  --help, -h    Show this help message"
         echo "  --dry-run     Show what would be done without executing"
+        echo "  --cleanup     Clean generations older than 180 days, run Nix store GC, and optimise the store"
         echo
         echo "This script performs a comprehensive system update:"
         echo "1. Check system health and evaluate declared host configurations"
@@ -323,6 +425,11 @@ case "${1:-}" in
         echo "4. Update Homebrew packages on macOS"
         echo "5. Apply configuration changes (darwin-rebuild/nixos-rebuild)"
         echo "6. Verify system health"
+        exit 0
+        ;;
+    "--cleanup")
+        check_directory
+        cleanup_generations
         exit 0
         ;;
     "")

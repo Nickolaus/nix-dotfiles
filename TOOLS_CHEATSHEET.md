@@ -600,7 +600,7 @@ determinate-nixd bug "Issue title" "Description"  # File bug report
 - ✅ Interactive prompts with confirmation
 - ✅ Colored output and progress indicators
 - ✅ Error handling with rollback instructions
-- ✅ Optional cleanup of old generations
+- ✅ Optional cleanup of old generations, Nix store GC, and store optimisation
 - ✅ Platform detection (macOS/Linux)
 
 #### Update Workflows by Scenario

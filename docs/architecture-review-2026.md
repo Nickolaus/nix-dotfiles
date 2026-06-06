@@ -192,7 +192,7 @@ The timer now renders an updated `flake.lock` into a temporary file with `nix fl
 
 In a flake-managed repo, update prompts should be tied to `flake.lock` or disabled. Channel-based notifications in a flake repo create ambiguity and low-signal operational noise.
 
-### 6. Resolved: Darwin Homebrew activation is now idempotent
+### 6. Resolved: Darwin Homebrew activation uses strict declarative cleanup
 
 #### Repo facts
 
@@ -214,11 +214,22 @@ This was a convenience-first stance, not a reproducibility-first stance. It mean
 
 #### Current state
 
-Normal `darwin-rebuild switch` now disables Homebrew auto-update and package upgrades during activation. The explicit update workflow performs Homebrew updates in its own step using the declarative Brewfile.
+Normal `darwin-rebuild switch` now disables Homebrew auto-update and package upgrades during activation, but keeps strict declarative cleanup enabled:
+
+```nix
+onActivation = {
+  autoUpdate = false;
+  cleanup = "uninstall";
+  extraFlags = [ "--force-cleanup" ];
+  upgrade = false;
+};
+```
+
+The explicit update workflow still performs Homebrew metadata updates and package upgrades in its own step using the declarative Brewfile. Activation only enforces that installed Homebrew packages match the declared Brewfile and passes Homebrew's required non-interactive cleanup flag.
 
 #### Best-practice comparison
 
-Keeping ordinary activation idempotent is the better default. Mutable Homebrew updates still exist, but they now happen during the explicit update workflow rather than every switch.
+Keeping ordinary activation free of mutable upgrades is the important boundary. Strict cleanup is acceptable here because this machine intentionally treats nix-darwin's Brewfile as the Homebrew ownership source, and Homebrew now requires `--force-cleanup` for non-interactive cleanup.
 
 ### 7. Resolved: low-level ownership duplication was reduced
 
@@ -281,7 +292,7 @@ For a repo of this size, domain ownership should be single-purpose where possibl
 
 ### Optional longer-term improvements
 
-1. Keep normal Darwin activation idempotent; use the explicit update workflow for Homebrew upgrades.
+1. Keep normal Darwin activation free of Homebrew auto-updates and upgrades; use the explicit update workflow for Homebrew upgrades.
 
 ## Do Not Change
 
@@ -296,7 +307,7 @@ These patterns are correct and should remain intentionally tool-specific:
 
 - The root filesystem is persistent unless a separate ephemeral-root strategy is added.
 - Claude global MCP handling is still more stateful and fragile than the rest of the agent architecture.
-- Homebrew updates are intentionally mutable, but now isolated to the explicit update workflow rather than ordinary activation.
+- Homebrew updates are intentionally mutable, but now isolated to the explicit update workflow rather than ordinary activation. Homebrew cleanup remains strict and will remove undeclared Homebrew packages during activation.
 
 ## Source Notes
 
