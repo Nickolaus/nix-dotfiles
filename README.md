@@ -169,11 +169,15 @@ programs.some-app.apiKey = config.sops.secrets.api_key.path;
 
 **SSH key management example**:
 ```bash
-# Work repositories (default)
+# Work repositories under ~/Programming/work use ~/.ssh/id_ed25519
+mkdir -p ~/Programming/work
+cd ~/Programming/work
 git clone git@github.com:company/repo.git
 
-# Personal repositories (explicit hostname)  
-git clone git@github.com-personal:user/repo.git
+# Personal repositories under ~/Programming/personal use ~/.ssh/id_ed25519_personal
+mkdir -p ~/Programming/personal
+cd ~/Programming/personal
+git clone git@github.com:user/repo.git
 ```
 
 ##### Key Management

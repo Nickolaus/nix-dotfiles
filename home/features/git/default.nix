@@ -44,6 +44,7 @@ in
       core.untrackedCache = true;
       init.templateDir = "~/.config/git/templates";
 
+      includeIf."gitdir:${homeDir}/Programming/work/".path = "~/.config/git/work.inc";
       includeIf."gitdir:${homeDir}/Programming/personal/".path = "~/.config/git/personal.inc";
       includeIf."gitdir:${homeDir}/.config/nix-dotfiles/".path = "~/.config/git/personal.inc";
     };
@@ -66,6 +67,11 @@ in
   home.file = {
     ".ssh/allowed_signers".text = "c.hessel@shopware.com namespaces=\"git\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHBw37pfQ1qRRONPampA3kv/2AhcmZxgzdMPcXuRI9Ue";
 
+    ".config/git/work.inc".text = ''
+      [core]
+        sshCommand = ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes
+    '';
+
     ".config/git/personal.inc".text = ''
       [core]
         sshCommand = ssh -i ~/.ssh/id_ed25519_personal -o IdentitiesOnly=yes
@@ -84,6 +90,7 @@ in
   };
 
   home.activation.createProgrammingDirectories = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run ${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArg "${homeDir}/Programming/work"}
     run ${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArg "${homeDir}/Programming/personal"}
   '';
 }
