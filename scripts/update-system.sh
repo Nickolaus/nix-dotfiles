@@ -300,6 +300,41 @@ scrub_macl_from_dead_apps() {
     fi
 }
 
+# Prune uv's cache only when no uv-managed process is actively using it.
+prune_uv_cache() {
+    if ! command -v uv >/dev/null 2>&1; then
+        log_info "uv is not installed; skipping uv cache prune"
+        return 0
+    fi
+
+    local active_uv_processes
+    active_uv_processes=$(
+        ps -axo pid=,command= |
+            awk '
+                /(^|\/| )uv( |$)|\/\.cache\/uv\// &&
+                $0 !~ /uv cache prune/ &&
+                $0 !~ /awk / {
+                    print
+                    count++
+                }
+                END { exit(count > 0 ? 0 : 1) }
+            '
+    ) || true
+
+    if [[ -n "$active_uv_processes" ]]; then
+        log_warning "uv cache is currently in use; skipping uv cache prune"
+        echo "$active_uv_processes" | sed -n '1,10p'
+        return 0
+    fi
+
+    log_info "Pruning uv cache..."
+    if uv cache prune; then
+        log_success "uv cache pruned"
+    else
+        log_warning "uv cache prune failed (non-critical)"
+    fi
+}
+
 # Cleanup old generations
 cleanup_generations() {
     log_step "Cleanup: Removing Old Generations"
@@ -323,6 +358,8 @@ cleanup_generations() {
         else
             log_warning "nh store garbage collection failed (non-critical)"
         fi
+
+        prune_uv_cache
 
         return 0
     fi
@@ -356,6 +393,8 @@ cleanup_generations() {
     else
         log_warning "Nix store optimisation failed (non-critical)"
     fi
+
+    prune_uv_cache
 }
 
 # Main function
@@ -406,7 +445,7 @@ case "${1:-}" in
         echo "Options:"
         echo "  --help, -h    Show this help message"
         echo "  --dry-run     Show what would be done without executing"
-        echo "  --cleanup     Clean generations older than 180 days, run Nix store GC, and optimise the store"
+        echo "  --cleanup     Clean generations older than 180 days, run Nix store GC, optimise the store, and prune caches"
         echo
         echo "This script performs a comprehensive system update:"
         echo "1. Check system health and evaluate declared host configurations"
