@@ -73,7 +73,7 @@
     nodejs_24
     cargo
     uv
-    (python3.withPackages (ps: with ps; [ pyyaml ]))  # Python with pyyaml package
+    (python3.withPackages (ps: with ps; [ pyyaml pytest ]))  # Python with pyyaml and pytest
     bun
     asdf-vm
     gnumake
