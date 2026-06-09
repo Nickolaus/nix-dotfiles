@@ -383,7 +383,8 @@ caveman-claude-install-full     # Explicit Claude plugin + hooks, no MCP shrink
 ```
 
 - Codex Caveman skills are installed declaratively from the pinned Nix flake input into `~/.codex/skills/`.
-- In Codex, activate per session with `/caveman`, `/caveman lite`, or `/caveman ultra`.
+- In Codex CLI, activate per session through `/skills` and select `caveman`, or ask in plain language: `use caveman mode`, `talk like caveman`, or `stop caveman`.
+- Caveman's upstream `/caveman` convention is not registered as a current Codex CLI slash command by this declarative setup.
 - Claude setup is explicit because its plugin and hook install mutate Claude-managed state.
 - `caveman-shrink`, repo-local `--with-init` rules, and compression of `AGENTS.md`/`CLAUDE.md` are intentionally not default.
 

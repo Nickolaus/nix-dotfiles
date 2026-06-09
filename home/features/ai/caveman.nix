@@ -40,7 +40,9 @@ in
         fi
       done
       echo
-      echo "Codex usage: start a session and run /caveman, /caveman lite, or /caveman ultra."
+      echo "Codex usage: start a new session, run /skills, and select caveman."
+      echo "Plain prompts also work: 'use caveman mode', 'talk like caveman', or 'stop caveman'."
+      echo "Note: /caveman is a Caveman upstream slash-command convention, but current Codex CLI only exposes installed skills through /skills."
       echo "Claude setup is explicit: caveman-claude-install-minimal or caveman-claude-install-full."
     '')
 
