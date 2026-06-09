@@ -16,6 +16,11 @@
 
     mac-app-util.url = "github:hraban/mac-app-util";
 
+    caveman = {
+      url = "github:JuliusBrussee/caveman/v1.8.2";
+      flake = false;
+    };
+
     # Disko for declarative disk management
     disko = {
       url = "github:nix-community/disko";

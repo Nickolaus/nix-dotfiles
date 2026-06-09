@@ -374,6 +374,19 @@ llm-claude-local     # Uses ~/.claude/settings.json via the session proxy
   - `type = "stdio"` uses `command`, optional `args`, and optional `env`
 - GitHub MCP is HTTP, not stdio
 
+#### Caveman Agent Compression
+```bash
+caveman-status                  # Check pinned Codex skill install and usage hints
+caveman-upstream-dry-run        # Preview Caveman upstream installer actions
+caveman-claude-install-minimal  # Explicit Claude plugin install, no hooks/MCP shrink
+caveman-claude-install-full     # Explicit Claude plugin + hooks, no MCP shrink
+```
+
+- Codex Caveman skills are installed declaratively from the pinned Nix flake input into `~/.codex/skills/`.
+- In Codex, activate per session with `/caveman`, `/caveman lite`, or `/caveman ultra`.
+- Claude setup is explicit because its plugin and hook install mutate Claude-managed state.
+- `caveman-shrink`, repo-local `--with-init` rules, and compression of `AGENTS.md`/`CLAUDE.md` are intentionally not default.
+
 #### Troubleshooting
 ```bash
 # Check service status
