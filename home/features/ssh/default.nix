@@ -2,97 +2,88 @@
   programs.ssh = {
     enable = true;
     enableDefaultConfig = false;
-    
-    # Global SSH settings
-    extraConfig = ''
-      Host *
-        SetEnv TERM=xterm-256color
-        TCPKeepAlive yes
-        ServerAliveInterval 60
-        ServerAliveCountMax 1200
-        IdentitiesOnly yes
-    '';
-    
+
     # Host-specific configurations for different SSH keys
     # WORK IS DEFAULT - Personal repositories use special hostnames
-    matchBlocks = {
+    settings = {
       # Personal GitHub (requires explicit hostname)
       "github.com-personal" = {
-        hostname = "github.com";
-        user = "git";
-        identityFile = "~/.ssh/id_ed25519_personal";  # Personal key
-        identitiesOnly = true;
+        HostName = "github.com";
+        User = "git";
+        IdentityFile = "~/.ssh/id_ed25519_personal"; # Personal key
+        IdentitiesOnly = true;
       };
-      
+
       # Personal GitLab (requires explicit hostname)
       "gitlab.com-personal" = {
-        hostname = "gitlab.com";
-        user = "git";
-        identityFile = "~/.ssh/id_ed25519_personal";  # Personal key
-        identitiesOnly = true;
+        HostName = "gitlab.com";
+        User = "git";
+        IdentityFile = "~/.ssh/id_ed25519_personal"; # Personal key
+        IdentitiesOnly = true;
       };
-      
+
       # Personal Home Assistant (Production)
       "home-assistant" = {
-        hostname = "192.168.2.50";
-        user = "root";
-        identityFile = "~/.ssh/id_ed25519_personal";  # Personal key
-        identitiesOnly = true;
+        HostName = "192.168.2.50";
+        User = "root";
+        IdentityFile = "~/.ssh/id_ed25519_personal"; # Personal key
+        IdentitiesOnly = true;
       };
-      
+
       # Home Assistant Testing VMs
       "ha-test-vm" = {
-        hostname = "192.168.2.40";
-        user = "root";
-        identityFile = "~/.ssh/id_ed25519_personal";  # Personal key
-        identitiesOnly = true;
-        extraOptions = {
-          StrictHostKeyChecking = "no";
-        };
+        HostName = "192.168.2.40";
+        User = "root";
+        IdentityFile = "~/.ssh/id_ed25519_personal"; # Personal key
+        IdentitiesOnly = true;
+        StrictHostKeyChecking = "no";
       };
-      
+
       "192.168.2.40" = {
-        user = "root";
-        identityFile = "~/.ssh/id_ed25519_personal";
-        identitiesOnly = true;
-        extraOptions = {
-          StrictHostKeyChecking = "no";
-        };
+        User = "root";
+        IdentityFile = "~/.ssh/id_ed25519_personal";
+        IdentitiesOnly = true;
+        StrictHostKeyChecking = "no";
       };
-      
+
       # All 192.168.2.* hosts (HA testing network)
       "192.168.2.*" = {
-        user = "root";
-        identityFile = "~/.ssh/id_ed25519_personal";
-        identitiesOnly = true;
-        extraOptions = {
-          StrictHostKeyChecking = "no";
-        };
+        User = "root";
+        IdentityFile = "~/.ssh/id_ed25519_personal";
+        IdentitiesOnly = true;
+        StrictHostKeyChecking = "no";
       };
-      
+
       # Work GitHub (default - no special hostname needed)
       "github.com" = {
-        hostname = "github.com";
-        user = "git";
-        identityFile = "~/.ssh/id_ed25519";  # Work key (DEFAULT)
-        identitiesOnly = true;
+        HostName = "github.com";
+        User = "git";
+        IdentityFile = "~/.ssh/id_ed25519"; # Work key (DEFAULT)
+        IdentitiesOnly = true;
       };
-      
+
       # Work GitLab (default - no special hostname needed)
       "gitlab.com" = {
-        hostname = "gitlab.com";
-        user = "git";
-        identityFile = "~/.ssh/id_ed25519";  # Work key (DEFAULT)
-        identitiesOnly = true;
+        HostName = "gitlab.com";
+        User = "git";
+        IdentityFile = "~/.ssh/id_ed25519"; # Work key (DEFAULT)
+        IdentitiesOnly = true;
       };
-      
+
       # All other hosts use work key (DEFAULT)
       "*" = {
-        identityFile = "~/.ssh/id_ed25519";  # Work key as explicit default
-        addKeysToAgent = "yes";
-        forwardAgent = false;
-        compression = true;
+        SetEnv = {
+          TERM = "xterm-256color";
+        };
+        TCPKeepAlive = true;
+        ServerAliveInterval = 60;
+        ServerAliveCountMax = 1200;
+        IdentitiesOnly = true;
+        IdentityFile = "~/.ssh/id_ed25519"; # Work key as explicit default
+        AddKeysToAgent = "yes";
+        ForwardAgent = false;
+        Compression = true;
       };
     };
   };
-} 
+}

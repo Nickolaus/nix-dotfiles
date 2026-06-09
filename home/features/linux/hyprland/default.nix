@@ -7,6 +7,7 @@ lib.mkIf pkgs.stdenv.isLinux {
   wayland.windowManager.hyprland = {
     enable = true;
     xwayland.enable = true;
+    configType = "hyprlang";
 
     settings = {
       # Monitor configuration - adjust per hardware
