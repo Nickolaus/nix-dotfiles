@@ -10,12 +10,11 @@ let
     "caveman-stats"
     "cavecrew"
   ];
-  codexSkillFiles = builtins.listToAttrs (map
+  codexSkillDirs = builtins.listToAttrs (map
     (skill: {
-      name = ".codex/skills/${skill}";
+      name = ".agents/skills/${skill}";
       value = {
         source = cavemanSrc + "/skills/${skill}";
-        recursive = true;
       };
     })
     cavemanSkills);
@@ -23,16 +22,16 @@ let
   installer = "${cavemanSrc}/bin/install.js";
 in
 {
-  home.file = codexSkillFiles;
+  home.file = codexSkillDirs;
 
   home.packages = [
     (pkgs.writeShellScriptBin "caveman-status" ''
       set -euo pipefail
 
       echo "Caveman source: ${cavemanSrc}"
-      echo "Codex skills:"
+      echo "Codex user skills:"
       for skill in ${builtins.concatStringsSep " " cavemanSkills}; do
-        skill_path="$HOME/.codex/skills/$skill/SKILL.md"
+        skill_path="$HOME/.agents/skills/$skill/SKILL.md"
         if [ -f "$skill_path" ]; then
           echo "  ok      $skill_path"
         else
@@ -40,6 +39,12 @@ in
         fi
       done
       echo
+      legacy_path="$HOME/.codex/skills/caveman/SKILL.md"
+      if [ -e "$legacy_path" ]; then
+        echo "Legacy path still exists: $legacy_path"
+        echo "Current Codex user skills are loaded from ~/.agents/skills."
+        echo
+      fi
       echo "Codex usage: start a new session, run /skills, and select caveman."
       echo "Plain prompts also work: 'use caveman mode', 'talk like caveman', or 'stop caveman'."
       echo "Note: /caveman is a Caveman upstream slash-command convention, but current Codex CLI only exposes installed skills through /skills."
