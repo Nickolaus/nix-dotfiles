@@ -372,7 +372,23 @@ llm-claude-local     # Uses ~/.claude/settings.json via the session proxy
 - MCP transport schema:
   - `type = "http"` uses `url` and optional `headers`
   - `type = "stdio"` uses `command`, optional `args`, and optional `env`
+  - `targetOverrides.<codex|claude|cursor>` customizes one logical server per client
 - GitHub MCP is HTTP, not stdio
+
+#### Serena Code Intelligence
+```bash
+serena-status          # Check pinned Serena package, MCP contexts, and helper commands
+serena-init-lsp        # Explicit first-time setup for Serena's default LSP backend
+serena-init-jetbrains  # Explicit setup for the JetBrains backend
+serena-claude          # Launch Claude Code with Serena's prompt override
+```
+
+- Serena is installed declaratively from the pinned upstream flake input.
+- The shared `aiAgents` MCP config enables Serena for Codex, Claude Code, and Cursor with client-specific contexts.
+- Serena is for live symbol-aware code navigation and refactoring. Graphify remains the durable repo graph for architecture, docs/code relationships, and visualizations.
+- Do not run `serena setup codex` or `serena setup claude-code` from activation hooks; those mutate user-owned agent config.
+- Project-local `.serena/` files and memories are per-repo decisions and should be committed only when that repo explicitly wants them.
+- Claude hooks and auto-approval are not enabled globally; use `serena-claude` when Serena adherence matters.
 
 #### Caveman Agent Compression
 ```bash

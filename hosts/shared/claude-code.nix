@@ -1,6 +1,8 @@
 { config, lib, pkgs, ... }:
 let
-  inherit (lib) escapeShellArg filterAttrs mkIf mkMerge optionalAttrs recursiveUpdate;
+  inherit (lib) filterAttrs mkIf mkMerge optionalAttrs recursiveUpdate;
+
+  aiAgentsLib = import ./ai-agents-lib.nix { inherit lib pkgs; };
 in
 {
   config = mkIf (config.aiAgents.enable && config.aiAgents.targets.claude.enable && config.aiAgents.claude.managed.enable) (
@@ -9,60 +11,10 @@ in
 
       enabledMcpServers = filterAttrs (_: server: server.enabled && builtins.elem "claude" server.targets) cfg.mcpServers;
 
-      isolatedStdioLauncher = name: server:
-        pkgs.writeShellScript "ai-agent-mcp-${name}" (
-          ''
-            set -eu
-
-            if [ -n "''${AI_AGENTS_MCP_STATE_DIR:-}" ]; then
-              state_root="$AI_AGENTS_MCP_STATE_DIR"
-            else
-              if [ -z "''${HOME:-}" ]; then
-                echo "HOME must be set to derive the MCP state directory" >&2
-                exit 1
-              fi
-
-              case "$(${pkgs.coreutils}/bin/uname -s 2>/dev/null || uname -s)" in
-                Darwin)
-                  state_root="$HOME/Library/Logs/ai-agents/mcp"
-                  ;;
-                *)
-                  state_root="''${XDG_STATE_HOME:-$HOME/.local/state}/ai-agents/mcp"
-                  ;;
-              esac
-            fi
-
-            server_name=${escapeShellArg name}
-          '' + (
-            if server.workingDirectory != null then
-              ''
-                run_dir=${escapeShellArg server.workingDirectory}
-              ''
-            else
-              ''
-                run_dir="$state_root/$server_name"
-              ''
-          ) + ''
-
-            ${pkgs.coreutils}/bin/mkdir -p "$run_dir"
-            cd "$run_dir"
-            exec ${escapeShellArg server.command} "$@"
-          ''
-        );
-
-      renderStdioCommand = name: server:
+      renderClaudeMcpServer = name: rawServer:
         let
-          useIsolatedWorkingDirectory = server.isolateWorkingDirectory || server.workingDirectory != null;
+          server = aiAgentsLib.effectiveServerFor "claude" rawServer;
         in
-        {
-          command =
-            if useIsolatedWorkingDirectory then
-              "${isolatedStdioLauncher name server}"
-            else
-              server.command;
-        };
-
-      renderClaudeMcpServer = name: server:
         if server.type == "http" then
           {
             type = "http";
@@ -73,7 +25,7 @@ in
         else
           {
             type = "stdio";
-          } // renderStdioCommand name server
+          } // aiAgentsLib.renderStdioCommand name server
           // optionalAttrs (server.args != [ ]) {
             args = server.args;
           } // optionalAttrs (server.env != { }) {

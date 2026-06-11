@@ -21,6 +21,8 @@
       flake = false;
     };
 
+    serena.url = "github:oraios/serena/v1.5.3";
+
     # Disko for declarative disk management
     disko = {
       url = "github:nix-community/disko";

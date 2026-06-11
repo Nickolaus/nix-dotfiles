@@ -433,7 +433,10 @@ oco-claude            # Auto-loads Claude key from encrypted secrets
 - MCP transport schema in `aiAgents`:
   - `type = "http"` uses `url` and optional `headers`
   - `type = "stdio"` uses `command`, optional `args`, and optional `env`
+  - `targetOverrides.<codex|claude|cursor>` customizes one logical MCP server per client
 - GitHub MCP is HTTP, not stdio.
+- Serena is installed from a pinned upstream flake and exposed through `aiAgents` for Codex, Claude Code, and Cursor. Use it for live symbol-aware code navigation/refactoring; keep Graphify for durable repo graphs and visualizations.
+- Serena initialization is explicit via `serena-init-lsp` or `serena-init-jetbrains`. Project-local `.serena/` files are per-repo decisions, not globally managed dotfiles.
 - For Cline or Cursor local coding, point the provider to `http://127.0.0.1:11436`.
 - Prefer one local coding agent at a time on this machine. The coding endpoint is single-request (`NUM_PARALLEL=1`), so running Cline and Roo together turns waits into queue time very quickly.
 

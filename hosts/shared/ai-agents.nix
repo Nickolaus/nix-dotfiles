@@ -9,6 +9,76 @@ let
 
   clientType = types.enum [ "codex" "claude" "cursor" ];
 
+  mcpServerTargetOverrideType = types.submodule ({ ... }: {
+    options = {
+      type = mkOption {
+        type = types.nullOr (types.enum [ "http" "stdio" ]);
+        default = null;
+        description = "Target-specific MCP transport type override.";
+      };
+
+      url = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Target-specific HTTP endpoint override.";
+      };
+
+      command = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Target-specific stdio command override.";
+      };
+
+      args = mkOption {
+        type = types.nullOr (types.listOf types.str);
+        default = null;
+        description = "Target-specific stdio arguments override.";
+      };
+
+      env = mkOption {
+        type = types.attrsOf types.str;
+        default = { };
+        description = "Target-specific environment variables merged with the base environment.";
+      };
+
+      isolateWorkingDirectory = mkOption {
+        type = types.nullOr types.bool;
+        default = null;
+        description = "Target-specific isolated working directory override.";
+      };
+
+      workingDirectory = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Target-specific working directory override.";
+      };
+
+      headers = mkOption {
+        type = types.attrsOf types.str;
+        default = { };
+        description = "Target-specific HTTP headers merged with the base headers.";
+      };
+
+      bearerTokenEnvVar = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Target-specific bearer token environment variable override.";
+      };
+
+      inheritEnv = mkOption {
+        type = types.nullOr (types.listOf types.str);
+        default = null;
+        description = "Target-specific inherited environment variable override.";
+      };
+
+      startupTimeoutSec = mkOption {
+        type = types.nullOr types.int;
+        default = null;
+        description = "Target-specific MCP startup timeout override where supported.";
+      };
+    };
+  });
+
   mcpServerType = types.submodule ({ ... }: {
     options = {
       enabled = mkOption {
@@ -77,10 +147,42 @@ let
         description = "Environment variable names that should be inherited from the surrounding user session.";
       };
 
+      startupTimeoutSec = mkOption {
+        type = types.nullOr types.int;
+        default = null;
+        description = "MCP server startup timeout in seconds for clients that support it.";
+      };
+
       targets = mkOption {
         type = types.listOf clientType;
         default = [ "codex" "claude" "cursor" ];
         description = "Agent clients that should receive this MCP definition.";
+      };
+
+      targetOverrides = mkOption {
+        type = types.submodule ({ ... }: {
+          options = {
+            codex = mkOption {
+              type = mcpServerTargetOverrideType;
+              default = { };
+              description = "Codex-specific MCP server overrides.";
+            };
+
+            claude = mkOption {
+              type = mcpServerTargetOverrideType;
+              default = { };
+              description = "Claude Code-specific MCP server overrides.";
+            };
+
+            cursor = mkOption {
+              type = mcpServerTargetOverrideType;
+              default = { };
+              description = "Cursor-specific MCP server overrides.";
+            };
+          };
+        });
+        default = { };
+        description = "Target-specific MCP server overrides. Scalars and lists replace base values; env and headers merge.";
       };
     };
 
@@ -173,6 +275,16 @@ in
           type = "stdio";
           command = "${pkgs.nodejs}/bin/npx";
           args = [ "-y" "mcp-remote@latest" "https://mcp.atlassian.com/v1/mcp" ];
+        };
+        serena = {
+          type = "stdio";
+          command = "serena";
+          args = [ "start-mcp-server" "--project-from-cwd" "--context=codex" ];
+          startupTimeoutSec = 15;
+          targetOverrides = {
+            claude.args = [ "start-mcp-server" "--context=claude-code" "--project-from-cwd" ];
+            cursor.args = [ "start-mcp-server" "--context=ide" "--project-from-cwd" ];
+          };
         };
       };
       description = "Neutral cross-tool MCP server definitions rendered for each supported agent.";
