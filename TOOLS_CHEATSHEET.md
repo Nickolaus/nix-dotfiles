@@ -385,6 +385,7 @@ serena-claude          # Launch Claude Code with Serena's prompt override
 
 - Serena is installed declaratively from the pinned upstream flake input.
 - The shared `aiAgents` MCP config enables Serena for Codex, Claude Code, and Cursor with client-specific contexts.
+- Managed Serena MCP launches keep the dashboard enabled but pass `--open-web-dashboard False`, so agents do not open browser tabs on startup.
 - Serena is for live symbol-aware code navigation and refactoring. Graphify remains the durable repo graph for architecture, docs/code relationships, and visualizations.
 - Do not run `serena setup codex` or `serena setup claude-code` from activation hooks; those mutate user-owned agent config.
 - Project-local `.serena/` files and memories are per-repo decisions and should be committed only when that repo explicitly wants them.

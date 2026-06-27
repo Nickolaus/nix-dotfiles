@@ -304,6 +304,10 @@
   programs.mise = {
     enable = true;
     enableFishIntegration = true;
+    package = pkgs.mise.overrideAttrs (_old: {
+      # nixpkgs 89570f2: one Darwin metadata-preservation test fails locally.
+      doCheck = false;
+    });
     globalConfig.settings = {
       experimental = true;
     };

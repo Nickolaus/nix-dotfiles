@@ -7,6 +7,26 @@
 let
   cloudflareMcpTokenPath = "${config.home.homeDirectory}/.config/mcp/cloudflare_mcp_token";
   githubMcpPatPath = "${config.home.homeDirectory}/.config/mcp/github_mcp_pat";
+  launchdMcpEnvNames = [
+    "UNIFI_NETWORK_USERNAME"
+    "UNIFI_NETWORK_PASSWORD"
+    "PROXMOX_MCP_CONFIG"
+    "INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET"
+    "RESEND_API_KEY"
+    "GRAFANA_SERVICE_ACCOUNT_TOKEN"
+    "CONTEXT7_API_KEY"
+    "CLOUDFLARE_MCP_TOKEN"
+    "GITHUB_MCP_PAT"
+  ];
+  launchdMcpEnvNamesShell = lib.concatMapStringsSep " " lib.escapeShellArg launchdMcpEnvNames;
+  mcpEnvUnset = pkgs.writeShellScriptBin "hm-unset-mcp-env" ''
+    #!${pkgs.bash}/bin/bash
+    set -euo pipefail
+
+    for name in ${launchdMcpEnvNamesShell}; do
+      /bin/launchctl unsetenv "$name" >/dev/null 2>&1 || true
+    done
+  '';
   mcpEnvExport = pkgs.writeShellScriptBin "hm-export-mcp-env" ''
     #!${pkgs.bash}/bin/bash
     set -euo pipefail
@@ -163,6 +183,7 @@ in
   };
 
   home.packages = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin [
+    mcpEnvUnset
     mcpEnvExport
   ];
 
@@ -182,8 +203,13 @@ in
     end
   '';
 
+  home.activation.clearMcpEnvBeforeLaunchAgents = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin
+    (lib.hm.dag.entryBefore [ "setupLaunchAgents" ] ''
+      ${mcpEnvUnset}/bin/hm-unset-mcp-env
+    '');
+
   home.activation.exportMcpEnv = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin
-    (lib.hm.dag.entryAfter [ "sops-nix" ] ''
+    (lib.hm.dag.entryAfter [ "sops-nix" "restartManagedOllamaLaunchAgents" ] ''
       ${mcpEnvExport}/bin/hm-export-mcp-env
     '');
 

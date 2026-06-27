@@ -165,7 +165,14 @@ update_homebrew() {
     fi
 
     log_info "Installing/upgrading declared Homebrew packages..."
-    if HOMEBREW_NO_AUTO_UPDATE=1 brew bundle --file="$brewfile" --upgrade --cleanup --force-cleanup; then
+    if HOMEBREW_NO_AUTO_UPDATE=1 brew bundle --file="$brewfile" --upgrade; then
+        log_info "Cleaning Homebrew packages not declared in Brewfile..."
+        if ! HOMEBREW_NO_AUTO_UPDATE=1 brew bundle cleanup --file="$brewfile" --force --all; then
+            rm -f "$brewfile"
+            log_error "Homebrew bundle cleanup failed"
+            exit 1
+        fi
+
         rm -f "$brewfile"
         log_success "Homebrew packages updated successfully"
     else

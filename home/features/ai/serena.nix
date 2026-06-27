@@ -31,10 +31,11 @@ in
 
       echo
       echo "MCP contexts rendered by aiAgents:"
-      echo "  Codex:       serena start-mcp-server --project-from-cwd --context=codex"
-      echo "  Claude Code: serena start-mcp-server --context=claude-code --project-from-cwd"
-      echo "  Cursor:      serena start-mcp-server --context=ide --project-from-cwd"
+      echo "  Codex:       serena start-mcp-server --project-from-cwd --context=codex --open-web-dashboard False"
+      echo "  Claude Code: serena start-mcp-server --context=claude-code --project-from-cwd --open-web-dashboard False"
+      echo "  Cursor:      serena start-mcp-server --context=ide --project-from-cwd --open-web-dashboard False"
       echo
+      echo "The dashboard stays enabled for diagnostics, but managed MCP launches do not open a browser tab."
       echo "First-time LSP setup: serena-init-lsp"
       echo "JetBrains backend setup: serena-init-jetbrains"
       echo "Claude launch with Serena prompt override: serena-claude"

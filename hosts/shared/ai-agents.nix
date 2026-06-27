@@ -279,11 +279,11 @@ in
         serena = {
           type = "stdio";
           command = "serena";
-          args = [ "start-mcp-server" "--project-from-cwd" "--context=codex" ];
+          args = [ "start-mcp-server" "--project-from-cwd" "--context=codex" "--open-web-dashboard" "False" ];
           startupTimeoutSec = 15;
           targetOverrides = {
-            claude.args = [ "start-mcp-server" "--context=claude-code" "--project-from-cwd" ];
-            cursor.args = [ "start-mcp-server" "--context=ide" "--project-from-cwd" ];
+            claude.args = [ "start-mcp-server" "--context=claude-code" "--project-from-cwd" "--open-web-dashboard" "False" ];
+            cursor.args = [ "start-mcp-server" "--context=ide" "--project-from-cwd" "--open-web-dashboard" "False" ];
           };
         };
       };

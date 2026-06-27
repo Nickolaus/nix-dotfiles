@@ -17,14 +17,20 @@
     };
     onActivation = {
       autoUpdate = false;
-      cleanup = "uninstall";
-      extraFlags = [ "--force-cleanup" ];
+      cleanup = "none";
       upgrade = false;
     };
 
+    # nix-darwin's cask submodule does not expose Homebrew Bundle's
+    # `trusted: true` field. Keep this third-party cask fully qualified and
+    # trust only that cask, not the whole tap.
+    extraConfig = ''
+      cask "TheBoredTeam/boring-notch/boring-notch", trusted: true
+    '';
+
     taps = [
       "aws/tap"
-      "TheBoredTeam/boring-notch" # Required tap for boring-notch cask
+      "TheBoredTeam/boring-notch" # Required tap for the fully qualified boring-notch cask
     ];
 
     # CLI tools not available or problematic in Nix
@@ -48,6 +54,7 @@
       "gitify" # GitHub notifications app for macOS
       "sourcetree" # Git GUI client, not available in nixpkgs
       "babeledit" # Localization editor for translating apps and websites
+      "bitwarden" # Password manager desktop app; Homebrew cask tracks current macOS releases
       "steam" # Gaming platform, not properly available in nixpkgs for Darwin
       {
         name = "logi-options+";
@@ -57,7 +64,6 @@
       "ddpm" # Dell Display and Peripheral Manager for Dell monitors and webcams
       "shottr" # Lightweight screenshot tool with URL scheme API support
       "corelocationcli" # CLI tool for accessing Core Location services (requires location permissions)
-      "boring-notch" # Dynamic notch enhancement for MacBooks with notch display
       "libreoffice" # Free office suite (not available in nixpkgs for Darwin)
       "phpstorm" # PHP IDE
       "discord" # Voice and text chat

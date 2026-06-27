@@ -25,6 +25,7 @@ let
   codingErrorLog = "${ollamaStateDir}/coding-server.error.log";
   sessionServerLog = "${ollamaStateDir}/session-proxy.log";
   sessionErrorLog = "${ollamaStateDir}/session-proxy.error.log";
+  launchdPath = "/etc/profiles/per-user/${config.home.username}/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
   commitModel = cfg.profiles.commit.model;
   generalModel = cfg.profiles.general.model;
@@ -41,6 +42,14 @@ let
   codingRequestService = if sessionProxyEnabled then sessionService else codingService;
   activeServices = [ defaultService codingService ] ++ lib.optionals sessionProxyEnabled [ sessionService ];
   activeServicesList = lib.concatStringsSep " " activeServices;
+  managedDarwinLaunchAgentLabels = [
+    "org.nix-community.home.ollama"
+    "org.nix-community.home.local-ai-ollama-coding"
+  ] ++ lib.optionals sessionProxyEnabled [
+    "org.nix-community.home.local-ai-session-proxy"
+  ];
+  managedDarwinLaunchAgentLabelsShell =
+    lib.concatMapStringsSep " " lib.escapeShellArg managedDarwinLaunchAgentLabels;
 
   sessionProxyScript = pkgs.writeText "local-ai-session-proxy.py" ''
     import http.client
@@ -232,6 +241,68 @@ let
             pass
         finally:
             server.server_close()
+  '';
+
+  defaultOllamaLaunchdPackage = pkgs.symlinkJoin {
+    name = "ollama-launchd-clean-env-${pkgs.ollama.version or "wrapped"}";
+    paths = [
+      (pkgs.writeShellScriptBin "ollama" ''
+        set -euo pipefail
+
+        if [ "''${1:-}" = "serve" ]; then
+          exec /usr/bin/env -i \
+            PATH=${lib.escapeShellArg launchdPath} \
+            HOME=${lib.escapeShellArg config.home.homeDirectory} \
+            OLLAMA_HOST=${lib.escapeShellArg defaultHostPort} \
+            OLLAMA_CONTEXT_LENGTH=${lib.escapeShellArg (toString cfg.runtime.contextLength)} \
+            OLLAMA_KEEP_ALIVE=${lib.escapeShellArg cfg.runtime.keepAlive} \
+            OLLAMA_NUM_PARALLEL=${lib.escapeShellArg (toString cfg.runtime.numParallel)} \
+            OLLAMA_MAX_LOADED_MODELS=${lib.escapeShellArg (toString cfg.runtime.maxLoadedModels)} \
+            OLLAMA_MAX_QUEUE=${lib.escapeShellArg (toString cfg.runtime.maxQueue)} \
+            OLLAMA_DEBUG=${lib.escapeShellArg (if cfg.runtime.debug then "1" else "0")} \
+            OLLAMA_NO_CLOUD=${lib.escapeShellArg (if cfg.runtime.disableCloud then "1" else "0")} \
+            ${pkgs.ollama}/bin/ollama "$@"
+        fi
+
+        exec ${pkgs.ollama}/bin/ollama "$@"
+      '')
+    ];
+    meta.mainProgram = "ollama";
+  };
+
+  codingOllamaLaunchdServe = pkgs.writeShellScript "local-ai-ollama-coding-serve" ''
+    set -euo pipefail
+
+    exec /usr/bin/env -i \
+      PATH=${lib.escapeShellArg launchdPath} \
+      HOME=${lib.escapeShellArg config.home.homeDirectory} \
+      OLLAMA_HOST=${lib.escapeShellArg codingHostPort} \
+      OLLAMA_CONTEXT_LENGTH=${lib.escapeShellArg (toString cfg.runtime.codingContextLength)} \
+      OLLAMA_KEEP_ALIVE=${lib.escapeShellArg cfg.runtime.codingKeepAlive} \
+      OLLAMA_FLASH_ATTENTION=${lib.escapeShellArg (if cfg.runtime.codingFlashAttention then "1" else "0")} \
+      OLLAMA_KV_CACHE_TYPE=${lib.escapeShellArg cfg.runtime.codingKvCacheType} \
+      OLLAMA_NUM_PARALLEL=${lib.escapeShellArg (toString cfg.runtime.numParallel)} \
+      OLLAMA_MAX_LOADED_MODELS=${lib.escapeShellArg (toString cfg.runtime.maxLoadedModels)} \
+      OLLAMA_MAX_QUEUE=${lib.escapeShellArg (toString cfg.runtime.maxQueue)} \
+      OLLAMA_DEBUG=${lib.escapeShellArg (if cfg.runtime.debug then "1" else "0")} \
+      OLLAMA_NO_CLOUD=${lib.escapeShellArg (if cfg.runtime.disableCloud then "1" else "0")} \
+      ${pkgs.ollama}/bin/ollama serve
+  '';
+
+  sessionProxyLaunchdServe = pkgs.writeShellScript "local-ai-session-proxy-serve" ''
+    set -euo pipefail
+
+    exec /usr/bin/env -i \
+      PATH=${lib.escapeShellArg launchdPath} \
+      HOME=${lib.escapeShellArg config.home.homeDirectory} \
+      SESSION_PROXY_HOST=${lib.escapeShellArg cfg.runtime.host} \
+      SESSION_PROXY_PORT=${lib.escapeShellArg (toString cfg.runtime.sessionProxy.port)} \
+      SESSION_PROXY_UPSTREAM_HOST=${lib.escapeShellArg cfg.runtime.host} \
+      SESSION_PROXY_UPSTREAM_PORT=${lib.escapeShellArg (toString cfg.runtime.codingPort)} \
+      SESSION_PROXY_KEEP_ALIVE=${lib.escapeShellArg cfg.runtime.codingKeepAlive} \
+      SESSION_PROXY_DEFAULT_THINK=false \
+      SESSION_PROXY_DEFAULT_REASONING_EFFORT=none \
+      ${pkgs.python3}/bin/python3 ${sessionProxyScript}
   '';
 
   commonShell = ''
@@ -533,7 +604,8 @@ let
       return "$problems"
     }
   '';
-in {
+in
+{
   imports = [
     (lib.mkRenamedOptionModule [ "localAI" ] [ "localAi" ])
   ];
@@ -769,7 +841,7 @@ in {
 
       services.ollama = {
         enable = true;
-        package = pkgs.ollama;
+        package = defaultOllamaLaunchdPackage;
         host = cfg.runtime.host;
         port = cfg.runtime.port;
         environmentVariables = {
@@ -1273,11 +1345,96 @@ in {
     }
 
     (mkIf pkgs.stdenv.hostPlatform.isDarwin {
+      home.activation.stopUnmanagedOllamaDefaultPort =
+        lib.hm.dag.entryBefore [ "setupLaunchAgents" ] ''
+          port=${lib.escapeShellArg (toString cfg.runtime.port)}
+          current_user=${lib.escapeShellArg config.home.username}
+          domain="gui/$(/usr/bin/id -u "$current_user")"
+          managed_default_pid="$(
+            /bin/launchctl print "$domain/org.nix-community.home.ollama" 2>/dev/null \
+              | /usr/bin/awk '/pid =/ { print $3; exit }'
+          )"
+
+          for pid in $(${pkgs.lsof}/bin/lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true); do
+            if [ -z "$pid" ]; then
+              continue
+            fi
+
+            if [ -n "$managed_default_pid" ] && [ "$pid" = "$managed_default_pid" ]; then
+              continue
+            fi
+
+            pid_user="$(/bin/ps -p "$pid" -o user= 2>/dev/null | ${pkgs.coreutils}/bin/tr -d '[:space:]' || true)"
+            if [ "$pid_user" != "$current_user" ]; then
+              continue
+            fi
+
+            command_line="$(/bin/ps -p "$pid" -o command= 2>/dev/null || true)"
+            case "$command_line" in
+              *"/ollama serve"*|*"ollama serve"*)
+                echo "Stopping unmanaged Ollama server on ${defaultHostPort} before launchd bootstrap (pid $pid)"
+                /bin/kill -TERM "$pid" 2>/dev/null || true
+
+                for _ in 1 2 3 4 5; do
+                  if ! /bin/kill -0 "$pid" 2>/dev/null; then
+                    break
+                  fi
+                  ${pkgs.coreutils}/bin/sleep 1
+                done
+
+                if /bin/kill -0 "$pid" 2>/dev/null; then
+                  echo "Unmanaged Ollama server on ${defaultHostPort} did not exit after TERM; sending KILL (pid $pid)"
+                  /bin/kill -KILL "$pid" 2>/dev/null || true
+                fi
+                ;;
+            esac
+          done
+        '';
+
+      home.activation.restartManagedOllamaLaunchAgents =
+        lib.hm.dag.entryAfter [ "setupLaunchAgents" ] ''
+          domain="gui/$(/usr/bin/id -u ${lib.escapeShellArg config.home.username})"
+          launch_agents_dir=${lib.escapeShellArg "${config.home.homeDirectory}/Library/LaunchAgents"}
+
+          for label in ${managedDarwinLaunchAgentLabelsShell}; do
+            plist="$launch_agents_dir/$label.plist"
+
+            if [ ! -f "$plist" ]; then
+              echo "Skipping missing managed Ollama launch agent plist: $plist" >&2
+              continue
+            fi
+
+            /bin/launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
+
+            for _ in 1 2 3 4 5; do
+              if ! /bin/launchctl print "$domain/$label" >/dev/null 2>&1; then
+                break
+              fi
+              ${pkgs.coreutils}/bin/sleep 1
+            done
+
+            bootstrapped=0
+            for attempt in 1 2 3; do
+              if /bin/launchctl bootstrap "$domain" "$plist"; then
+                bootstrapped=1
+                break
+              fi
+
+              ${pkgs.coreutils}/bin/sleep "$attempt"
+            done
+
+            if [ "$bootstrapped" != "1" ]; then
+              echo "Failed to bootstrap managed Ollama launch agent: $domain/$label" >&2
+              exit 1
+            fi
+          done
+        '';
+
       launchd.agents = {
         local-ai-ollama-coding = {
           enable = true;
           config = {
-            ProgramArguments = [ "${pkgs.ollama}/bin/ollama" "serve" ];
+            ProgramArguments = [ "${codingOllamaLaunchdServe}" ];
             RunAtLoad = true;
             KeepAlive = true;
             ProcessType = "Background";
@@ -1303,7 +1460,7 @@ in {
         local-ai-session-proxy = mkIf cfg.runtime.sessionProxy.enable {
           enable = true;
           config = {
-            ProgramArguments = [ "${pkgs.python3}/bin/python3" "${sessionProxyScript}" ];
+            ProgramArguments = [ "${sessionProxyLaunchdServe}" ];
             RunAtLoad = true;
             KeepAlive = true;
             ProcessType = "Background";
