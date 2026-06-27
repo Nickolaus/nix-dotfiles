@@ -618,6 +618,12 @@ determinate-nixd bug "Issue title" "Description"  # File bug report
 # Complete system update (recommended)
 ./scripts/update-system.sh
 
+# Explicit mutable Homebrew upgrades for declared packages only
+./scripts/update-system.sh --upgrade-brew
+
+# Preview and explicitly prune undeclared Homebrew packages
+./scripts/update-system.sh --prune-brew
+
 # Show available options
 ./scripts/update-system.sh --help
 
@@ -628,6 +634,9 @@ determinate-nixd bug "Issue title" "Description"  # File bug report
 **Script Features:**
 - ✅ Automated health checks (before/after)
 - ✅ Proper Determinate Systems upgrade sequence
+- ✅ Homebrew defaults to declared package convergence with `--no-upgrade`
+- ✅ Explicit `--upgrade-brew` path for mutable declared-only Homebrew upgrades
+- ✅ Explicit `--prune-brew` path for destructive Homebrew cleanup
 - ✅ Interactive prompts with confirmation
 - ✅ Colored output and progress indicators
 - ✅ Error handling with rollback instructions
@@ -639,6 +648,16 @@ determinate-nixd bug "Issue title" "Description"  # File bug report
 **Daily/Weekly Updates:**
 ```bash
 ./scripts/update-system.sh           # Complete system update
+```
+
+**Homebrew Version Updates:**
+```bash
+./scripts/update-system.sh --upgrade-brew  # Opt into mutable declared-only Brew upgrades
+```
+
+**Homebrew Pruning:**
+```bash
+./scripts/update-system.sh --prune-brew    # Preview and confirm undeclared package cleanup
 ```
 
 **Configuration-Only Changes:**

@@ -12,6 +12,10 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+UPGRADE_BREW=false
+PRUNE_BREW=false
+DRY_RUN=false
+
 # Logging functions
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -31,6 +35,14 @@ log_error() {
 
 log_step() {
     echo -e "\n${BLUE}===${NC} $1 ${BLUE}===${NC}"
+}
+
+confirm() {
+    local prompt=$1
+
+    read -p "$prompt (y/N): " -n 1 -r
+    echo
+    [[ $REPLY =~ ^[Yy]$ ]]
 }
 
 # Detect platform
@@ -132,7 +144,152 @@ update_configuration() {
     fi
 }
 
-# Step 4: Update Homebrew
+render_homebrew_brewfile() {
+    local brewfile=$1
+
+    log_info "Rendering declarative Brewfile from the updated flake..."
+    if ! nix eval --raw .#darwinConfigurations.zoidberg.config.homebrew.brewfile >"$brewfile"; then
+        log_error "Failed to render Homebrew Brewfile from nix-darwin configuration"
+        return 1
+    fi
+}
+
+list_declared_outdated_homebrew() {
+    local brewfile=$1
+    local kind=$2
+    local outdated_args=()
+    local declared_args=()
+    local label
+
+    case "$kind" in
+        formula)
+            declared_args=(--formula)
+            outdated_args=(--formula)
+            label="formulae"
+            ;;
+        cask)
+            declared_args=(--cask)
+            outdated_args=(--cask --greedy)
+            label="casks"
+            ;;
+        *)
+            log_error "Unknown Homebrew dependency kind: $kind"
+            return 1
+            ;;
+    esac
+
+    local declared_file
+    local outdated_file
+    declared_file=$(mktemp -t nix-dotfiles-brew-declared.XXXXXX)
+    outdated_file=$(mktemp -t nix-dotfiles-brew-outdated.XXXXXX)
+
+    if ! HOMEBREW_NO_AUTO_UPDATE=1 brew bundle list --file="$brewfile" "${declared_args[@]}" >"$declared_file"; then
+        rm -f "$declared_file" "$outdated_file"
+        log_error "Failed to list declared Homebrew $label"
+        return 1
+    fi
+
+    if ! brew outdated "${outdated_args[@]}" >"$outdated_file"; then
+        rm -f "$declared_file" "$outdated_file"
+        return 0
+    fi
+
+    awk 'NR == FNR { declared[$1] = 1; next } declared[$1] { print $1 }' "$declared_file" "$outdated_file" | sort -u
+    rm -f "$declared_file" "$outdated_file"
+}
+
+upgrade_declared_homebrew() {
+    local brewfile=$1
+    local formulae_file
+    local casks_file
+    formulae_file=$(mktemp -t nix-dotfiles-brew-formulae.XXXXXX)
+    casks_file=$(mktemp -t nix-dotfiles-brew-casks.XXXXXX)
+
+    list_declared_outdated_homebrew "$brewfile" formula >"$formulae_file"
+    list_declared_outdated_homebrew "$brewfile" cask >"$casks_file"
+
+    if [[ ! -s "$formulae_file" && ! -s "$casks_file" ]]; then
+        rm -f "$formulae_file" "$casks_file"
+        log_success "Declared Homebrew packages are already current"
+        return 0
+    fi
+
+    log_warning "Mutable Homebrew upgrades requested explicitly"
+    if [[ -s "$formulae_file" ]]; then
+        log_info "Declared outdated formulae:"
+        sed 's/^/  - /' "$formulae_file"
+    fi
+    if [[ -s "$casks_file" ]]; then
+        log_info "Declared outdated casks:"
+        sed 's/^/  - /' "$casks_file"
+    fi
+
+    if ! confirm "Upgrade the declared Homebrew packages listed above sequentially?"; then
+        rm -f "$formulae_file" "$casks_file"
+        log_warning "Skipping mutable Homebrew upgrades"
+        return 0
+    fi
+
+    local name
+    local failed_name=""
+    while IFS= read -r name; do
+        [[ -n "$name" ]] || continue
+        log_info "Upgrading Homebrew formula: $name"
+        if ! HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade "$name"; then
+            failed_name=$name
+            break
+        fi
+    done <"$formulae_file"
+
+    if [[ -n "$failed_name" ]]; then
+        rm -f "$formulae_file" "$casks_file"
+        log_error "Homebrew formula upgrade failed: $failed_name"
+        return 1
+    fi
+
+    while IFS= read -r name; do
+        [[ -n "$name" ]] || continue
+        log_info "Upgrading Homebrew cask: $name"
+        if ! HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade --cask "$name"; then
+            failed_name=$name
+            break
+        fi
+    done <"$casks_file"
+
+    if [[ -n "$failed_name" ]]; then
+        rm -f "$formulae_file" "$casks_file"
+        log_error "Homebrew cask upgrade failed: $failed_name"
+        return 1
+    fi
+
+    rm -f "$formulae_file" "$casks_file"
+    log_success "Declared Homebrew upgrades completed"
+}
+
+prune_homebrew() {
+    local brewfile=$1
+
+    log_warning "Homebrew prune requested explicitly"
+    log_info "Previewing Homebrew dependencies not declared in the generated Brewfile..."
+    if HOMEBREW_NO_AUTO_UPDATE=1 brew bundle cleanup --file="$brewfile" --all; then
+        log_success "No undeclared Homebrew dependencies to prune"
+        return 0
+    fi
+
+    if ! confirm "Remove undeclared Homebrew dependencies shown above?"; then
+        log_warning "Skipping Homebrew prune"
+        return 0
+    fi
+
+    if HOMEBREW_NO_AUTO_UPDATE=1 brew bundle cleanup --file="$brewfile" --force --all; then
+        log_success "Undeclared Homebrew dependencies pruned"
+    else
+        log_error "Homebrew bundle cleanup failed"
+        return 1
+    fi
+}
+
+# Step 4: Converge Homebrew declarations
 update_homebrew() {
     local platform=$1
 
@@ -140,7 +297,7 @@ update_homebrew() {
         return 0
     fi
 
-    log_step "Step 4: Updating Homebrew"
+    log_step "Step 4: Converging Homebrew declarations"
 
     if ! command -v brew >/dev/null 2>&1; then
         log_warning "Homebrew is not installed; skipping Homebrew update"
@@ -150,36 +307,46 @@ update_homebrew() {
     local brewfile
     brewfile=$(mktemp -t nix-dotfiles-Brewfile.XXXXXX)
 
-    log_info "Rendering declarative Brewfile from the updated flake..."
-    if ! nix eval --raw .#darwinConfigurations.zoidberg.config.homebrew.brewfile >"$brewfile"; then
+    if ! render_homebrew_brewfile "$brewfile"; then
         rm -f "$brewfile"
-        log_error "Failed to render Homebrew Brewfile from nix-darwin configuration"
         exit 1
     fi
 
-    log_info "Updating Homebrew metadata..."
+    log_info "Updating Homebrew metadata without upgrading installed packages..."
     if ! brew update; then
         rm -f "$brewfile"
         log_error "Homebrew update failed"
         exit 1
     fi
 
-    log_info "Installing/upgrading declared Homebrew packages..."
-    if HOMEBREW_NO_AUTO_UPDATE=1 brew bundle --file="$brewfile" --upgrade; then
-        log_info "Cleaning Homebrew packages not declared in Brewfile..."
-        if ! HOMEBREW_NO_AUTO_UPDATE=1 brew bundle cleanup --file="$brewfile" --force --all; then
-            rm -f "$brewfile"
-            log_error "Homebrew bundle cleanup failed"
-            exit 1
-        fi
-
+    log_info "Installing missing declared Homebrew packages without upgrading existing packages..."
+    if ! HOMEBREW_NO_AUTO_UPDATE=1 brew bundle --file="$brewfile" --no-upgrade --jobs=1; then
         rm -f "$brewfile"
-        log_success "Homebrew packages updated successfully"
-    else
-        rm -f "$brewfile"
-        log_error "Homebrew bundle update failed"
+        log_error "Homebrew bundle convergence failed"
         exit 1
     fi
+
+    log_success "Homebrew declarations are installed"
+
+    if [[ "$UPGRADE_BREW" == true ]]; then
+        if ! upgrade_declared_homebrew "$brewfile"; then
+            rm -f "$brewfile"
+            exit 1
+        fi
+    else
+        log_info "Skipping mutable Homebrew upgrades; pass --upgrade-brew to opt in"
+    fi
+
+    if [[ "$PRUNE_BREW" == true ]]; then
+        if ! prune_homebrew "$brewfile"; then
+            rm -f "$brewfile"
+            exit 1
+        fi
+    else
+        log_info "Skipping Homebrew prune; pass --prune-brew to opt in"
+    fi
+
+    rm -f "$brewfile"
 }
 
 # Step 5: Apply Changes
@@ -416,9 +583,7 @@ main() {
     log_info "Detected platform: $platform"
 
     # Ask for confirmation
-    read -p "Do you want to proceed with the system update? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    if ! confirm "Do you want to proceed with the system update?"; then
         log_info "Update cancelled by user"
         exit 0
     fi
@@ -432,9 +597,7 @@ main() {
     verify_system_health
 
     # Optional cleanup
-    read -p "Do you want to clean up old generations? (y/N): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    if confirm "Do you want to clean up old generations?"; then
         cleanup_generations
     fi
 
@@ -442,48 +605,84 @@ main() {
     echo -e "${BLUE}Your nix-dotfiles configuration is now up to date.${NC}"
 }
 
-# Handle script arguments
-case "${1:-}" in
-    "--help" | "-h")
+usage() {
         echo "nix-dotfiles System Update Script"
         echo
         echo "Usage: $0 [OPTIONS]"
         echo
         echo "Options:"
-        echo "  --help, -h    Show this help message"
-        echo "  --dry-run     Show what would be done without executing"
-        echo "  --cleanup     Clean generations older than 180 days, run Nix store GC, optimise the store, and prune caches"
+        echo "  --help, -h       Show this help message"
+        echo "  --dry-run        Show what would be done without executing"
+        echo "  --cleanup        Clean generations older than 180 days, run Nix store GC, optimise the store, and prune caches"
+        echo "  --upgrade-brew   Explicitly upgrade outdated Homebrew packages declared in the generated Brewfile"
+        echo "  --prune-brew     Explicitly remove Homebrew packages not declared in the generated Brewfile"
         echo
         echo "This script performs a comprehensive system update:"
         echo "1. Check system health and evaluate declared host configurations"
         echo "2. Update Determinate Systems Nix"
         echo "3. Update flake inputs and re-evaluate declared host configurations"
-        echo "4. Update Homebrew packages on macOS"
+        echo "4. Converge declared Homebrew packages on macOS without upgrading by default"
         echo "5. Apply configuration changes"
         echo "6. Verify system health"
-        exit 0
-        ;;
-    "--dry-run")
+        echo
+        echo "Homebrew policy:"
+        echo "- Default: install missing declared packages with --no-upgrade"
+        echo "- --upgrade-brew: mutable, sequential, declared-only Homebrew upgrades"
+        echo "- --prune-brew: destructive cleanup of undeclared Homebrew packages after confirmation"
+}
+
+dry_run() {
         echo "DRY RUN: Would perform the following steps:"
         echo "1. Check Determinate Systems daemon status and evaluate declared host configurations"
         echo "2. Upgrade Determinate Nix to latest version"
         echo "3. Update flake inputs (nix flake update) and re-evaluate declared host configurations"
-        echo "4. Update Homebrew packages on macOS"
+        echo "4. Run Homebrew metadata update and brew bundle --no-upgrade for declared packages on macOS"
+        if [[ "$UPGRADE_BREW" == true ]]; then
+            echo "4a. Explicitly upgrade outdated declared Homebrew packages sequentially"
+        fi
+        if [[ "$PRUNE_BREW" == true ]]; then
+            echo "4b. Preview and optionally prune undeclared Homebrew packages"
+        fi
         echo "5. Apply configuration changes (darwin-rebuild/nixos-rebuild)"
         echo "6. Verify system health"
-        exit 0
-        ;;
-    "--cleanup")
-        check_directory
-        cleanup_generations
-        exit 0
-        ;;
-    "")
-        main
-        ;;
-    *)
-        log_error "Unknown option: $1"
-        echo "Use --help for usage information"
-        exit 1
-        ;;
-esac
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            "--help" | "-h")
+                usage
+                exit 0
+                ;;
+            "--dry-run")
+                DRY_RUN=true
+                ;;
+            "--cleanup")
+                check_directory
+                cleanup_generations
+                exit 0
+                ;;
+            "--upgrade-brew")
+                UPGRADE_BREW=true
+                ;;
+            "--prune-brew")
+                PRUNE_BREW=true
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                echo "Use --help for usage information"
+                exit 1
+                ;;
+        esac
+        shift
+    done
+}
+
+parse_args "$@"
+
+if [[ "$DRY_RUN" == true ]]; then
+    dry_run
+    exit 0
+fi
+
+main

@@ -255,8 +255,20 @@ Use the comprehensive update workflow to keep your system current:
 # Run the complete update workflow
 ./scripts/update-system.sh
 
+# Explicitly opt into mutable Homebrew upgrades for declared packages
+./scripts/update-system.sh --upgrade-brew
+
+# Explicitly preview and prune undeclared Homebrew packages
+./scripts/update-system.sh --prune-brew
+
 # Or follow the manual steps below:
 ```
+
+By default the update script keeps Homebrew activation idempotent: it renders
+the nix-darwin Brewfile, updates Homebrew metadata, and installs missing
+declared packages with `brew bundle --no-upgrade`. Existing Homebrew versions
+are only upgraded when `--upgrade-brew` is passed, and undeclared packages are
+only removed when `--prune-brew` is passed.
 
 #### Manual Update Workflow
 
@@ -287,7 +299,21 @@ nix flake update
 nix flake check
 ```
 
-**Step 4: Apply Changes**
+**Step 4: Converge Homebrew Declarations (macOS)**
+```bash
+# Rendered by nix-darwin during activation; shown here for manual workflows
+nix eval --raw .#darwinConfigurations.zoidberg.config.homebrew.brewfile > /tmp/nix-dotfiles-Brewfile
+brew update
+HOMEBREW_NO_AUTO_UPDATE=1 brew bundle --file=/tmp/nix-dotfiles-Brewfile --no-upgrade --jobs=1
+
+# Optional mutable upgrades for declared packages only
+./scripts/update-system.sh --upgrade-brew
+
+# Optional destructive pruning after preview and confirmation
+./scripts/update-system.sh --prune-brew
+```
+
+**Step 5: Apply Changes**
 ```bash
 # macOS: Apply configuration changes
 sudo darwin-rebuild switch --flake ~/.config/nix-dotfiles/ --show-trace
@@ -296,7 +322,7 @@ sudo darwin-rebuild switch --flake ~/.config/nix-dotfiles/ --show-trace
 sudo nixos-rebuild switch --flake ~/.config/nix-dotfiles/ --show-trace
 ```
 
-**Step 5: Verify System Health**
+**Step 6: Verify System Health**
 ```bash
 # Confirm Determinate Systems is healthy
 sudo determinate-nixd status
