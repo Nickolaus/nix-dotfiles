@@ -272,9 +272,8 @@ in
           args = [ "mcp-server-time" ];
         };
         atlassian = {
-          type = "stdio";
-          command = "${pkgs.nodejs}/bin/npx";
-          args = [ "-y" "mcp-remote@latest" "https://mcp.atlassian.com/v1/mcp" ];
+          type = "http";
+          url = "https://mcp.atlassian.com/v1/mcp/authv2";
         };
         serena = {
           type = "stdio";

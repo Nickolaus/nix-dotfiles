@@ -19,6 +19,12 @@ let
 
   serverEnabledFor = target: server: builtins.elem target server.targets;
 
+  codexManagedMcpServers =
+    filterAttrs (_: server: serverEnabledFor "codex" server) enabledMcpServers;
+
+  codexManagedMcpServerNamesShell =
+    lib.concatMapStringsSep " " lib.escapeShellArg (builtins.attrNames codexManagedMcpServers);
+
   renderEnvForCursor = server:
     server.env
     // builtins.listToAttrs (map
@@ -111,11 +117,58 @@ in
         codex_dir="${config.home.homeDirectory}/.codex"
         codex_config="$codex_dir/config.toml"
         codex_backup="$codex_dir/config.toml.backup"
+        codex_prune_backup="$codex_dir/config.toml.pre-ai-agents-mcp-prune"
 
         mkdir -p "$codex_dir"
 
         if [ ! -e "$codex_config" ] && [ -f "$codex_backup" ]; then
           cp "$codex_backup" "$codex_config"
+        fi
+
+        if [ -f "$codex_config" ]; then
+          tmp_file="$(mktemp)"
+
+          ${pkgs.gawk}/bin/awk -v managed_names=${lib.escapeShellArg codexManagedMcpServerNamesShell} '
+            BEGIN {
+              split(managed_names, names, " ")
+              for (idx in names) {
+                if (names[idx] != "") {
+                  managed[names[idx]] = 1
+                }
+              }
+            }
+
+            function is_managed_mcp_table(line, inner, parts) {
+              if (line !~ /^\[mcp_servers\./) {
+                return 0
+              }
+
+              inner = line
+              sub(/^\[mcp_servers\./, "", inner)
+              sub(/\]$/, "", inner)
+              split(inner, parts, ".")
+
+              return parts[1] in managed
+            }
+
+            /^\[/ {
+              skip = is_managed_mcp_table($0)
+            }
+
+            !skip {
+              print
+            }
+          ' "$codex_config" > "$tmp_file"
+
+          if ! cmp -s "$tmp_file" "$codex_config"; then
+            if [ ! -e "$codex_prune_backup" ]; then
+              cp "$codex_config" "$codex_prune_backup"
+              chmod 0600 "$codex_prune_backup" 2>/dev/null || true
+            fi
+            mv "$tmp_file" "$codex_config"
+          else
+            rm -f "$tmp_file"
+          fi
         fi
       '');
 }
