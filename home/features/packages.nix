@@ -122,6 +122,8 @@
     python3Packages.openai   # OpenAI Python client library with CLI capabilities
     cursor-cli               # Cursor CLI agent for AI-powered code editing
     codex                    # OpenAI's coding agent
+    opencode                 # Multi-provider agentic coding CLI (opencode.ai)
+    mistral-vibe             # Mistral's terminal coding agent (vibe, vibe-acp)
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 📊 DATA & ANALYTICS

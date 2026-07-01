@@ -279,6 +279,11 @@ in
           type = "stdio";
           command = "codebase-memory-mcp";
         };
+        headroom = {
+          type = "stdio";
+          command = "${pkgs.uv}/bin/uvx";
+          args = [ "--from" "headroom-ai[mcp]" "headroom" "mcp" "serve" ];
+        };
         serena = {
           type = "stdio";
           command = "serena";

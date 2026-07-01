@@ -44,11 +44,6 @@ let
       base_url = cfg.localCoding.openaiBaseUrl;
     };
 
-    profiles.local-coding = {
-      model = cfg.localCoding.model;
-      model_provider = "local_coding_ollama";
-    };
-
     mcp_servers = lib.mapAttrs renderCodexMcpServer enabledMcpServers;
   };
 in

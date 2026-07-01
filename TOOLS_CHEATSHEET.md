@@ -407,6 +407,32 @@ codebase-memory-mcp config set auto_index true   # opt-in: index new projects on
 - We deliberately did **not** run the upstream `install` command's side effects (Claude Code skills + `PreToolUse` hook, Codex `AGENTS.md`/`SessionStart` reminder) since those mutate agent-owned files outside Nix's control — same reasoning as Serena above. The MCP tools are available; the agent decides when to reach for them (or is nudged via `AGENTS.md`).
 - Complementary to Graphify, not a replacement: Graphify is the cross-modal (code + docs + papers + media), LLM-driven deep-dive with visual/report artifacts, invoked on demand; `codebase-memory-mcp` is the always-on, free, sub-ms structural backend for routine code navigation.
 
+#### Headroom (Context Compression)
+```bash
+headroom-status                 # Proxy health, upstream, and wrapper usage hints
+headroom-logs                   # Follow the persistent proxy's log
+headroom-claude [-- args]       # Run Claude Code through the proxy (real Anthropic API, compressed)
+headroom-codex [-- args]        # Run Codex through the proxy (real OpenAI-compatible API, compressed)
+headroom-opencode [-- args]     # Run OpenCode through the proxy (real API, compressed)
+```
+
+- Installed via `uvx --from "headroom-ai[...]" headroom ...` (no Nix package exists upstream — it's a fast-moving maturin/Rust+Python build with a large optional-ML dependency surface). `uv`/`uvx` resolves a **prebuilt wheel** on this platform, so no Rust toolchain is pulled in.
+- Two integration layers, both declarative:
+  1. **MCP tools** (`headroom_compress`, `headroom_retrieve`, `headroom_stats`) — registered for Codex, Claude Code, and Cursor via `aiAgents.mcpServers.headroom`, same `uvx`-on-demand pattern as `context7`/`fetch`/`time`. The agent calls these explicitly to shrink large tool output before reasoning over it.
+  2. **Persistent local proxy** (`headroom proxy`, port 8787) — a launchd agent (`org.nix-community.home.headroom-proxy`, macOS only) that starts at login and stays up, compressing all traffic that's routed through it before forwarding to the real upstream provider (`https://api.anthropic.com`, `https://api.openai.com`, etc.). Check it with `headroom-status` / `curl http://127.0.0.1:8787/health`.
+- **Why no separate "gateway" tool (LiteLLM/Portkey/etc.) was needed**: Claude Code, Cursor, Codex, and OpenCode split into exactly two wire protocols — Anthropic Messages (Claude Code) and OpenAI-compatible (everyone else) — and the Headroom proxy already speaks *both* on the same port (`/v1/messages`, `/v1/chat/completions`, `/v1/responses`). It **is** the protocol-agnostic gateway; no extra layer needed. What differs per tool is only how each one is told to point at it:
+  | Tool | Native override mechanism | Auth preserved? |
+  | --- | --- | --- |
+  | Claude Code | `ANTHROPIC_BASE_URL` env var | via `headroom wrap claude` |
+  | Codex | `openai_base_url` in a `--profile` file (`~/.codex/headroom.config.toml`) | yes — keeps ChatGPT sign-in *or* API key on the built-in `openai` provider |
+  | OpenCode | `provider.<id>.options.baseURL` in `opencode.json` | via `headroom wrap opencode` (dynamic model catalog) |
+  | Cursor | **No config file or env var exists** — Settings ➜ Models ➜ OpenAI API Key ➜ Advanced ➜ Override Base URL | one-time manual step, confirmed by Cursor's own forum/docs; no tool works around this |
+- **`headroom-codex` is fully declarative** — no `uvx`/`headroom wrap` subprocess. `~/.codex/headroom.config.toml` sets `openai_base_url = "http://127.0.0.1:8787/v1"`, which redirects Codex's built-in `openai` provider without replacing its identity or auth (per OpenAI's own docs: a custom `model_providers.*` entry would require `env_key`/a real API key and **cannot** use ChatGPT sign-in — `openai_base_url` avoids that entirely).
+  - **Bug found & fixed along the way**: `codex --profile local-coding` (used by `llm-codex-local`) was silently broken on Codex CLI ≥ 0.134 (installed: 0.142.2) — `--profile <name>` no longer reads `[profiles.<name>]` from `config.toml` at all; it now only reads `$CODEX_HOME/<name>.config.toml`. Fixed by moving the profile selector to `~/.codex/local-coding.config.toml` (declared via `home.file` in `ollama.nix`); `model_providers.local_coding_ollama` itself still lives in the managed config since that key is unaffected.
+- **Claude/OpenCode still use `headroom wrap <tool> --no-proxy --no-mcp --no-tokensave --no-serena --no-context-tool`** (the `--no-*` flags skip Headroom's own MCP/tokensave/Serena auto-registration, since we already declare those MCP servers ourselves via `aiAgents`). Claude Code has a documented `settings.json`-env-precedence quirk that `headroom wrap` handles correctly (verified end-to-end); OpenCode's custom-provider config needs an explicit, versioned model catalog that `headroom wrap` generates dynamically rather than something we'd want to hand-maintain in Nix.
+- **Deliberately not wired into the default `claude`/`codex`/`opencode` commands.** This machine's default `claude` already routes to the local Ollama backend unconditionally (see `localAi`/`llm-claude-local`), so silently rewriting it risked breaking that routing. The `headroom-*` wrappers above are explicit opt-in.
+- Proxy state/logs live at `~/.local/state/headroom/` (`proxy.log` / `proxy.error.log`); the proxy itself persists savings stats at `~/.headroom/`.
+
 #### Caveman Agent Compression
 ```bash
 caveman-status                  # Check pinned Codex skill install and usage hints

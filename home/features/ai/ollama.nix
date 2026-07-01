@@ -860,6 +860,16 @@ in
       };
       home.file.".local/state/ollama/.keep".text = "";
 
+      # Codex CLI >= 0.134 no longer reads `[profiles.<name>]` from config.toml;
+      # `--profile <name>` now layers `$CODEX_HOME/<name>.config.toml` on top of the
+      # base config instead. `model_providers.local_coding_ollama` itself still lives
+      # in the managed config (hosts/shared/codex.nix) since that key isn't ignored
+      # there; only the profile *selector* needs to move to this per-user file.
+      home.file.".codex/local-coding.config.toml".text = ''
+        model = "${codingModel}"
+        model_provider = "local_coding_ollama"
+      '';
+
       home.shellAliases = {
         "ollama-health" = "llm-status";
         "ollama-setup" = "llm-pull all";
@@ -1308,7 +1318,7 @@ in
             exit 1
           fi
 
-          # The local-coding profile now comes from the user-level Codex config.
+          # Profile selector lives at ~/.codex/local-coding.config.toml (see home.file above).
           exec codex --profile local-coding "$@"
         '')
 
