@@ -464,6 +464,8 @@ oco-claude            # Auto-loads Claude key from encrypted secrets
 - Serena is installed from a pinned upstream flake and exposed through `aiAgents` for Codex, Claude Code, and Cursor. Use it for live symbol-aware code navigation/refactoring; keep Graphify for durable repo graphs and visualizations.
 - Serena's dashboard remains enabled for diagnostics, but managed MCP launches pass `--open-web-dashboard False` so agents do not open browser tabs on startup.
 - Serena initialization is explicit via `serena-init-lsp` or `serena-init-jetbrains`. Project-local `.serena/` files are per-repo decisions, not globally managed dotfiles.
+- `codebase-memory-mcp` is built from its pinned upstream flake and exposed through `aiAgents` for Codex, Claude Code, and Cursor. It's a zero-token, always-on structural code graph (call graphs, dead code, Cypher queries, git-diff impact) — prefer it over grep for "who calls X" / "what breaks if I change Y" questions on indexed repos. Graphify remains the tool for deep, cross-document (code + docs + papers + media) architecture exploration invoked on demand.
+- `codebase-memory-mcp` indexes lazily on first tool call (or via `config set auto_index true`) and persists its graph at `~/.cache/codebase-memory-mcp/`; run `codebase-memory-status` to check the pinned package and PATH resolution.
 - For Cline or Cursor local coding, point the provider to `http://127.0.0.1:11436`.
 - Prefer one local coding agent at a time on this machine. The coding endpoint is single-request (`NUM_PARALLEL=1`), so running Cline and Roo together turns waits into queue time very quickly.
 

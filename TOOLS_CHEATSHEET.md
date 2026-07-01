@@ -391,6 +391,22 @@ serena-claude          # Launch Claude Code with Serena's prompt override
 - Project-local `.serena/` files and memories are per-repo decisions and should be committed only when that repo explicitly wants them.
 - Claude hooks and auto-approval are not enabled globally; use `serena-claude` when Serena adherence matters.
 
+#### Codebase Memory (Code Knowledge Graph)
+```bash
+codebase-memory-status              # Check pinned package, PATH resolution, cache dir
+codebase-memory-mcp cli list_projects
+codebase-memory-mcp cli search_graph '{"name_pattern": ".*Handler.*"}'
+codebase-memory-mcp cli trace_path '{"function_name": "Search", "direction": "both"}'
+codebase-memory-mcp config set auto_index true   # opt-in: index new projects on session start
+```
+
+- Installed declaratively from the pinned upstream flake input (`github:DeusData/codebase-memory-mcp`), built from source — no upstream `install.sh`/`curl | bash` involved.
+- The shared `aiAgents` MCP config enables it for Codex, Claude Code, and Cursor as a stdio server (`codebase-memory-mcp`, resolved via `PATH`).
+- Zero LLM tokens for indexing: pure tree-sitter + Hybrid LSP static analysis in a single C binary. Persists its graph at `~/.cache/codebase-memory-mcp/` (override with `CBM_CACHE_DIR`).
+- Prefer it for structural questions on indexed repos — call graphs (`trace_path`), regex/label search (`search_graph`), dead code, git-diff blast radius (`detect_changes`), and read-only Cypher queries (`query_graph`) — instead of grepping file-by-file.
+- We deliberately did **not** run the upstream `install` command's side effects (Claude Code skills + `PreToolUse` hook, Codex `AGENTS.md`/`SessionStart` reminder) since those mutate agent-owned files outside Nix's control — same reasoning as Serena above. The MCP tools are available; the agent decides when to reach for them (or is nudged via `AGENTS.md`).
+- Complementary to Graphify, not a replacement: Graphify is the cross-modal (code + docs + papers + media), LLM-driven deep-dive with visual/report artifacts, invoked on demand; `codebase-memory-mcp` is the always-on, free, sub-ms structural backend for routine code navigation.
+
 #### Caveman Agent Compression
 ```bash
 caveman-status                  # Check pinned Codex skill install and usage hints
