@@ -275,6 +275,10 @@ in
           type = "http";
           url = "https://mcp.atlassian.com/v1/mcp/authv2";
         };
+        codebase-memory = {
+          type = "stdio";
+          command = "codebase-memory-mcp";
+        };
         serena = {
           type = "stdio";
           command = "serena";

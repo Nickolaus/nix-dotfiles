@@ -23,6 +23,8 @@
 
     serena.url = "github:oraios/serena/v1.5.3";
 
+    codebase-memory-mcp.url = "github:DeusData/codebase-memory-mcp/v0.8.1";
+
     # Disko for declarative disk management
     disko = {
       url = "github:nix-community/disko";
