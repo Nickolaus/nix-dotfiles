@@ -372,8 +372,8 @@ llm-claude-local     # Uses ~/.claude/settings.json via the session proxy
 - MCP transport schema:
   - `type = "http"` uses `url` and optional `headers`
   - `type = "stdio"` uses `command`, optional `args`, and optional `env`
-  - `targetOverrides.<codex|claude|cursor>` customizes one logical server per client
-- GitHub MCP is HTTP, not stdio
+  - `targetOverrides.<codex|claude|cursor|vibe>` customizes one logical server per client
+- GitHub MCP is HTTP, not stdio. Codex and Vibe both authenticate it natively (`bearer_token_env_var` / `api_key_env`); Claude Code and Cursor lack a native bearer-token field, so they get an `Authorization` header with an env-var placeholder (`${GITHUB_MCP_PAT}` / `${env:GITHUB_MCP_PAT}`) that each tool expands at startup instead.
 
 #### Serena Code Intelligence
 ```bash
@@ -384,7 +384,7 @@ serena-claude          # Launch Claude Code with Serena's prompt override
 ```
 
 - Serena is installed declaratively from the pinned upstream flake input.
-- The shared `aiAgents` MCP config enables Serena for Codex, Claude Code, and Cursor with client-specific contexts.
+- The shared `aiAgents` MCP config enables Serena for Codex, Claude Code, Cursor, and Vibe with client-specific contexts (Vibe inherits the `codex` context, since both are terminal CLIs).
 - Managed Serena MCP launches keep the dashboard enabled but pass `--open-web-dashboard False`, so agents do not open browser tabs on startup.
 - Serena is for live symbol-aware code navigation and refactoring. Graphify remains the durable repo graph for architecture, docs/code relationships, and visualizations.
 - Do not run `serena setup codex` or `serena setup claude-code` from activation hooks; those mutate user-owned agent config.
@@ -401,7 +401,7 @@ codebase-memory-mcp config set auto_index true   # opt-in: index new projects on
 ```
 
 - Installed declaratively from the pinned upstream flake input (`github:DeusData/codebase-memory-mcp`), built from source — no upstream `install.sh`/`curl | bash` involved.
-- The shared `aiAgents` MCP config enables it for Codex, Claude Code, and Cursor as a stdio server (`codebase-memory-mcp`, resolved via `PATH`).
+- The shared `aiAgents` MCP config enables it for Codex, Claude Code, Cursor, and Vibe as a stdio server (`codebase-memory-mcp`, resolved via `PATH`).
 - Zero LLM tokens for indexing: pure tree-sitter + Hybrid LSP static analysis in a single C binary. Persists its graph at `~/.cache/codebase-memory-mcp/` (override with `CBM_CACHE_DIR`).
 - Prefer it for structural questions on indexed repos — call graphs (`trace_path`), regex/label search (`search_graph`), dead code, git-diff blast radius (`detect_changes`), and read-only Cypher queries (`query_graph`) — instead of grepping file-by-file.
 - We deliberately did **not** run the upstream `install` command's side effects (Claude Code skills + `PreToolUse` hook, Codex `AGENTS.md`/`SessionStart` reminder) since those mutate agent-owned files outside Nix's control — same reasoning as Serena above. The MCP tools are available; the agent decides when to reach for them (or is nudged via `AGENTS.md`).
@@ -418,7 +418,7 @@ headroom-opencode [-- args]     # Run OpenCode through the proxy (real API, comp
 
 - Installed via `uvx --from "headroom-ai[...]" headroom ...` (no Nix package exists upstream — it's a fast-moving maturin/Rust+Python build with a large optional-ML dependency surface). `uv`/`uvx` resolves a **prebuilt wheel** on this platform, so no Rust toolchain is pulled in.
 - Two integration layers, both declarative:
-  1. **MCP tools** (`headroom_compress`, `headroom_retrieve`, `headroom_stats`) — registered for Codex, Claude Code, and Cursor via `aiAgents.mcpServers.headroom`, same `uvx`-on-demand pattern as `context7`/`fetch`/`time`. The agent calls these explicitly to shrink large tool output before reasoning over it.
+  1. **MCP tools** (`headroom_compress`, `headroom_retrieve`, `headroom_stats`) — registered for Codex, Claude Code, Cursor, and Vibe via `aiAgents.mcpServers.headroom`, same `uvx`-on-demand pattern as `context7`/`fetch`/`time`. The agent calls these explicitly to shrink large tool output before reasoning over it.
   2. **Persistent local proxy** (`headroom proxy`, port 8787) — a launchd agent (`org.nix-community.home.headroom-proxy`, macOS only) that starts at login and stays up, compressing all traffic that's routed through it before forwarding to the real upstream provider (`https://api.anthropic.com`, `https://api.openai.com`, etc.). Check it with `headroom-status` / `curl http://127.0.0.1:8787/health`.
 - **Why no separate "gateway" tool (LiteLLM/Portkey/etc.) was needed**: Claude Code, Cursor, Codex, and OpenCode split into exactly two wire protocols — Anthropic Messages (Claude Code) and OpenAI-compatible (everyone else) — and the Headroom proxy already speaks *both* on the same port (`/v1/messages`, `/v1/chat/completions`, `/v1/responses`). It **is** the protocol-agnostic gateway; no extra layer needed. What differs per tool is only how each one is told to point at it:
   | Tool | Native override mechanism | Auth preserved? |
@@ -433,6 +433,20 @@ headroom-opencode [-- args]     # Run OpenCode through the proxy (real API, comp
 - **Deliberately not wired into the default `claude`/`codex`/`opencode` commands.** This machine's default `claude` already routes to the local Ollama backend unconditionally (see `localAi`/`llm-claude-local`), so silently rewriting it risked breaking that routing. The `headroom-*` wrappers above are explicit opt-in.
 - Proxy state/logs live at `~/.local/state/headroom/` (`proxy.log` / `proxy.error.log`); the proxy itself persists savings stats at `~/.headroom/`.
 
+#### Mistral Vibe
+```bash
+vibe                # Launch Vibe in the current project (first run prompts for MISTRAL_API_KEY)
+vibe --setup        # (Re)configure the API key explicitly
+vibe-status         # Managed MCP server list, config path, skills note
+```
+
+- Installed from nixpkgs (`mistral-vibe`), providing the `vibe` and `vibe-acp` (Agent Client Protocol, for editor/IDE integrations) commands.
+- **MCP servers**: the same `aiAgents.mcpServers` set used by Codex (see `targets` defaults and per-server `targets` overrides) is merged declaratively into `~/.vibe/config.toml`'s `mcp_servers` array. Unlike Claude's fully-generated `.claude/settings.json`, this is a **format-preserving merge** — a small `tomlkit`-based Python script (`python3.withPackages` w/ `tomlkit`, run from `home.activation`) parses the existing `config.toml`, replaces only entries whose `name` matches a Nix-managed server, and leaves everything else (model choice, `default_agent`, tool permissions, any server you added yourself via `/mcp add`) untouched. This mirrors `restoreCodexUserConfig`'s surgical-prune approach for Codex, adapted from single-name TOML tables to TOML arrays-of-tables.
+- **Skills**: Vibe follows the [Agent Skills spec](https://agentskills.io/specification) and reads `~/.agents/skills/` directly — the exact directory Codex uses (see Caveman above) — so no separate skill install step was needed; Vibe picks up the same skills for free. Project-local `.agents/skills/` and `.vibe/skills/` are also honored in trusted folders.
+- **Auth**: Vibe has no system-managed config layer (unlike Codex's `/etc/codex/managed_config.toml`), so API key setup stays interactive/manual — `vibe --setup`, the `MISTRAL_API_KEY` env var, or `~/.vibe/.env`.
+- **Serena context**: no `targetOverrides.vibe` was added for Serena — Vibe inherits the base `--context=codex` args, since both are terminal-style CLI agents with equivalent tool-schema needs.
+- `vibe-status` lists the exact managed server names, so you can tell a Nix-managed entry apart from anything you've added yourself.
+
 #### Caveman Agent Compression
 ```bash
 caveman-status                  # Check pinned Codex skill install and usage hints
@@ -441,11 +455,12 @@ caveman-claude-install-minimal  # Explicit Claude plugin install, no hooks/MCP s
 caveman-claude-install-full     # Explicit Claude plugin + hooks, no MCP shrink
 ```
 
-- Codex Caveman skills are installed declaratively from the pinned Nix flake input into `~/.agents/skills/`.
-- In Codex CLI, activate per session through `/skills` and select `caveman`, or ask in plain language: `use caveman mode`, `talk like caveman`, or `stop caveman`.
+- Codex Caveman skills are installed declaratively from the pinned Nix flake input into `~/.agents/skills/` (also read by Vibe — both follow the Agent Skills spec).
+- **Full-intensity caveman style is on by default** for Codex, Vibe, and Claude Code — each tool's global instructions file (`~/.codex/AGENTS.md`, `~/.vibe/AGENTS.md`, `~/.claude/CLAUDE.md`) gets a short "activate immediately" preamble followed by the pinned `caveman` flake input's own `SKILL.md` embedded **verbatim** (`builtins.readFile`, not a hand-copied paraphrase) — single source of truth, so bumping the flake input is the only thing ever needed to keep the default style current. None of these mutate app-owned settings/MCP state, so — unlike the Claude plugin/hook install below — they're safe to enable unconditionally.
+- Say `stop caveman` / `normal mode` to turn it off for the rest of a session (it resumes as the default next session); switch intensity with `/caveman lite|full|ultra` (Codex/Vibe skill invocation) or plain language.
 - Caveman's upstream `/caveman` convention is not registered as a current Codex CLI slash command by this declarative setup.
-- Claude setup is explicit because its plugin and hook install mutate Claude-managed state.
-- `caveman-shrink`, repo-local `--with-init` rules, and compression of `AGENTS.md`/`CLAUDE.md` are intentionally not default.
+- Claude's caveman *skill/plugin* install (`caveman-claude-install-minimal`/`-full`, beyond the default `CLAUDE.md` style above) stays explicit because it mutates Claude-managed plugin/hook state.
+- `caveman-shrink` and repo-local `--with-init` rules are intentionally not default.
 
 #### Troubleshooting
 ```bash

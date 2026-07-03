@@ -36,7 +36,14 @@ let
 
   renderEnvForInheritedSession = server: server.env;
 
-  renderMcpServerForJson = target: envRenderer: name: rawServer:
+  # Codex gets bearer-token auth for HTTP MCP servers natively via
+  # `bearer_token_env_var`. Claude Code and Cursor have no such field -- both
+  # instead expand environment variable references inside literal `headers`
+  # string values at startup, but with different placeholder syntax.
+  claudeHeaderAuthRenderer = varName: "Bearer \${${varName}}";
+  cursorHeaderAuthRenderer = varName: "Bearer \${env:${varName}}";
+
+  renderMcpServerForJson = target: envRenderer: headerAuthRenderer: name: rawServer:
     let
       server = aiAgentsLib.effectiveServerFor target rawServer;
     in
@@ -44,8 +51,10 @@ let
       {
         type = "http";
         url = server.url;
-      } // optionalAttrs (server.headers != { }) {
-        headers = server.headers;
+      } // optionalAttrs (server.headers != { } || server.bearerTokenEnvVar != null) {
+        headers = server.headers // optionalAttrs (server.bearerTokenEnvVar != null) {
+          Authorization = headerAuthRenderer server.bearerTokenEnvVar;
+        };
       }
     else
       aiAgentsLib.renderStdioCommand name server
@@ -65,13 +74,13 @@ let
   };
 
   cursorMcpSettings = {
-    mcpServers = lib.mapAttrs (renderMcpServerForJson "cursor" renderEnvForCursor) (
+    mcpServers = lib.mapAttrs (renderMcpServerForJson "cursor" renderEnvForCursor cursorHeaderAuthRenderer) (
       filterAttrs (_: server: serverEnabledFor "cursor" server) enabledMcpServers
     );
   };
 
   claudeMcpSettings = {
-    mcpServers = lib.mapAttrs (renderMcpServerForJson "claude" renderEnvForInheritedSession) (
+    mcpServers = lib.mapAttrs (renderMcpServerForJson "claude" renderEnvForInheritedSession claudeHeaderAuthRenderer) (
       filterAttrs (_: server: serverEnabledFor "claude" server) enabledMcpServers
     );
   };

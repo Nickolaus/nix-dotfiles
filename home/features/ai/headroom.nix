@@ -56,7 +56,7 @@ in
       fi
 
       echo
-      echo "Always-on MCP tools (headroom_compress/retrieve/stats): registered for Codex, Claude Code, and Cursor via aiAgents."
+      echo "Always-on MCP tools (headroom_compress/retrieve/stats): registered for Codex, Claude Code, Cursor, and Vibe via aiAgents."
       echo
       echo "Opt-in compressed-cloud wrappers (real Anthropic/OpenAI traffic, routed through the local proxy):"
       echo "  headroom-claude [args...]     - Claude Code through the proxy"

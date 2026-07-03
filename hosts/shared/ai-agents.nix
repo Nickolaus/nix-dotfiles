@@ -7,7 +7,7 @@ let
     types
     ;
 
-  clientType = types.enum [ "codex" "claude" "cursor" ];
+  clientType = types.enum [ "codex" "claude" "cursor" "vibe" ];
 
   mcpServerTargetOverrideType = types.submodule ({ ... }: {
     options = {
@@ -155,7 +155,7 @@ let
 
       targets = mkOption {
         type = types.listOf clientType;
-        default = [ "codex" "claude" "cursor" ];
+        default = [ "codex" "claude" "cursor" "vibe" ];
         description = "Agent clients that should receive this MCP definition.";
       };
 
@@ -178,6 +178,12 @@ let
               type = mcpServerTargetOverrideType;
               default = { };
               description = "Cursor-specific MCP server overrides.";
+            };
+
+            vibe = mkOption {
+              type = mcpServerTargetOverrideType;
+              default = { };
+              description = "Vibe-specific MCP server overrides.";
             };
           };
         });
@@ -219,6 +225,10 @@ in
       cursor.enable = mkEnableOption "Cursor configuration rendering" // {
         default = true;
       };
+
+      vibe.enable = mkEnableOption "Mistral Vibe configuration rendering" // {
+        default = true;
+      };
     };
 
     mcpServers = mkOption {
@@ -249,7 +259,7 @@ in
           command = "${pkgs.nodejs}/bin/npx";
           args = [ "-y" "puppeteer-mcp-server@latest" ];
           isolateWorkingDirectory = true;
-          targets = [ "codex" ];
+          targets = [ "codex" "vibe" ];
         };
         fetch = {
           type = "stdio";

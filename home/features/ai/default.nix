@@ -6,5 +6,6 @@
     ./headroom.nix
     ./ollama.nix
     ./serena.nix
+    ./vibe.nix
   ];
 }

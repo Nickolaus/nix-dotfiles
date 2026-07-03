@@ -445,26 +445,28 @@ oco-claude            # Auto-loads Claude key from encrypted secrets
 - `keep_alive=10m` means 10 minutes after the last completed request, not 10 minutes after startup.
 - Unsent typing in Cursor or Cline does not refresh residency; submitted requests do.
 - `llm-session finish coding` is the intended task-finished path when you want memory back immediately.
-- Codex, Claude Code, and Cursor all derive shared defaults from `aiAgents`.
+- Codex, Claude Code, Cursor, and Vibe all derive shared defaults from `aiAgents`.
 - Ownership is tool-specific:
   - Codex shared defaults: `/etc/codex/managed_config.toml`
   - Codex user state and trust: `~/.codex/config.toml`
   - Cursor global MCP config: `~/.cursor/mcp.json`
   - Claude Code settings: `~/.claude/settings.json`
   - Claude Code global MCPs are merged into the top-level `mcpServers` section of `~/.claude.json`
+  - Vibe's `mcp_servers` array is merged (format-preserving, via `tomlkit`) into `~/.vibe/config.toml`, leaving the rest of that file (model choice, agent prefs, any manually `/mcp add`-ed servers) untouched
 - Project-specific MCPs should stay tool-native and local to the project:
   - Codex: `.codex/config.toml`
   - Cursor: `.cursor/mcp.json`
   - Claude Code: `.mcp.json`
+  - Vibe: `.vibe/config.toml`
 - MCP transport schema in `aiAgents`:
   - `type = "http"` uses `url` and optional `headers`
   - `type = "stdio"` uses `command`, optional `args`, and optional `env`
-  - `targetOverrides.<codex|claude|cursor>` customizes one logical MCP server per client
-- GitHub MCP is HTTP, not stdio.
-- Serena is installed from a pinned upstream flake and exposed through `aiAgents` for Codex, Claude Code, and Cursor. Use it for live symbol-aware code navigation/refactoring; keep Graphify for durable repo graphs and visualizations.
+  - `targetOverrides.<codex|claude|cursor|vibe>` customizes one logical MCP server per client
+- GitHub MCP is HTTP, not stdio. Codex authenticates it natively via `bearer_token_env_var`; Vibe has an equally native `api_key_env`/`api_key_header`/`api_key_format`; Claude Code and Cursor have no such field, so both get an `Authorization` header with a literal `${GITHUB_MCP_PAT}` / `${env:GITHUB_MCP_PAT}` placeholder that each tool expands from the shell environment at startup.
+- Serena is installed from a pinned upstream flake and exposed through `aiAgents` for Codex, Claude Code, Cursor, and Vibe. Use it for live symbol-aware code navigation/refactoring; keep Graphify for durable repo graphs and visualizations.
 - Serena's dashboard remains enabled for diagnostics, but managed MCP launches pass `--open-web-dashboard False` so agents do not open browser tabs on startup.
 - Serena initialization is explicit via `serena-init-lsp` or `serena-init-jetbrains`. Project-local `.serena/` files are per-repo decisions, not globally managed dotfiles.
-- `codebase-memory-mcp` is built from its pinned upstream flake and exposed through `aiAgents` for Codex, Claude Code, and Cursor. It's a zero-token, always-on structural code graph (call graphs, dead code, Cypher queries, git-diff impact) — prefer it over grep for "who calls X" / "what breaks if I change Y" questions on indexed repos. Graphify remains the tool for deep, cross-document (code + docs + papers + media) architecture exploration invoked on demand.
+- `codebase-memory-mcp` is built from its pinned upstream flake and exposed through `aiAgents` for Codex, Claude Code, Cursor, and Vibe. It's a zero-token, always-on structural code graph (call graphs, dead code, Cypher queries, git-diff impact) — prefer it over grep for "who calls X" / "what breaks if I change Y" questions on indexed repos. Graphify remains the tool for deep, cross-document (code + docs + papers + media) architecture exploration invoked on demand.
 - `codebase-memory-mcp` indexes lazily on first tool call (or via `config set auto_index true`) and persists its graph at `~/.cache/codebase-memory-mcp/`; run `codebase-memory-status` to check the pinned package and PATH resolution.
 - `headroom` (context compression) runs as an `uvx`-resolved MCP server (`headroom_compress`/`headroom_retrieve`/`headroom_stats`, exposed via `aiAgents`) plus a persistent local proxy (launchd, port 8787, macOS) that speaks both the Anthropic and OpenAI-compatible wire protocols and compresses real cloud LLM traffic before forwarding it — no separate gateway tool needed since it already covers Claude Code, Codex, OpenCode, and (manually, via Cursor's own Settings — it has no config file/env var for this) Cursor. Run `headroom-status` for health; use `headroom-claude` / `headroom-codex` / `headroom-opencode` to opt a session into compressed cloud traffic — the default `claude`/`codex`/`opencode` commands are untouched (see `TOOLS_CHEATSHEET.md`).
 - `opencode` (opencode.ai) is installed from nixpkgs as a general multi-provider coding CLI, in addition to its Headroom wrapper above.

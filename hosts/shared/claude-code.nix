@@ -19,8 +19,13 @@ in
           {
             type = "http";
             url = server.url;
-          } // optionalAttrs (server.headers != { }) {
-            headers = server.headers;
+          } // optionalAttrs (server.headers != { } || server.bearerTokenEnvVar != null) {
+            # Claude Code expands `${VAR}` in .mcp.json headers from the shell
+            # environment at startup -- this is the only way to give it the same
+            # bearer-token auth Codex gets natively via `bearer_token_env_var`.
+            headers = server.headers // optionalAttrs (server.bearerTokenEnvVar != null) {
+              Authorization = "Bearer \${${server.bearerTokenEnvVar}}";
+            };
           }
         else
           {
