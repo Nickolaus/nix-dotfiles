@@ -9,6 +9,23 @@ let
 
   clientType = types.enum [ "codex" "claude" "cursor" "vibe" ];
 
+  # Servers that stay natively registered for all 4 clients (targets unchanged
+  # below): universal, cheap, no meaningful downside to loading every session.
+  # Everything else is `targets = [ ]` (defined, but not natively pushed to any
+  # client) and reachable only by explicitly opting into one of the
+  # `mcpProfiles` below -- see that option's own comment for why. Every
+  # profile that needs the "generally useful anywhere" baseline extends this
+  # list instead of re-declaring it, so the two never drift apart.
+  defaultProfileServers = [
+    "context7"
+    "fetch"
+    "sequential-thinking"
+    "time"
+    "github"
+    "codebase-memory"
+    "headroom"
+  ];
+
   mcpServerTargetOverrideType = types.submodule ({ ... }: {
     options = {
       type = mkOption {
@@ -234,9 +251,12 @@ in
     mcpServers = mkOption {
       type = types.attrsOf mcpServerType;
       default = {
+        # Single-purpose (OpenAI API docs only) -- not natively registered,
+        # reachable via aiAgents.mcpProfiles.openai-api.
         openaiDeveloperDocs = {
           type = "http";
           url = "https://developers.openai.com/mcp";
+          targets = [ ];
         };
         context7 = {
           type = "stdio";
@@ -249,27 +269,37 @@ in
           url = "https://api.githubcopilot.com/mcp/";
           bearerTokenEnvVar = "GITHUB_MCP_PAT";
         };
+        # Browser automation -- not natively registered, reachable together via
+        # aiAgents.mcpProfiles.web.
         chrome-devtools = {
           type = "stdio";
           command = "${pkgs.nodejs}/bin/npx";
           args = [ "-y" "chrome-devtools-mcp@latest" ];
+          targets = [ ];
         };
         puppeteer = {
           type = "stdio";
           command = "${pkgs.nodejs}/bin/npx";
           args = [ "-y" "puppeteer-mcp-server@latest" ];
           isolateWorkingDirectory = true;
-          targets = [ "codex" "vibe" ];
+          targets = [ ];
         };
         fetch = {
           type = "stdio";
           command = "${pkgs.uv}/bin/uvx";
           args = [ "mcp-server-fetch" ];
         };
+        # @modelcontextprotocol/server-memory defaults to storing memory.jsonl
+        # next to its own installed package, not per-repo -- it's already a
+        # single global scratchpad shared across every repo/client regardless
+        # of targets here. That surprising global-by-default behavior is why
+        # it stays an explicit opt-in (aiAgents.mcpProfiles.scratchpad) rather
+        # than natively loaded everywhere.
         memory = {
           type = "stdio";
           command = "${pkgs.nodejs}/bin/npx";
           args = [ "-y" "@modelcontextprotocol/server-memory" ];
+          targets = [ ];
         };
         sequential-thinking = {
           type = "stdio";
@@ -281,9 +311,12 @@ in
           command = "${pkgs.uv}/bin/uvx";
           args = [ "mcp-server-time" ];
         };
+        # Single-purpose (Jira/Confluence) -- not natively registered,
+        # reachable via aiAgents.mcpProfiles.atlassian.
         atlassian = {
           type = "http";
           url = "https://mcp.atlassian.com/v1/mcp/authv2";
+          targets = [ ];
         };
         codebase-memory = {
           type = "stdio";
@@ -294,11 +327,20 @@ in
           command = "${pkgs.uv}/bin/uvx";
           args = [ "--from" "headroom-ai[mcp]" "headroom" "mcp" "serve" ];
         };
+        # Heaviest tool surface + slowest startup (LSP indexing) of any server
+        # here -- only valuable during active code-navigation sessions, not
+        # every session. Not natively registered, reachable via
+        # aiAgents.mcpProfiles.nix-dotfiles (or any other profile that opts
+        # in). Profile rendering uses this base definition as-is (the
+        # targetOverrides below are keyed by codex/claude/cursor/vibe and only
+        # ever apply to those 4 native renderers, never to the profile
+        # gateway) -- i.e. every profile gets the `--context=codex` variant.
         serena = {
           type = "stdio";
           command = "serena";
           args = [ "start-mcp-server" "--project-from-cwd" "--context=codex" "--open-web-dashboard" "False" ];
           startupTimeoutSec = 15;
+          targets = [ ];
           targetOverrides = {
             claude.args = [ "start-mcp-server" "--context=claude-code" "--project-from-cwd" "--open-web-dashboard" "False" ];
             cursor.args = [ "start-mcp-server" "--context=ide" "--project-from-cwd" "--open-web-dashboard" "False" ];
@@ -306,6 +348,67 @@ in
         };
       };
       description = "Neutral cross-tool MCP server definitions rendered for each supported agent.";
+    };
+
+    mcpProfiles = mkOption {
+      type = types.attrsOf (types.submodule {
+        options = {
+          servers = mkOption {
+            type = types.listOf types.str;
+            description = "Names of aiAgents.mcpServers entries aggregated into this profile.";
+          };
+
+          description = mkOption {
+            type = types.str;
+            default = "";
+            description = "Human-readable description shown by mcp-profile-status.";
+          };
+        };
+      });
+      default = {
+        default = {
+          servers = defaultProfileServers;
+          description = "Universal baseline -- mirrors the servers natively registered for all 4 clients.";
+        };
+        nix-dotfiles = {
+          servers = defaultProfileServers ++ [ "serena" ];
+          description = "Editing this repo -- adds Nix-aware LSP code navigation.";
+        };
+        web = {
+          servers = defaultProfileServers ++ [ "chrome-devtools" "puppeteer" ];
+          description = "Browser automation / frontend work.";
+        };
+        atlassian = {
+          servers = defaultProfileServers ++ [ "atlassian" ];
+          description = "Jira/Confluence-integrated repos.";
+        };
+        openai-api = {
+          servers = defaultProfileServers ++ [ "openaiDeveloperDocs" ];
+          description = "OpenAI API integration work.";
+        };
+        scratchpad = {
+          servers = defaultProfileServers ++ [ "memory" ];
+          description = "Opt-in cross-repo notes -- memory.jsonl is global by upstream design, not per-repo.";
+        };
+      };
+      description = ''
+        Named, on-demand compositions of aiAgents.mcpServers, aggregated by a
+        FastMCP proxy (home/features/ai/mcp-profiles.nix -- one
+        `mcp-profile-<name>` binary per entry here) into a single stdio
+        endpoint. Each profile is spawned fresh per client invocation --
+        never a persistent or shared process, so member servers keep the
+        same per-invocation isolation they already have today (see the MCP
+        gateway sharing discussion this option's design is based on).
+        Independent of each server's `targets`/`enabled` fields: those
+        govern direct native registration into the 4 clients above, profiles
+        are a separate, explicit opt-in -- the two mechanisms together are
+        how a server goes "off by default, on via profile" (see
+        `defaultProfileServers` and the six servers above with
+        `targets = [ ]`). A repo pulls a profile in with one committed
+        stdio entry in its own project-native MCP config (`.mcp.json`,
+        `.cursor/mcp.json`, `.codex/config.toml`, `.vibe/config.toml`),
+        e.g. `{ "command": "mcp-profile-nix-dotfiles" }`.
+      '';
     };
 
     localCoding = {
@@ -453,6 +556,19 @@ in
           assertion = server.workingDirectory == null || builtins.substring 0 1 server.workingDirectory == "/";
           message = "aiAgents.mcpServers.${name}.workingDirectory must be an absolute path.";
         })
-        config.aiAgents.mcpServers;
+        config.aiAgents.mcpServers
+      ++ lib.concatMap
+        (profileName:
+          let
+            profile = config.aiAgents.mcpProfiles.${profileName};
+            unknown = builtins.filter (s: !(config.aiAgents.mcpServers ? ${s})) profile.servers;
+          in
+          [{
+            assertion = unknown == [ ];
+            message =
+              "aiAgents.mcpProfiles.${profileName}.servers references unknown aiAgents.mcpServers: "
+              + builtins.concatStringsSep ", " unknown;
+          }])
+        (builtins.attrNames config.aiAgents.mcpProfiles);
   };
 }

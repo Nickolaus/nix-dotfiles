@@ -8,6 +8,7 @@
     cachix       # Binary cache (works on all platforms)
     nixpkgs-fmt
     nh
+    nixd         # Nix language server -- also what Serena's LSP backend uses for Nix-aware navigation
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🔐 SECURITY & SECRETS MANAGEMENT

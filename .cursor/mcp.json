@@ -3,6 +3,9 @@
     "nixos": {
       "command": "uvx",
       "args": ["mcp-nixos"]
+    },
+    "nix-dotfiles-profile": {
+      "command": "mcp-profile-nix-dotfiles"
     }
   }
 }

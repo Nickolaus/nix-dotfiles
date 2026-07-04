@@ -373,7 +373,30 @@ llm-claude-local     # Uses ~/.claude/settings.json via the session proxy
   - `type = "http"` uses `url` and optional `headers`
   - `type = "stdio"` uses `command`, optional `args`, and optional `env`
   - `targetOverrides.<codex|claude|cursor|vibe>` customizes one logical server per client
+  - `targets = [ ]` opts a server out of native per-client registration entirely -- reachable only via an `aiAgents.mcpProfiles` profile (see below)
 - GitHub MCP is HTTP, not stdio. Codex and Vibe both authenticate it natively (`bearer_token_env_var` / `api_key_env`); Claude Code and Cursor lack a native bearer-token field, so they get an `Authorization` header with an env-var placeholder (`${GITHUB_MCP_PAT}` / `${env:GITHUB_MCP_PAT}`) that each tool expands at startup instead.
+
+#### MCP Profiles (`aiAgents.mcpProfiles`)
+```bash
+mcp-profile-status         # Declared profiles, member servers, and which servers are profile-only
+mcp-profile-nix-dotfiles   # Aggregated stdio endpoint: default baseline + serena, for this repo
+mcp-profile-web            # default baseline + chrome-devtools/puppeteer, for browser automation
+mcp-profile-atlassian      # default baseline + atlassian
+mcp-profile-openai-api     # default baseline + openaiDeveloperDocs
+mcp-profile-scratchpad     # default baseline + memory
+mcp-profile-onboard <profile> [repo-dir]   # Opt a repo into a profile WITHOUT committing that choice (see below)
+```
+
+- `context7`, `fetch`, `sequential-thinking`, `time`, `github`, `codebase-memory`, and `headroom` are the universal baseline (`defaultProfileServers` in `hosts/shared/ai-agents.nix`) and stay natively registered for all 4 clients.
+- `serena`, `chrome-devtools`, `puppeteer`, `atlassian`, `openaiDeveloperDocs`, and `memory` are `targets = [ ]` -- not natively loaded anywhere -- and reachable only through the profile above that carries them.
+- Every non-`default` profile is `defaultProfileServers ++ [ ... ]` in Nix, not a hand-relisted set, so the baseline can't drift between profiles.
+- Each `mcp-profile-<name>` binary is a FastMCP proxy (`home/features/ai/mcp-profiles.nix`, `uv run` since FastMCP isn't in nixpkgs) spawned fresh per invocation and exited after -- never a persistent or shared process, so unrelated repos/sessions never multiplex onto the same Serena workspace, browser session, or other stateful backend.
+- Opt a repo in with one committed line in its own project-native MCP config, e.g. `.cursor/mcp.json: { "command": "mcp-profile-nix-dotfiles" }` (see this repo's own `.cursor/mcp.json`) -- appropriate when the whole team should get that server.
+- **Onboarding without committing** (someone else's shared repo, or just a personal preference you don't want to impose on collaborators): `mcp-profile-onboard <profile> [repo-dir]` wires the profile into that repo's own project-native MCP config per client, entirely privately:
+  - **Claude Code**: uses `claude mcp add`'s default `local` scope -- stored in `~/.claude.json` keyed by that repo's path, zero repo footprint, nothing to hide.
+  - **Cursor / Codex / Vibe** (no native private-project scope): writes the entry into `.cursor/mcp.json` / `.codex/config.toml` / `.vibe/config.toml` as usual, then keeps that file out of git for *this clone only* -- via `.git/info/exclude` (a per-clone ignore list living inside `.git/` itself; never touches the shared `.gitignore`; invisible to `git status`/diffs/PRs) if the file wasn't already tracked, or `git update-index --skip-worktree <file>` if the team already committed it (git then ignores your local edit to that one file without touching history or your teammates' copies).
+  - Verified end-to-end: after running it, `git status` in the target repo shows nothing new.
+  - Undo: `claude mcp remove <name>`; `git update-index --no-skip-worktree <file>`; or remove the line from `.git/info/exclude` and delete the file.
 
 #### Serena Code Intelligence
 ```bash
@@ -384,7 +407,9 @@ serena-claude          # Launch Claude Code with Serena's prompt override
 ```
 
 - Serena is installed declaratively from the pinned upstream flake input.
-- The shared `aiAgents` MCP config enables Serena for Codex, Claude Code, Cursor, and Vibe with client-specific contexts (Vibe inherits the `codex` context, since both are terminal CLIs).
+- Not natively registered for Codex/Claude/Cursor/Vibe by default (heaviest tool surface + slowest startup of any declared server) -- reachable via the `nix-dotfiles` MCP profile (or any other profile that opts in). See "MCP Profiles" above.
+- When rendered by a profile, Serena uses its base `aiAgents.mcpServers.serena` definition with client-specific contexts (Vibe inherits the `codex` context, since both are terminal CLIs) -- the `targetOverrides` only apply if native per-client rendering is ever turned back on for this server.
+- Nix-language navigation requires the `nixd` binary (`home/features/packages.nix`); without it, Serena falls back to weaker structural-only navigation for Nix files.
 - Managed Serena MCP launches keep the dashboard enabled but pass `--open-web-dashboard False`, so agents do not open browser tabs on startup.
 - Serena is for live symbol-aware code navigation and refactoring. Graphify remains the durable repo graph for architecture, docs/code relationships, and visualizations.
 - Do not run `serena setup codex` or `serena setup claude-code` from activation hooks; those mutate user-owned agent config.
