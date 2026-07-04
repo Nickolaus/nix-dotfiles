@@ -49,21 +49,35 @@ let
   managedServerNames = builtins.attrNames enabledMcpServers;
   managedServersJson = pkgs.writeText "vibe-managed-mcp-servers.json" (builtins.toJSON managedServersList);
 
-  # `~/.vibe/config.toml` also holds live, interactively-edited user state
-  # (model choice, default_agent, tool permissions, `/mcp add`-created OAuth
-  # servers, ...), so we can't blindly overwrite the whole file the way
-  # Claude's `.claude/settings.json` does. tomlkit does a format-preserving
-  # parse/edit/dump, so only the `[[mcp_servers]]` entries we own are
-  # replaced; anything else in the file (including a user's own manually
-  # added servers) survives untouched, mirroring the surgical approach
-  # `restoreCodexUserConfig` takes for Codex's `config.toml` via awk.
-  mergeScript = pkgs.writeText "vibe-merge-mcp-servers.py" ''
+  directMistralApiUrl = "https://api.mistral.ai/v1";
+  vibeProxyBaseUrl =
+    if aiCfg != null then aiCfg.headroom.proxies.vibe.url else "http://127.0.0.1:8788";
+  vibeProxyUrl = "${vibeProxyBaseUrl}/v1";
+  # Headroom's proxy (home/features/ai/headroom.nix) only ever runs on Darwin, so the
+  # "target" the guarded rewrite below drives towards is the direct URL (a harmless no-op)
+  # everywhere else -- never a URL nothing is listening on.
+  mistralTargetUrl = if pkgs.stdenv.hostPlatform.isDarwin then vibeProxyUrl else directMistralApiUrl;
+
+  # `~/.vibe/config.toml` also holds live, interactively-edited user state (model choice,
+  # default_agent, tool permissions, `/mcp add`-created OAuth servers, the "mistral"
+  # provider's own `api_base`, ...), so we can't blindly overwrite the whole file the way
+  # Claude's `.claude/settings.json` does. tomlkit does a format-preserving parse/edit/dump,
+  # so only the pieces we own are replaced: the `[[mcp_servers]]` entries by name (mirroring
+  # the surgical approach `restoreCodexUserConfig` takes for Codex's `config.toml` via awk),
+  # and the "mistral" provider's `api_base` -- routed through Headroom by default, same
+  # "opt-out, not opt-in" philosophy as Claude/Codex (hosts/shared/claude-code.nix,
+  # codex.nix; live-validated end-to-end against Mistral's real API), but *only* rewritten
+  # while it's still holding a value we recognise (the direct default or our own proxy URL
+  # already) -- a value the user customized to something else themselves is left untouched.
+  mergeScript = pkgs.writeText "vibe-merge-config.py" ''
     import json
     import sys
 
     import tomlkit
 
-    config_path, generated_path = sys.argv[1], sys.argv[2]
+    config_path, generated_path, mistral_direct_url, mistral_target_url = (
+        sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+    )
 
     with open(generated_path) as f:
         managed = json.load(f)
@@ -89,18 +103,44 @@ let
 
     doc["mcp_servers"] = array
 
+    for entry in doc.get("providers", []):
+        if entry.get("name") == "mistral" and entry.get("api_base") in (mistral_direct_url, mistral_target_url):
+            entry["api_base"] = mistral_target_url
+
     with open(config_path, "w") as f:
         f.write(tomlkit.dumps(doc))
   '';
 
   mergePython = pkgs.python3.withPackages (ps: [ ps.tomlkit ]);
+
+  # Read-only status helper for `vibe-status`. There's deliberately no matching "set"
+  # script/enable-disable command pair here: opting out of Vibe's default routing uses the
+  # exact same mechanism Claude/Codex already rely on (`headroom-pause vibe` stops the proxy
+  # process itself), rather than a bespoke Vibe-only TOML mutation with its own reversion
+  # semantics -- one universal opt-out path for all three tools, not three different ones.
+  getMistralApiBaseScript = pkgs.writeText "vibe-get-mistral-api-base.py" ''
+    import sys
+
+    import tomlkit
+
+    try:
+        with open(sys.argv[1]) as f:
+            doc = tomlkit.parse(f.read())
+    except FileNotFoundError:
+        sys.exit(0)
+
+    for entry in doc.get("providers", []):
+        if entry.get("name") == "mistral":
+            print(entry.get("api_base", ""))
+  '';
 in
 {
   home.activation.mergeVibeMcpServers = mkIf vibeEnabled (
     lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       vibe_dir="${config.home.homeDirectory}/.vibe"
       mkdir -p "$vibe_dir"
-      ${mergePython}/bin/python3 ${mergeScript} "$vibe_dir/config.toml" ${managedServersJson}
+      ${mergePython}/bin/python3 ${mergeScript} "$vibe_dir/config.toml" ${managedServersJson} \
+        ${lib.escapeShellArg directMistralApiUrl} ${lib.escapeShellArg mistralTargetUrl}
     ''
   );
 
@@ -130,6 +170,20 @@ in
       echo
       echo "API key: first run prompts interactively and saves to ~/.vibe/.env, or set MISTRAL_API_KEY,"
       echo "or run 'vibe --setup' explicitly."
+
+      echo
+      echo "Headroom compression: ON BY DEFAULT for the mistral provider (opt-out, same as"
+      echo "Claude/Codex -- same destination/auth, just compressed):"
+      current_api_base="$(${mergePython}/bin/python3 ${getMistralApiBaseScript} "$HOME/.vibe/config.toml" 2>/dev/null || true)"
+      if [ "$current_api_base" = ${lib.escapeShellArg vibeProxyUrl} ]; then
+        echo "  on      mistral provider routed through ${vibeProxyUrl}"
+      elif [ -n "$current_api_base" ]; then
+        echo "  custom  mistral provider -> $current_api_base (customized by you; left alone)"
+      else
+        echo "  n/a     no 'mistral' provider yet -- run 'vibe --setup' first"
+      fi
+      echo "  opt out: headroom-pause vibe   (same mechanism Claude/Codex use; a rebuild"
+      echo "           reasserts it, same as it does for them)."
 
       echo
       echo "Note: any MCP server you add yourself via '/mcp add' inside Vibe is left alone by the"

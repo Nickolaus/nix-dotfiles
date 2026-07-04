@@ -355,6 +355,75 @@ in
     claude.managed.enable = mkEnableOption "system-managed Claude Code policy under the platform policy path" // {
       default = false;
     };
+
+    headroom.proxies = mkOption {
+      type = types.attrsOf (types.submodule ({ config, ... }: {
+        options = {
+          port = mkOption {
+            type = types.port;
+            description = "Port this Headroom compression-proxy instance (home/features/ai/headroom.nix) binds to.";
+          };
+
+          url = mkOption {
+            type = types.str;
+            readOnly = true;
+            default = "http://127.0.0.1:${toString config.port}";
+            description = "Full base URL for this proxy instance, derived from `port`.";
+          };
+
+          anthropicTargetUrl = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Upstream for the Anthropic-wire route (/v1/messages). Null
+              leaves Headroom's own default (real Anthropic) in place.
+            '';
+          };
+
+          openaiTargetUrl = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Upstream for the OpenAI-compatible wire routes
+              (/v1/chat/completions, /v1/responses). Null leaves Headroom's
+              own default (real OpenAI) in place.
+            '';
+          };
+        };
+      }));
+      default = {
+        # Claude Code + Codex: a single `headroom proxy` process handles both,
+        # since one process happily serves *different* wire protocols
+        # (Anthropic Messages for Claude, OpenAI-compatible for Codex) on the
+        # same port simultaneously -- it only ever has *one* upstream per
+        # protocol, which is why this can't also carry Vibe's traffic below.
+        shared = {
+          port = 8787;
+          anthropicTargetUrl = config.aiAgents.localCoding.anthropicBaseUrl;
+        };
+        # Vibe's Mistral Cloud traffic needs its own instance/port: it's also
+        # OpenAI-compatible wire format, but to a *different* upstream than
+        # Codex's real OpenAI, and a single proxy process only ever forwards
+        # that route to one place.
+        vibe = {
+          port = 8788;
+          openaiTargetUrl = "https://api.mistral.ai";
+        };
+      };
+      description = ''
+        Declarative registry of Headroom compression-proxy instances
+        (home/features/ai/headroom.nix): one launchd-managed process/port per
+        attrset entry. headroom.nix itself has zero per-tool knowledge -- it
+        just spins up whatever's declared here -- so onboarding a future
+        provider that needs OpenAI/Anthropic-wire compression to a
+        *different* upstream than the ones already covered is exactly one
+        new attrset entry here, plus pointing that consumer's own base-URL
+        config at `<entry>.url`, never a change to headroom.nix itself.
+        Every consumer (hosts/shared/claude-code.nix, codex.nix,
+        home/features/ai/agent-configs.nix, vibe.nix) reads its proxy's URL
+        from here, so each one is only ever defined once.
+      '';
+    };
   };
 
   config = {

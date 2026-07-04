@@ -32,6 +32,17 @@ let
     };
 
   managedConfigSettings = {
+    # Redirects the built-in "openai" provider (default `codex`, ChatGPT sign-in *or* an
+    # API key -- either stays intact) through the always-on Headroom compression proxy
+    # (home/features/ai/headroom.nix, aiAgents.headroom.proxies.shared -- single source of
+    # truth). That proxy's own openaiTargetUrl is left at its real-OpenAI default, so this
+    # is the same destination and auth as before, just compressed.
+    # `openai_base_url` (as opposed to a custom `model_providers.*` entry, which requires
+    # `env_key` and can't use ChatGPT sign-in) is what keeps the provider's identity
+    # intact -- see https://developers.openai.com/codex/config-advanced.
+    # Opt out: `headroom-pause`.
+    openai_base_url = "${cfg.headroom.proxies.shared.url}/v1";
+
     shell_environment_policy.exclude = [
       "GH_TOKEN"
       "GITHUB_TOKEN"

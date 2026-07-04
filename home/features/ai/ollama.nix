@@ -1359,9 +1359,27 @@ in
         lib.hm.dag.entryBefore [ "setupLaunchAgents" ] ''
           port=${lib.escapeShellArg (toString cfg.runtime.port)}
           current_user=${lib.escapeShellArg config.home.username}
-          domain="gui/$(/usr/bin/id -u "$current_user")"
+          uid="$(/usr/bin/id -u "$current_user")"
+          # Home Manager's built-in `services.ollama` module sets
+          # `LimitLoadToSessionType: Background`, which makes launchd/`setupLaunchAgents`
+          # register this label under the `user/<uid>` domain rather than `gui/<uid>`
+          # (confirmed via `launchctl dumpstate`). Querying the wrong domain here always
+          # comes up empty, which would make this script treat the legitimately-managed
+          # Ollama process as "unmanaged" and kill it below.
+          #
+          # `launchctl print` exits non-zero (e.g. 113) whenever the service isn't
+          # currently registered with launchd at all (not just "not running") -- under
+          # Home Manager's `set -e -o pipefail` activation runner that would otherwise
+          # abort this whole script (and therefore skip `setupLaunchAgents` entirely,
+          # silently leaving every managed launchd agent -- Ollama, Headroom, etc. --
+          # stale) before it ever gets a chance to detect/kill the unmanaged process
+          # below. An absent registration just means "no known managed pid yet", which
+          # the loop below already handles correctly via the `-n "$managed_default_pid"`
+          # check.
           managed_default_pid="$(
-            /bin/launchctl print "$domain/org.nix-community.home.ollama" 2>/dev/null \
+            { /bin/launchctl print "user/$uid/org.nix-community.home.ollama" 2>/dev/null \
+                || /bin/launchctl print "gui/$uid/org.nix-community.home.ollama" 2>/dev/null \
+                || true; } \
               | /usr/bin/awk '/pid =/ { print $3; exit }'
           )"
 
@@ -1403,7 +1421,7 @@ in
 
       home.activation.restartManagedOllamaLaunchAgents =
         lib.hm.dag.entryAfter [ "setupLaunchAgents" ] ''
-          domain="gui/$(/usr/bin/id -u ${lib.escapeShellArg config.home.username})"
+          uid="$(/usr/bin/id -u ${lib.escapeShellArg config.home.username})"
           launch_agents_dir=${lib.escapeShellArg "${config.home.homeDirectory}/Library/LaunchAgents"}
 
           for label in ${managedDarwinLaunchAgentLabelsShell}; do
@@ -1412,6 +1430,23 @@ in
             if [ ! -f "$plist" ]; then
               echo "Skipping missing managed Ollama launch agent plist: $plist" >&2
               continue
+            fi
+
+            # Agents carrying `LimitLoadToSessionType: Background` (e.g. Home
+            # Manager's built-in `services.ollama` module) get bootstrapped by
+            # launchd/`setupLaunchAgents` into the `user/<uid>` domain rather than
+            # `gui/<uid>`. Targeting the wrong domain here is a no-op for `bootout`
+            # (nothing found) and then makes `bootstrap` collide with the
+            # already-loaded label in the *other* domain, failing with
+            # "Bootstrap failed: 5: Input/output error" -- confirmed via
+            # `launchctl dumpstate` showing `org.nix-community.home.ollama` living
+            # under `user/<uid>` while our other custom `launchd.agents.*` entries
+            # (no `LimitLoadToSessionType`) live under `gui/<uid>`.
+            session_type="$(/usr/libexec/PlistBuddy -c 'Print :LimitLoadToSessionType' "$plist" 2>/dev/null || true)"
+            if [ "$session_type" = "Background" ]; then
+              domain="user/$uid"
+            else
+              domain="gui/$uid"
             fi
 
             /bin/launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
@@ -1434,8 +1469,12 @@ in
             done
 
             if [ "$bootstrapped" != "1" ]; then
-              echo "Failed to bootstrap managed Ollama launch agent: $domain/$label" >&2
-              exit 1
+              # Non-fatal: a flaky launchd bootstrap for one agent must never abort
+              # the rest of Home Manager's activation (that previously left every
+              # other managed file/service -- Headroom, Claude/Codex settings, etc.
+              # -- stale). Worst case the user re-runs `llm-restart`/`launchctl
+              # kickstart -k "$domain/$label"` by hand afterward.
+              echo "Warning: failed to bootstrap managed launch agent $domain/$label after 3 attempts; leaving it as-is." >&2
             fi
           done
         '';

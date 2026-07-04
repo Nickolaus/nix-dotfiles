@@ -67,7 +67,12 @@ let
   claudeSettings = {
     model = aiCfg.localCoding.model;
     env = {
-      ANTHROPIC_BASE_URL = aiCfg.localCoding.anthropicBaseUrl;
+      # Mirrors hosts/shared/claude-code.nix's managed-settings.json: routes through the
+      # always-on Headroom compression proxy (home/features/ai/headroom.nix,
+      # aiAgents.headroom.proxies.shared -- single source of truth), which forwards on to
+      # this same `aiCfg.localCoding.anthropicBaseUrl` -- same free/local Ollama
+      # destination as before, now compressed by default.
+      ANTHROPIC_BASE_URL = aiCfg.headroom.proxies.shared.url;
       ANTHROPIC_AUTH_TOKEN = "ollama";
       ANTHROPIC_API_KEY = "";
     };

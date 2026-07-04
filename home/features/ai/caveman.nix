@@ -1,4 +1,4 @@
-{ flake, pkgs, ... }:
+{ flake, lib, pkgs, ... }:
 let
   cavemanSrc = flake.inputs.caveman;
   cavemanSkills = [
@@ -10,14 +10,24 @@ let
     "caveman-stats"
     "cavecrew"
   ];
-  codexSkillDirs = builtins.listToAttrs (map
-    (skill: {
-      name = ".agents/skills/${skill}";
-      value = {
-        source = cavemanSrc + "/skills/${skill}";
-      };
-    })
-    cavemanSkills);
+  # Codex and Vibe both follow the Agent Skills spec and read ~/.agents/skills/ directly.
+  # Cursor discovers skills from *either* ~/.agents/skills/ or its own ~/.cursor/skills/
+  # (cursor.com/docs/skills) -- both are documented, auto-scanned, global locations with
+  # no manifest/registration step, so skillDestDirs just fans the same
+  # cavemanSkills/cavemanSrc pair out to both prefixes instead of hand-duplicating the
+  # list. Cursor's own built-in skills live separately under ~/.cursor/skills-cursor/ and
+  # are unaffected.
+  skillDirPrefixes = [ ".agents/skills" ".cursor/skills" ];
+  skillDestDirs = builtins.listToAttrs (lib.concatMap
+    (prefix: map
+      (skill: {
+        name = "${prefix}/${skill}";
+        value = {
+          source = cavemanSrc + "/skills/${skill}";
+        };
+      })
+      cavemanSkills)
+    skillDirPrefixes);
   node = "${pkgs.nodejs}/bin/node";
   installer = "${cavemanSrc}/bin/install.js";
 
@@ -43,7 +53,7 @@ let
   '';
 in
 {
-  home.file = codexSkillDirs // {
+  home.file = skillDestDirs // {
     ".codex/AGENTS.md".text = cavemanDefaultInstructions;
     ".vibe/AGENTS.md".text = cavemanDefaultInstructions;
     ".claude/CLAUDE.md".text = cavemanDefaultInstructions;
@@ -54,14 +64,18 @@ in
       set -euo pipefail
 
       echo "Caveman source: ${cavemanSrc}"
-      echo "Codex user skills (also read by Vibe -- both follow the Agent Skills spec at ~/.agents/skills/):"
-      for skill in ${builtins.concatStringsSep " " cavemanSkills}; do
-        skill_path="$HOME/.agents/skills/$skill/SKILL.md"
-        if [ -f "$skill_path" ]; then
-          echo "  ok      $skill_path"
-        else
-          echo "  missing $skill_path"
-        fi
+      echo "User-level skills (auto-discovered, no manifest needed):"
+      echo "  Codex + Vibe follow the Agent Skills spec and read ~/.agents/skills/"
+      echo "  Cursor also scans ~/.cursor/skills/ (cursor.com/docs/skills) -- same content, mirrored"
+      for prefix in ${builtins.concatStringsSep " " (map lib.escapeShellArg skillDirPrefixes)}; do
+        for skill in ${builtins.concatStringsSep " " cavemanSkills}; do
+          skill_path="$HOME/$prefix/$skill/SKILL.md"
+          if [ -f "$skill_path" ]; then
+            echo "  ok      $skill_path"
+          else
+            echo "  missing $skill_path"
+          fi
+        done
       done
       echo
       legacy_path="$HOME/.codex/skills/caveman/SKILL.md"
@@ -85,6 +99,12 @@ in
       echo "Say 'stop caveman' or 'normal mode' to turn it off for the rest of a session; it"
       echo "resumes next session (it's a default, not a one-time toggle). Switch intensity with"
       echo "'/caveman lite|full|ultra' (Codex/Vibe skill invocation) or by asking in plain language."
+      echo
+      echo "Cursor has no global-rules file Nix can manage (User Rules are GUI-only, not exported"
+      echo "to disk -- see cursor.com/help/customization/rules), so the skill above is *available*"
+      echo "in Cursor (invoke with '/caveman' or a matching request) but not forced on-by-default"
+      echo "the way it is for the other three. To force it in Cursor too: Cursor Settings > Rules >"
+      echo "User Rules, and paste a short pointer at the skill (one-time manual step, per-machine)."
       echo
       echo "Claude's caveman *skill/plugin* install (beyond the default CLAUDE.md style above) is"
       echo "still explicit, since it mutates Claude-managed plugin/hook state:"

@@ -40,7 +40,13 @@ in
       managedSettingsFile = builtins.toFile "claude-code-managed-settings.json" (builtins.toJSON {
         model = cfg.localCoding.model;
         env = {
-          ANTHROPIC_BASE_URL = cfg.localCoding.anthropicBaseUrl;
+          # Routes through the always-on Headroom compression proxy
+          # (home/features/ai/headroom.nix, aiAgents.headroom.proxies.shared -- single
+          # source of truth), which is itself configured (anthropicTargetUrl there) to
+          # forward straight on to this exact same `cfg.localCoding.anthropicBaseUrl` --
+          # same free/local Ollama destination as before, now compressed by default.
+          # Opt out: `headroom-pause`.
+          ANTHROPIC_BASE_URL = cfg.headroom.proxies.shared.url;
           ANTHROPIC_AUTH_TOKEN = "ollama";
           ANTHROPIC_API_KEY = "";
         };
