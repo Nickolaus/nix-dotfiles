@@ -69,19 +69,33 @@ let
   # codex.nix; live-validated end-to-end against Mistral's real API), but *only* rewritten
   # while it's still holding a value we recognise (the direct default or our own proxy URL
   # already) -- a value the user customized to something else themselves is left untouched.
+  #
+  # A plain "keep anything not currently declared" filter can't tell a genuinely
+  # user-added entry apart from one Nix used to manage but no longer declares (e.g.
+  # a server narrowed out of aiAgents.mcpServers.<name>.targets) -- both look
+  # identical once removed from `managed`. So a small state side-car
+  # (`.nix-managed-mcp-servers.json`, written after every merge) records exactly
+  # which names Nix managed last time; only names in *neither* the current nor the
+  # previous managed set are assumed to be the user's own and survive untouched.
   mergeScript = pkgs.writeText "vibe-merge-config.py" ''
     import json
     import sys
 
     import tomlkit
 
-    config_path, generated_path, mistral_direct_url, mistral_target_url = (
-        sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+    config_path, generated_path, state_path, mistral_direct_url, mistral_target_url = (
+        sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
     )
 
     with open(generated_path) as f:
         managed = json.load(f)
     managed_names = {entry["name"] for entry in managed}
+
+    try:
+        with open(state_path) as f:
+            previously_managed_names = set(json.load(f))
+    except FileNotFoundError:
+        previously_managed_names = set()
 
     try:
         with open(config_path) as f:
@@ -90,7 +104,11 @@ let
         doc = tomlkit.document()
 
     existing = doc.get("mcp_servers", [])
-    kept = [item for item in existing if item.get("name") not in managed_names]
+    kept = [
+        item for item in existing
+        if item.get("name") not in managed_names
+        and item.get("name") not in previously_managed_names
+    ]
 
     array = tomlkit.aot()
     for item in kept:
@@ -109,6 +127,9 @@ let
 
     with open(config_path, "w") as f:
         f.write(tomlkit.dumps(doc))
+
+    with open(state_path, "w") as f:
+        json.dump(sorted(managed_names), f)
   '';
 
   mergePython = pkgs.python3.withPackages (ps: [ ps.tomlkit ]);
@@ -140,6 +161,7 @@ in
       vibe_dir="${config.home.homeDirectory}/.vibe"
       mkdir -p "$vibe_dir"
       ${mergePython}/bin/python3 ${mergeScript} "$vibe_dir/config.toml" ${managedServersJson} \
+        "$vibe_dir/.nix-managed-mcp-servers.json" \
         ${lib.escapeShellArg directMistralApiUrl} ${lib.escapeShellArg mistralTargetUrl}
     ''
   );
