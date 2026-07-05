@@ -412,18 +412,6 @@ in
     };
 
     localCoding = {
-      openaiBaseUrl = mkOption {
-        type = types.str;
-        readOnly = true;
-        description = "Shared OpenAI-compatible base URL for the local coding route.";
-      };
-
-      anthropicBaseUrl = mkOption {
-        type = types.str;
-        readOnly = true;
-        description = "Shared Anthropic-compatible base URL for the local coding route.";
-      };
-
       model = mkOption {
         type = types.str;
         readOnly = true;
@@ -516,14 +504,12 @@ in
         };
       }));
       default = {
-        # Claude Code + Codex: a single `headroom proxy` process handles both,
-        # since one process happily serves *different* wire protocols
-        # (Anthropic Messages for Claude, OpenAI-compatible for Codex) on the
-        # same port simultaneously -- it only ever has *one* upstream per
-        # protocol, which is why this can't also carry Vibe's traffic below.
+        # Codex's real-OpenAI traffic, compressed. `openaiTargetUrl` is left null
+        # (Headroom's own default: real OpenAI) -- only `anthropicTargetUrl` or
+        # `openaiTargetUrl` need setting here, and only when routing that wire
+        # protocol somewhere other than the real provider.
         shared = {
           port = 8787;
-          anthropicTargetUrl = config.aiAgents.localCoding.anthropicBaseUrl;
         };
         # Vibe's Mistral Cloud traffic needs its own instance/port: it's also
         # OpenAI-compatible wire format, but to a *different* upstream than

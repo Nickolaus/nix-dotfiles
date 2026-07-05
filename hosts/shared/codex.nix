@@ -50,11 +50,6 @@ let
       "CODEX_GITHUB_TOKEN"
     ];
 
-    model_providers.local_coding_ollama = {
-      name = "Ollama";
-      base_url = cfg.localCoding.openaiBaseUrl;
-    };
-
     mcp_servers = lib.mapAttrs renderCodexMcpServer enabledMcpServers;
   };
 in

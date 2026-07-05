@@ -394,9 +394,6 @@ llm-pull all          # Pull all declared profiles
 llm-run general "Explain this code"
 llm-run coding        # Interactive coding shell on the raw 64k coding backend
 llm-smoke coding      # Sanity-check the coding profile through the session proxy
-
-# Local coding agents
-llm-codex-local       # Launch Codex via managed defaults against the session proxy
 ```
 
 ### OpenAI & Claude - Cloud Providers (Providers 2 & 3: Premium Quality)

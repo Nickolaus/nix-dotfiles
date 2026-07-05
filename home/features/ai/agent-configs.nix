@@ -75,6 +75,36 @@ let
       filterAttrs (_: server: serverEnabledFor "claude" server) enabledMcpServers
     );
   };
+
+  # Codex's real managed MCP servers live in a separate system file
+  # (/etc/codex/managed_config.toml, hosts/shared/codex.nix) that Codex itself layers on
+  # top -- this script only prunes stale `[mcp_servers.<name>]` tables a currently-managed
+  # name might still hold in the user's own config.toml (e.g. left over from before that
+  # name was narrowed out of targets). Delete-only, no insertion, so unlike Vibe's merge
+  # (which must coexist with genuinely user-added entries) there's no state sidecar to
+  # track "previously managed" -- a real TOML parse is enough to know exactly which table
+  # belongs to which name, correctly handling shapes a naive `[mcp_servers.` line-match
+  # can't (inline tables, quoted dotted keys, ...).
+  codexPruneScript = pkgs.writeText "codex-prune-managed-mcp.py" ''
+    import sys
+
+    import tomlkit
+
+    config_path, output_path, managed_names_str = sys.argv[1], sys.argv[2], sys.argv[3]
+    managed_names = set(managed_names_str.split())
+
+    with open(config_path) as f:
+        doc = tomlkit.parse(f.read())
+
+    servers = doc.get("mcp_servers")
+    if servers is not None:
+        for name in list(servers.keys()):
+            if name in managed_names:
+                del servers[name]
+
+    with open(output_path, "w") as f:
+        f.write(tomlkit.dumps(doc))
+  '';
 in
 {
   home.file =
@@ -83,8 +113,13 @@ in
     # identity -- see hosts/shared/codex.nix), forcing ANTHROPIC_BASE_URL/AUTH_TOKEN/API_KEY
     # here would count as "another auth source" to Claude Code and silently disable a
     # logged-in claude.ai subscription's connectors, Remote Control, and subscription
-    # billing. Claude Code has no local-coding route at all -- Codex and OpenCode expose
-    # that natively instead (model_providers.local_coding_ollama / provider.local-ollama).
+    # billing. Claude Code has no local-coding route at all as a result -- OpenCode is the
+    # one tool with a local-coding provider (home/features/ai/headroom.nix).
+    #
+    # `.claude/settings.json` has no single owner: besides not being managed here, it's
+    # also written directly by third-party installers (e.g. an IDE's own Claude Code
+    # plugin/hook installer) and by Claude Code's own CLI/settings persistence. Don't
+    # assume Nix controls its contents when debugging it.
     lib.optionalAttrs (aiCfg != null && aiCfg.enable && aiCfg.targets.claude.enable)
       {
         ".claude/ai-agents-mcp.json".text = builtins.toJSON claudeMcpSettings;
@@ -95,27 +130,13 @@ in
 
   home.activation.mergeClaudeUserMcp =
     lib.mkIf (aiCfg != null && aiCfg.enable && aiCfg.targets.claude.enable)
-      (lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-        claude_state_file="${config.home.homeDirectory}/.claude.json"
-        generated_mcp_file="${config.home.homeDirectory}/.claude/ai-agents-mcp.json"
-        tmp_file="$(mktemp)"
-
-        if [ -f "$claude_state_file" ]; then
-          if ! ${pkgs.jq}/bin/jq empty "$claude_state_file" >/dev/null 2>&1; then
-            echo "warning: $claude_state_file is not valid JSON; skipping aiAgents MCP merge for Claude Code" >&2
-            rm -f "$tmp_file"
-          else
-            ${pkgs.jq}/bin/jq --slurpfile generated "$generated_mcp_file" \
-              '.mcpServers = ($generated[0].mcpServers // {})' \
-              "$claude_state_file" > "$tmp_file"
-            mv "$tmp_file" "$claude_state_file"
-          fi
-        else
-          ${pkgs.jq}/bin/jq -n --slurpfile generated "$generated_mcp_file" \
-            '{ mcpServers: ($generated[0].mcpServers // {}) }' > "$tmp_file"
-          mv "$tmp_file" "$claude_state_file"
-        fi
-      '');
+      (lib.hm.dag.entryAfter [ "writeBoundary" ] (aiAgentsLib.mkJsonMergeActivation {
+        configPath = "${config.home.homeDirectory}/.claude.json";
+        jqArgName = "generated";
+        jqFilter = ".mcpServers = ($generated[0].mcpServers // {})";
+        valueFile = "${config.home.homeDirectory}/.claude/ai-agents-mcp.json";
+        invalidJsonWarning = "warning: ~/.claude.json is not valid JSON; skipping aiAgents MCP merge for Claude Code";
+      }));
 
   home.activation.restoreCodexUserConfig =
     lib.mkIf (aiCfg != null && aiCfg.enable && aiCfg.targets.codex.enable)
@@ -134,37 +155,8 @@ in
         if [ -f "$codex_config" ]; then
           tmp_file="$(mktemp)"
 
-          ${pkgs.gawk}/bin/awk -v managed_names=${lib.escapeShellArg codexManagedMcpServerNamesShell} '
-            BEGIN {
-              split(managed_names, names, " ")
-              for (idx in names) {
-                if (names[idx] != "") {
-                  managed[names[idx]] = 1
-                }
-              }
-            }
-
-            function is_managed_mcp_table(line, inner, parts) {
-              if (line !~ /^\[mcp_servers\./) {
-                return 0
-              }
-
-              inner = line
-              sub(/^\[mcp_servers\./, "", inner)
-              sub(/\]$/, "", inner)
-              split(inner, parts, ".")
-
-              return parts[1] in managed
-            }
-
-            /^\[/ {
-              skip = is_managed_mcp_table($0)
-            }
-
-            !skip {
-              print
-            }
-          ' "$codex_config" > "$tmp_file"
+          ${aiAgentsLib.tomlkitPython}/bin/python3 ${codexPruneScript} \
+            "$codex_config" "$tmp_file" ${lib.escapeShellArg codexManagedMcpServerNamesShell}
 
           if ! cmp -s "$tmp_file" "$codex_config"; then
             if [ ! -e "$codex_prune_backup" ]; then

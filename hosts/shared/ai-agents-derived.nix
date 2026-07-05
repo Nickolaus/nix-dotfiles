@@ -31,16 +31,14 @@ let
       selectedHomeManagerConfig.localAi
     else
       null;
-
-  needsLocalCoding =
-    cfg.targets.codex.enable
-    || cfg.targets.claude.enable
-    || cfg.codex.managed.enable
-    || cfg.claude.managed.enable;
 in
 {
+  # aiAgents.localCoding.model needs to resolve whenever aiAgents is enabled at all --
+  # OpenCode's local-ollama provider (home/features/ai/headroom.nix) is unconditionally
+  # part of the AI feature set and always reads it, unlike Codex/Claude which consume
+  # nothing from aiAgents.localCoding.
   config = mkIf cfg.enable (mkMerge [
-    (mkIf needsLocalCoding {
+    {
       assertions = [
         {
           assertion = selectedHomeManagerUser != null;
@@ -55,13 +53,9 @@ in
           message = "The selected Home Manager user must define localAi so shared agent defaults can derive the local coding profile.";
         }
       ];
-    })
+    }
     (mkIf (localAiConfig != null) {
       aiAgents.localCoding = {
-        openaiBaseUrl =
-          "${if localAiConfig.runtime.sessionProxy.enable then localAiConfig.sessionEndpoint else localAiConfig.codingEndpoint}/v1";
-        anthropicBaseUrl =
-          if localAiConfig.runtime.sessionProxy.enable then localAiConfig.sessionEndpoint else localAiConfig.codingEndpoint;
         model = localAiConfig.profiles.coding.model;
       };
     })

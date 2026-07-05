@@ -3,6 +3,44 @@ let
   inherit (lib) escapeShellArg;
 in
 rec {
+  # Shared by every script that reads/edits TOML via tomlkit (Vibe's config.toml merge,
+  # the MCP-profile onboarding scripts) -- one derivation instead of each caller declaring
+  # its own identical `pkgs.python3.withPackages (ps: [ ps.tomlkit ])`.
+  tomlkitPython = pkgs.python3.withPackages (ps: [ ps.tomlkit ]);
+
+  # Shared by every activation script that owns exactly one top-level key in a JSON config
+  # file a third-party tool also writes to (Claude's `.claude.json` mcpServers, OpenCode's
+  # opencode.json provider.local-ollama) -- identical mechanics (create-if-missing, validate,
+  # `jq --slurpfile` merge, atomic `mv`), differing only in the one jq filter each caller
+  # actually needs. Not used for TOML mergers (Codex/Vibe): those need genuinely different
+  # control flow (delete-only vs. full merge with a state sidecar), not just a different
+  # filter string, so forcing them through this same shape would add coupling instead of
+  # removing duplication.
+  mkJsonMergeActivation =
+    { configPath
+    , defaultContent ? "{}"
+    , jqArgName
+    , jqFilter
+    , valueFile
+    , invalidJsonWarning
+    }:
+    ''
+      config_file=${escapeShellArg configPath}
+      mkdir -p "$(dirname "$config_file")"
+      if [ ! -f "$config_file" ]; then
+        echo ${escapeShellArg defaultContent} > "$config_file"
+      fi
+      if ${pkgs.jq}/bin/jq empty "$config_file" >/dev/null 2>&1; then
+        tmp_file="$(mktemp)"
+        ${pkgs.jq}/bin/jq --slurpfile ${jqArgName} ${escapeShellArg valueFile} \
+          ${escapeShellArg jqFilter} \
+          "$config_file" > "$tmp_file"
+        mv "$tmp_file" "$config_file"
+      else
+        echo ${escapeShellArg invalidJsonWarning} >&2
+      fi
+    '';
+
   effectiveServerFor = target: server:
     let
       override = server.targetOverrides.${target};

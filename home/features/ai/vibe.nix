@@ -132,7 +132,7 @@ let
         json.dump(sorted(managed_names), f)
   '';
 
-  mergePython = pkgs.python3.withPackages (ps: [ ps.tomlkit ]);
+  mergePython = aiAgentsLib.tomlkitPython;
 
   # Read-only status helper for `vibe-status`. There's deliberately no matching "set"
   # script/enable-disable command pair here: opting out of Vibe's default routing uses the

@@ -2,6 +2,8 @@
 let
   inherit (lib) mkIf optionalAttrs;
 
+  aiAgentsLib = import ../../../hosts/shared/ai-agents-lib.nix { inherit lib pkgs; };
+
   aiCfg = if osConfig ? aiAgents then osConfig.aiAgents else null;
 
   # Single source of truth for every proxy instance lives in
@@ -63,42 +65,16 @@ let
   # machinery. Falls back gracefully if a from-scratch config ever omits it.
   sharedProxyUrl = if proxies ? shared then proxies.shared.url else null;
 
-  # Generic, opt-in local-coding surface for GUI apps and IDE/extensions (VS Code, Orca,
-  # Continue, Cline, ...) -- CLI tools already reach this via inherited shell env, but GUI
-  # apps only see the macOS *login session* environment, set once here via
-  # `launchctl setenv`. Deliberately namespaced
-  # (`LOCAL_CODING_*`) rather than the reserved names (ANTHROPIC_BASE_URL, OPENAI_API_KEY,
-  # ...) real tools auto-detect: those reserved names have tool-specific side effects we
-  # don't want session-wide (e.g. Claude Code treats ANTHROPIC_BASE_URL as "another auth
-  # source" and silently disables claude.ai subscription connectors -- see
-  # home/features/ai/agent-configs.nix). Any tool wants this, it opts in with one manual,
-  # one-time step pointing its own Base URL / API key setting at these vars (same shape as
-  # the existing Cursor step below) -- consistent single source of truth, no code change
-  # needed to onboard a future tool.
-  localCodingEnvVars = optionalAttrs (sharedProxyUrl != null) {
-    LOCAL_CODING_ANTHROPIC_BASE_URL = sharedProxyUrl;
-    LOCAL_CODING_OPENAI_BASE_URL = "${sharedProxyUrl}/v1";
-    LOCAL_CODING_API_KEY = "ollama";
-    LOCAL_CODING_MODEL = if aiCfg != null then aiCfg.localCoding.model else "";
-  };
-
-  setLocalCodingEnvScript = pkgs.writeShellScript "set-local-coding-env" (
-    ''
-      set -euo pipefail
-    '' + lib.concatStringsSep "\n" (
-      lib.mapAttrsToList (name: value: "/bin/launchctl setenv ${name} ${lib.escapeShellArg value}") localCodingEnvVars
-    )
-  );
-
-  # Native, baked-in local-coding provider for OpenCode -- same shape as Codex's
-  # `model_providers.local_coding_ollama` (hosts/shared/codex.nix): a permanent, named
-  # entry in OpenCode's own config, selectable from its `/models` picker or `--model
+  # Native, baked-in local-coding provider for OpenCode: a permanent, named entry in
+  # OpenCode's own config, selectable from its `/models` picker or `--model
   # local-ollama/<id>`, no wrapper binary needed. OpenCode's custom-provider schema
-  # requires every model to be listed explicitly (no wildcard "any model" support) --
-  # that's what previously justified a wrap-based, live-generated config instead
-  # (`headroom wrap opencode`), but the local-coding route is always exactly one pinned
-  # model (`aiAgents.localCoding.model`), so a static entry needs no live generation at
-  # all.
+  # requires every model to be listed explicitly (no wildcard "any model" support), but
+  # the local-coding route is always exactly one pinned model (`aiAgents.localCoding.model`),
+  # so a static entry needs no live generation at all. OpenCode is the only integration
+  # this repo wires up to the local-coding Ollama backend -- that backend is a single
+  # loaded model processing one request at a time (`localAi.runtime`, ollama.nix), so
+  # adding a second independent consumer risks one app's request silently starving
+  # another's with no shared visibility between them.
   localCodingModel = if aiCfg != null then aiCfg.localCoding.model else null;
   opencodeLocalProvider = optionalAttrs (sharedProxyUrl != null && localCodingModel != null) {
     local-ollama = {
@@ -152,9 +128,10 @@ in
       echo "needed."
       echo
       echo "OpenCode has a native 'local-ollama' provider baked into"
-      echo "~/.config/opencode/opencode.json (same shape as Codex's local_coding_ollama) --"
-      echo "opt-in, no wrapper needed: pick it from OpenCode's /models picker, or"
-      echo "'opencode --model local-ollama/${toString localCodingModel}'."
+      echo "~/.config/opencode/opencode.json -- opt-in, no wrapper needed: pick it from"
+      echo "OpenCode's /models picker, or 'opencode --model local-ollama/${toString localCodingModel}'."
+      echo "It's the only integration wired up to the local-coding Ollama backend, by design:"
+      echo "that backend is a single loaded model processing one request at a time."
       echo
       echo "Claude Code has no local-coding route: it has no native multi-provider config"
       echo "(unlike Codex/OpenCode), and forcing ANTHROPIC_BASE_URL globally would count as"
@@ -163,19 +140,6 @@ in
       echo
       echo "Cursor has no config file or env var for this -- one-time manual step:"
       echo "  Settings > Models > OpenAI API Key > Advanced > Override Base URL -> ${toString sharedProxyUrl}/v1"
-      echo
-      echo "Any other GUI app or IDE/extension (VS Code, Orca, Continue, Cline, ...) can opt"
-      echo "in the same way, via a generic session-wide env surface (launchctl setenv, set at"
-      echo "login and re-applied on every rebuild -- see LOCAL_CODING_* below) instead of a"
-      echo "per-tool code change. One-time step: point that tool's own Base URL / API key"
-      echo "setting at \''${env:LOCAL_CODING_ANTHROPIC_BASE_URL} (Anthropic-wire tools) or"
-      echo "\''${env:LOCAL_CODING_OPENAI_BASE_URL} (OpenAI-wire tools), API key"
-      echo "\''${env:LOCAL_CODING_API_KEY}, model \''${env:LOCAL_CODING_MODEL} -- exact"
-      echo "placeholder syntax (\''${env:VAR}, \\\$VAR, ...) depends on the tool."
-      echo "Current values:"
-      ${lib.concatStringsSep "\n" (
-        lib.mapAttrsToList (name: value: "      echo \"  ${name}=${value}\"") localCodingEnvVars
-      )}
       echo
       echo "Opt out of default routing (Codex/Vibe will fail to connect until resumed or"
       echo "rebuilt; OpenCode's local-ollama provider just becomes unusable):"
@@ -252,28 +216,6 @@ in
 
   launchd.agents = mkIf pkgs.stdenv.hostPlatform.isDarwin (
     builtins.listToAttrs (lib.mapAttrsToList mkProxyAgent proxies)
-    // optionalAttrs (localCodingEnvVars != { }) {
-      local-coding-env = {
-        enable = true;
-        config = {
-          ProgramArguments = [ "${setLocalCodingEnvScript}" ];
-          RunAtLoad = true;
-          KeepAlive = false;
-          StandardOutPath = "${stateDir}/local-coding-env.log";
-          StandardErrorPath = "${stateDir}/local-coding-env.error.log";
-        };
-      };
-    }
-  );
-
-  # `launchctl setenv` only affects the *current* login session -- RunAtLoad above covers
-  # every login going forward, but a `home-manager switch`/`darwin-rebuild switch` between
-  # logins wouldn't otherwise apply a first-time or changed value until next login. Run the
-  # same script immediately on activation so it takes effect right away too.
-  home.activation.applyLocalCodingEnv = mkIf (pkgs.stdenv.hostPlatform.isDarwin && localCodingEnvVars != { }) (
-    lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      ${setLocalCodingEnvScript} || true
-    ''
   );
 
   # Merges (never fully overwrites) the `local-ollama` provider into OpenCode's own
@@ -283,22 +225,13 @@ in
   # Vibe config merge (this directory) take with their respective tools' user-editable
   # config files.
   home.activation.mergeOpencodeLocalProvider = mkIf (opencodeLocalProvider != { }) (
-    lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      opencode_dir="${config.home.homeDirectory}/.config/opencode"
-      opencode_config="$opencode_dir/opencode.json"
-      mkdir -p "$opencode_dir"
-      if [ ! -f "$opencode_config" ]; then
-        echo '{"$schema":"https://opencode.ai/config.json"}' > "$opencode_config"
-      fi
-      if ${pkgs.jq}/bin/jq empty "$opencode_config" >/dev/null 2>&1; then
-        tmp_file="$(mktemp)"
-        ${pkgs.jq}/bin/jq --slurpfile provider ${opencodeLocalProviderFile} \
-          '.provider = ((.provider // {}) + $provider[0])' \
-          "$opencode_config" > "$tmp_file"
-        mv "$tmp_file" "$opencode_config"
-      else
-        echo "warning: $opencode_config is not valid JSON; skipping local-ollama provider merge for OpenCode" >&2
-      fi
-    ''
+    lib.hm.dag.entryAfter [ "writeBoundary" ] (aiAgentsLib.mkJsonMergeActivation {
+      configPath = "${config.home.homeDirectory}/.config/opencode/opencode.json";
+      defaultContent = builtins.toJSON { "$schema" = "https://opencode.ai/config.json"; };
+      jqArgName = "provider";
+      jqFilter = ".provider = ((.provider // {}) + $provider[0])";
+      valueFile = "${opencodeLocalProviderFile}";
+      invalidJsonWarning = "warning: ~/.config/opencode/opencode.json is not valid JSON; skipping local-ollama provider merge for OpenCode";
+    })
   );
 }

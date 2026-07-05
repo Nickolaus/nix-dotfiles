@@ -25,6 +25,7 @@ let
   codingErrorLog = "${ollamaStateDir}/coding-server.error.log";
   sessionServerLog = "${ollamaStateDir}/session-proxy.log";
   sessionErrorLog = "${ollamaStateDir}/session-proxy.error.log";
+  sessionBusyStateFile = "${ollamaStateDir}/session-proxy-busy.json";
   launchdPath = "/etc/profiles/per-user/${config.home.username}/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
   commitModel = cfg.profiles.commit.model;
@@ -58,6 +59,8 @@ let
     import os
     import socketserver
     import sys
+    import threading
+    import time
     import urllib.parse
 
     LISTEN_HOST = os.environ.get("SESSION_PROXY_HOST", "127.0.0.1")
@@ -68,6 +71,50 @@ let
     DEFAULT_THINK = os.environ.get("SESSION_PROXY_DEFAULT_THINK", "false").strip().lower()
     DEFAULT_REASONING_EFFORT = os.environ.get("SESSION_PROXY_DEFAULT_REASONING_EFFORT", "none")
     UPSTREAM_TIMEOUT_SECONDS = int(os.environ.get("SESSION_PROXY_TIMEOUT_SECONDS", "180"))
+    BUSY_STATE_FILE = os.environ.get("SESSION_PROXY_BUSY_STATE_FILE", "")
+
+    # Ollama itself (`OLLAMA_NUM_PARALLEL=1`) processes exactly one generation at a time --
+    # this lock mirrors that at the proxy layer so a second concurrent generation request
+    # gets an immediate, clear "busy" response instead of silently queueing behind Ollama's
+    # own queue for however long the in-flight one takes. Metadata endpoints (tags/ps/show/
+    # version/models) never touch this lock -- they're cheap and Ollama answers them even
+    # while a generation is in flight, and diagnostics like `llm-session status` need them to
+    # keep working regardless of busy state.
+    GENERATION_PATHS = {
+        "/api/chat",
+        "/api/generate",
+        "/v1/chat/completions",
+        "/v1/completions",
+        "/v1/responses",
+        "/v1/messages",
+    }
+    busy_lock = threading.Lock()
+
+
+    def write_busy_state(path: str, body: bytes) -> None:
+        if not BUSY_STATE_FILE:
+            return
+        model = None
+        try:
+            payload = json.loads(body.decode("utf-8")) if body else {}
+            if isinstance(payload, dict):
+                model = payload.get("model")
+        except Exception:
+            pass
+        try:
+            with open(BUSY_STATE_FILE, "w") as f:
+                json.dump({"started_at": time.time(), "path": path, "model": model}, f)
+        except OSError:
+            pass
+
+
+    def clear_busy_state() -> None:
+        if not BUSY_STATE_FILE:
+            return
+        try:
+            os.remove(BUSY_STATE_FILE)
+        except OSError:
+            pass
 
     HOP_BY_HOP_HEADERS = {
         "connection",
@@ -173,6 +220,24 @@ let
             body = self.rfile.read(content_length) if content_length > 0 else b""
             body = maybe_inject_request_defaults(path, body, self.headers.get("Content-Type", "application/json"))
 
+            is_generation = path in GENERATION_PATHS
+            acquired_lock = False
+            if is_generation:
+                acquired_lock = busy_lock.acquire(blocking=False)
+                if not acquired_lock:
+                    error_body = b'{"error":"local-coding backend is already handling a request; try again shortly"}'
+                    self.send_response(503, "Backend busy")
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(error_body)))
+                    self.send_header("Connection", "close")
+                    self.end_headers()
+                    try:
+                        self.wfile.write(error_body)
+                    except BrokenPipeError:
+                        pass
+                    return
+                write_busy_state(path, body)
+
             headers = {}
             for key, value in self.headers.items():
               lower = key.lower()
@@ -232,6 +297,9 @@ let
                     return
             finally:
                 conn.close()
+                if is_generation and acquired_lock:
+                    clear_busy_state()
+                    busy_lock.release()
 
 
     if __name__ == "__main__":
@@ -304,6 +372,7 @@ let
       SESSION_PROXY_DEFAULT_THINK=false \
       SESSION_PROXY_DEFAULT_REASONING_EFFORT=none \
       SESSION_PROXY_TIMEOUT_SECONDS=${lib.escapeShellArg (toString cfg.runtime.sessionProxy.timeoutSeconds)} \
+      SESSION_PROXY_BUSY_STATE_FILE=${lib.escapeShellArg sessionBusyStateFile} \
       ${pkgs.python3}/bin/python3 ${sessionProxyScript}
   '';
 
@@ -332,6 +401,7 @@ let
     default_log_path="${defaultServerLog}"
     coding_log_path="${codingServerLog}"
     session_log_path="${sessionServerLog}"
+    session_busy_state_file="${sessionBusyStateFile}"
     server_json_path="${config.home.homeDirectory}/.ollama/server.json"
 
     profile_model() {
@@ -874,16 +944,6 @@ in
       };
       home.file.".local/state/ollama/.keep".text = "";
 
-      # Codex CLI >= 0.134 no longer reads `[profiles.<name>]` from config.toml;
-      # `--profile <name>` now layers `$CODEX_HOME/<name>.config.toml` on top of the
-      # base config instead. `model_providers.local_coding_ollama` itself still lives
-      # in the managed config (hosts/shared/codex.nix) since that key isn't ignored
-      # there; only the profile *selector* needs to move to this per-user file.
-      home.file.".codex/local-coding.config.toml".text = ''
-        model = "${codingModel}"
-        model_provider = "local_coding_ollama"
-      '';
-
       home.shellAliases = {
         "ollama-health" = "llm-status";
         "ollama-setup" = "llm-pull all";
@@ -894,7 +954,6 @@ in
         "ollama-pull" = "ollama pull";
         "ollama-rm" = "ollama rm";
         "ollama-status" = "ollama ps";
-        "llm-codex" = "llm-codex-local";
       };
 
       home.packages = with pkgs; [
@@ -1127,6 +1186,19 @@ in
             echo "  request_route=$(service_endpoint "${codingRequestService}")"
             if [[ "$session_proxy_enabled" == "1" ]]; then
               echo "  session_proxy=${sessionEndpoint}"
+              if [[ -f "$session_busy_state_file" ]]; then
+                started_at="$(${pkgs.jq}/bin/jq -r '.started_at // empty' "$session_busy_state_file" 2>/dev/null || true)"
+                busy_path="$(${pkgs.jq}/bin/jq -r '.path // empty' "$session_busy_state_file" 2>/dev/null || true)"
+                busy_model="$(${pkgs.jq}/bin/jq -r '.model // empty' "$session_busy_state_file" 2>/dev/null || true)"
+                if [[ -n "$started_at" ]]; then
+                  elapsed=$(( $(date +%s) - ''${started_at%.*} ))
+                  echo "  session_proxy_busy: yes (''${elapsed}s, path=$busy_path''${busy_model:+, model=$busy_model})"
+                else
+                  echo "  session_proxy_busy: yes (unknown duration)"
+                fi
+              else
+                echo "  session_proxy_busy: no"
+              fi
             else
               echo "  session_proxy=disabled"
             fi
@@ -1306,101 +1378,86 @@ in
           fi
         '')
 
-        (writeShellScriptBin "llm-codex-local" ''
-          #!/usr/bin/env bash
-          ${commonShell}
-
-          if ! command -v codex >/dev/null 2>&1; then
-            echo "Codex CLI is not available in PATH."
-            echo "Next step: ensure the nix profile containing 'codex' is applied."
-            exit 1
-          fi
-
-          if [[ $# -gt 0 && ( "$1" == "--help" || "$1" == "-h" || "$1" == "help" ) ]]; then
-            exec codex "$@"
-          fi
-
-          require_service "${codingService}"
-
-          if [[ "$session_proxy_enabled" == "1" ]]; then
-            require_service "${sessionService}"
-          fi
-
-          if ! model_installed_for_service "${codingService}" "${codingModel}"; then
-            echo "Coding profile is not installed: ${codingModel}"
-            echo "Next step: llm-pull coding"
-            exit 1
-          fi
-
-          # Profile selector lives at ~/.codex/local-coding.config.toml (see home.file above).
-          exec codex --profile local-coding "$@"
-        '')
       ];
     }
 
     (mkIf pkgs.stdenv.hostPlatform.isDarwin {
-      home.activation.stopUnmanagedOllamaDefaultPort =
+      # Guards all three managed ports (default, coding, session-proxy) against a stray
+      # non-Nix-managed process binding one of them before launchd bootstrap -- originally
+      # only covered the default port, leaving the coding/session-proxy ports (the ones
+      # every local-coding consumer actually depends on) with no such protection.
+      home.activation.stopUnmanagedOllamaPorts =
         lib.hm.dag.entryBefore [ "setupLaunchAgents" ] ''
-          port=${lib.escapeShellArg (toString cfg.runtime.port)}
           current_user=${lib.escapeShellArg config.home.username}
           uid="$(/usr/bin/id -u "$current_user")"
-          # Home Manager's built-in `services.ollama` module sets
-          # `LimitLoadToSessionType: Background`, which makes launchd/`setupLaunchAgents`
-          # register this label under the `user/<uid>` domain rather than `gui/<uid>`
-          # (confirmed via `launchctl dumpstate`). Querying the wrong domain here always
-          # comes up empty, which would make this script treat the legitimately-managed
-          # Ollama process as "unmanaged" and kill it below.
-          #
-          # `launchctl print` exits non-zero (e.g. 113) whenever the service isn't
-          # currently registered with launchd at all (not just "not running") -- under
-          # Home Manager's `set -e -o pipefail` activation runner that would otherwise
-          # abort this whole script (and therefore skip `setupLaunchAgents` entirely,
-          # silently leaving every managed launchd agent -- Ollama, Headroom, etc. --
-          # stale) before it ever gets a chance to detect/kill the unmanaged process
-          # below. An absent registration just means "no known managed pid yet", which
-          # the loop below already handles correctly via the `-n "$managed_default_pid"`
-          # check.
-          managed_default_pid="$(
-            { /bin/launchctl print "user/$uid/org.nix-community.home.ollama" 2>/dev/null \
-                || /bin/launchctl print "gui/$uid/org.nix-community.home.ollama" 2>/dev/null \
-                || true; } \
-              | /usr/bin/awk '/pid =/ { print $3; exit }'
-          )"
 
-          for pid in $(${pkgs.lsof}/bin/lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true); do
-            if [ -z "$pid" ]; then
-              continue
-            fi
+          stop_unmanaged() {
+            local port="$1" label="$2" description="$3"
 
-            if [ -n "$managed_default_pid" ] && [ "$pid" = "$managed_default_pid" ]; then
-              continue
-            fi
+            # Home Manager's built-in `services.ollama` module (used for the default
+            # backend) sets `LimitLoadToSessionType: Background`, which makes launchd/
+            # `setupLaunchAgents` register that label under the `user/<uid>` domain rather
+            # than `gui/<uid>` (confirmed via `launchctl dumpstate`); our own custom
+            # `launchd.agents.*` entries (coding, session-proxy) don't set that and live
+            # under `gui/<uid>`. Checking both domains for every port is harmless -- the
+            # domain a given label isn't registered under just comes up empty.
+            #
+            # `launchctl print` exits non-zero (e.g. 113) whenever the service isn't
+            # currently registered with launchd at all (not just "not running") -- under
+            # Home Manager's `set -e -o pipefail` activation runner that would otherwise
+            # abort this whole script (and therefore skip `setupLaunchAgents` entirely,
+            # silently leaving every managed launchd agent -- Ollama, Headroom, etc. --
+            # stale) before it ever gets a chance to detect/kill the unmanaged process
+            # below. An absent registration just means "no known managed pid yet", which
+            # the loop below already handles correctly via the `-n "$managed_pid"` check.
+            managed_pid="$(
+              { /bin/launchctl print "user/$uid/$label" 2>/dev/null \
+                  || /bin/launchctl print "gui/$uid/$label" 2>/dev/null \
+                  || true; } \
+                | /usr/bin/awk '/pid =/ { print $3; exit }'
+            )"
 
-            pid_user="$(/bin/ps -p "$pid" -o user= 2>/dev/null | ${pkgs.coreutils}/bin/tr -d '[:space:]' || true)"
-            if [ "$pid_user" != "$current_user" ]; then
-              continue
-            fi
+            for pid in $(${pkgs.lsof}/bin/lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true); do
+              if [ -z "$pid" ]; then
+                continue
+              fi
 
-            command_line="$(/bin/ps -p "$pid" -o command= 2>/dev/null || true)"
-            case "$command_line" in
-              *"/ollama serve"*|*"ollama serve"*)
-                echo "Stopping unmanaged Ollama server on ${defaultHostPort} before launchd bootstrap (pid $pid)"
-                /bin/kill -TERM "$pid" 2>/dev/null || true
+              if [ -n "$managed_pid" ] && [ "$pid" = "$managed_pid" ]; then
+                continue
+              fi
 
-                for _ in 1 2 3 4 5; do
-                  if ! /bin/kill -0 "$pid" 2>/dev/null; then
-                    break
+              pid_user="$(/bin/ps -p "$pid" -o user= 2>/dev/null | ${pkgs.coreutils}/bin/tr -d '[:space:]' || true)"
+              if [ "$pid_user" != "$current_user" ]; then
+                continue
+              fi
+
+              command_line="$(/bin/ps -p "$pid" -o command= 2>/dev/null || true)"
+              case "$command_line" in
+                *"/ollama serve"*|*"ollama serve"*|*"local-ai-session-proxy"*)
+                  echo "Stopping unmanaged process on $description (port $port) before launchd bootstrap (pid $pid)"
+                  /bin/kill -TERM "$pid" 2>/dev/null || true
+
+                  for _ in 1 2 3 4 5; do
+                    if ! /bin/kill -0 "$pid" 2>/dev/null; then
+                      break
+                    fi
+                    ${pkgs.coreutils}/bin/sleep 1
+                  done
+
+                  if /bin/kill -0 "$pid" 2>/dev/null; then
+                    echo "Unmanaged process on $description (port $port) did not exit after TERM; sending KILL (pid $pid)"
+                    /bin/kill -KILL "$pid" 2>/dev/null || true
                   fi
-                  ${pkgs.coreutils}/bin/sleep 1
-                done
+                  ;;
+              esac
+            done
+          }
 
-                if /bin/kill -0 "$pid" 2>/dev/null; then
-                  echo "Unmanaged Ollama server on ${defaultHostPort} did not exit after TERM; sending KILL (pid $pid)"
-                  /bin/kill -KILL "$pid" 2>/dev/null || true
-                fi
-                ;;
-            esac
-          done
+          stop_unmanaged ${lib.escapeShellArg (toString cfg.runtime.port)} org.nix-community.home.ollama ${lib.escapeShellArg defaultHostPort}
+          stop_unmanaged ${lib.escapeShellArg (toString cfg.runtime.codingPort)} org.nix-community.home.local-ai-ollama-coding ${lib.escapeShellArg codingHostPort}
+          ${lib.optionalString sessionProxyEnabled ''
+            stop_unmanaged ${lib.escapeShellArg (toString cfg.runtime.sessionProxy.port)} org.nix-community.home.local-ai-session-proxy ${lib.escapeShellArg sessionHostPort}
+          ''}
         '';
 
       home.activation.restartManagedOllamaLaunchAgents =

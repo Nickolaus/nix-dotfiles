@@ -101,9 +101,9 @@ let
   # same concept -- mirrors the schema each already gets from
   # agent-configs.nix's restoreCodexUserConfig / vibe.nix's mergeScript, so
   # onboarding writes into the exact same structure those files expect.
-  # `mergePython`'s tomlkit dependency is the same one vibe.nix already pulls
-  # in via pkgs.python3.withPackages, so this doesn't add a new closure.
-  onboardPython = pkgs.python3.withPackages (ps: [ ps.tomlkit ]);
+  # Same shared `tomlkitPython` derivation vibe.nix's own tomlkit script uses
+  # (hosts/shared/ai-agents-lib.nix) -- one declaration, no new closure.
+  onboardPython = aiAgentsLib.tomlkitPython;
 
   onboardCodexScript = pkgs.writeText "mcp-profile-onboard-codex.py" ''
     import sys
