@@ -2,6 +2,13 @@
 let
   cfg = config.caveman;
   cavemanSrc = flake.inputs.caveman;
+  # Home Manager's activation script hardcodes a minimal PATH for its entire run that
+  # never includes nix-darwin's per-user system profile directory, where `claude`
+  # actually lives -- confirmed directly (a real `darwin-rebuild switch` run showed this
+  # step produce zero output, meaning `command -v claude` failed silently here every
+  # time). Same fix already established for launchd-facing scripts elsewhere
+  # (ollama.nix/headroom.nix's `launchdPath`).
+  perUserSystemProfileBin = "/etc/profiles/per-user/${config.home.username}/bin";
   cavemanSkills = [
     "caveman"
     "caveman-commit"
@@ -75,6 +82,7 @@ in
   };
 
   config.home.activation.cavemanClaudeHooks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    PATH="${perUserSystemProfileBin}:$PATH"
     if command -v claude >/dev/null 2>&1; then
       ${if cfg.claudeHooks.enable then ''
         # Upstream installer copies hook files from a read-only Nix store source; the

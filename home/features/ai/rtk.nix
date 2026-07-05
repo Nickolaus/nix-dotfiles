@@ -9,6 +9,15 @@ let
   claudeSettingsFile = "${config.home.homeDirectory}/.claude/settings.json";
   cursorHooksFile = "${config.home.homeDirectory}/.cursor/hooks.json";
 
+  # Home Manager's activation script hardcodes a minimal PATH (coreutils/jq/etc. plus
+  # whatever directory the default Nix profile's `nix-env` resolves to) for its entire
+  # run -- confirmed directly that this never includes nix-darwin's per-user system
+  # profile directory, which is where `claude` actually lives on this machine. Without
+  # this, `command -v claude` fails silently in every activation script regardless of
+  # DAG ordering, not just this one -- same fix already established for launchd-facing
+  # scripts elsewhere (ollama.nix/headroom.nix's `launchdPath`).
+  perUserSystemProfileBin = "/etc/profiles/per-user/${config.home.username}/bin";
+
   # Contributed to the same global-instructions files caveman.nix/codebase-memory.nix
   # already write to (home.file merges these via Home Manager's types.lines
   # string-concat -- no shared registry needed, each module just owns its own
@@ -206,6 +215,7 @@ in
     # runs on every switch and converges to whatever claudeHook.enable currently says,
     # in either direction, rather than being a one-shot manual install with no undo path.
     home.activation.rtkClaudeHook = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      PATH="${perUserSystemProfileBin}:$PATH"
       if command -v claude >/dev/null 2>&1; then
         ${if cfg.claudeHook.enable then ''
           ${pkgs.rtk}/bin/rtk init --global --auto-patch --hook-only || true
