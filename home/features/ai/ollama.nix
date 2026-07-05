@@ -1335,36 +1335,6 @@ in
           # Profile selector lives at ~/.codex/local-coding.config.toml (see home.file above).
           exec codex --profile local-coding "$@"
         '')
-
-        (writeShellScriptBin "llm-claude-local" ''
-          #!/usr/bin/env bash
-          ${commonShell}
-
-          if ! command -v claude >/dev/null 2>&1; then
-            echo "Claude Code is not available in PATH."
-            echo "Next step: ensure the nix profile containing 'claude-code' is applied."
-            exit 1
-          fi
-
-          if [[ $# -gt 0 && ( "$1" == "--help" || "$1" == "-h" || "$1" == "help" ) ]]; then
-            exec claude "$@"
-          fi
-
-          require_service "${codingService}"
-
-          if [[ "$session_proxy_enabled" == "1" ]]; then
-            require_service "${sessionService}"
-          fi
-
-          if ! model_installed_for_service "${codingService}" "${codingModel}"; then
-            echo "Coding profile is not installed: ${codingModel}"
-            echo "Next step: llm-pull coding"
-            exit 1
-          fi
-
-          # Claude Code's local route now comes from the user-level Claude config.
-          exec claude "$@"
-        '')
       ];
     }
 

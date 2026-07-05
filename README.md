@@ -397,7 +397,6 @@ llm-smoke coding      # Sanity-check the coding profile through the session prox
 
 # Local coding agents
 llm-codex-local       # Launch Codex via managed defaults against the session proxy
-llm-claude-local      # Launch Claude Code via ~/.claude/settings.json against the session proxy
 ```
 
 ### OpenAI & Claude - Cloud Providers (Providers 2 & 3: Premium Quality)
