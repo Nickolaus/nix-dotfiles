@@ -41,6 +41,35 @@ rec {
       fi
     '';
 
+  # The disable-direction counterpart to mkJsonMergeActivation, for the opposite case:
+  # a JSON file holds an *array* some other tool (or this repo's own opt-in installers)
+  # also appends entries to, and disabling one Nix-managed feature should remove exactly
+  # the one entry it owns, leaving everything else in the array untouched -- e.g. rtk's
+  # Claude/Cursor hook entries in `hooks.PreToolUse`/`hooks.preToolUse`. Genuinely reused
+  # (not a forced abstraction): both callers have identical mechanics -- filter the array
+  # at `arrayPath`, keep entries matching `predicate`, no-op gracefully if the file is
+  # missing or invalid -- differing only in the path and the one predicate expression.
+  mkJsonArrayEntryRemoval =
+    { configPath
+    , arrayPath
+    , predicate
+    , invalidJsonWarning ? "warning: ${configPath} is not valid JSON; skipping entry removal"
+    }:
+    ''
+      config_file=${escapeShellArg configPath}
+      if [ -f "$config_file" ]; then
+        if ${pkgs.jq}/bin/jq empty "$config_file" >/dev/null 2>&1; then
+          tmp_file="$(mktemp)"
+          ${pkgs.jq}/bin/jq \
+            '${arrayPath} = ((${arrayPath} // []) | map(select(${predicate})))' \
+            "$config_file" > "$tmp_file"
+          mv "$tmp_file" "$config_file"
+        else
+          echo ${escapeShellArg invalidJsonWarning} >&2
+        fi
+      fi
+    '';
+
   effectiveServerFor = target: server:
     let
       override = server.targetOverrides.${target};

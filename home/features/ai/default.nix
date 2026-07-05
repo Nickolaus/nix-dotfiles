@@ -7,6 +7,7 @@
     ./headroom.nix
     ./mcp-profiles.nix
     ./ollama.nix
+    ./rtk.nix
     ./serena.nix
     ./vibe.nix
   ];

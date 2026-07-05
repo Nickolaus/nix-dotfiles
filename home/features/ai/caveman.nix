@@ -1,5 +1,6 @@
-{ flake, lib, pkgs, ... }:
+{ config, flake, lib, pkgs, ... }:
 let
+  cfg = config.caveman;
   cavemanSrc = flake.inputs.caveman;
   cavemanSkills = [
     "caveman"
@@ -53,13 +54,44 @@ let
   '';
 in
 {
-  home.file = skillDestDirs // {
+  options.caveman.claudeHooks.enable = lib.mkOption {
+    type = lib.types.bool;
+    default = true;
+    description = ''
+      Install caveman's Claude Code plugin + SessionStart/UserPromptSubmit hooks +
+      statusline badge (via the upstream installer's `--with-hooks` mode).
+      Self-cleaning: this activation script always runs, and disabling this runs
+      the installer's own `--uninstall`, which removes exactly its own settings.json
+      entries and hook files (confirmed it preserves unrelated hooks -- e.g. an IDE's
+      own installer, or rtk's -- untouched). Independent of the always-on CLAUDE.md
+      skill text above, which this option does not affect.
+    '';
+  };
+
+  config.home.file = skillDestDirs // {
     ".codex/AGENTS.md".text = cavemanDefaultInstructions;
     ".vibe/AGENTS.md".text = cavemanDefaultInstructions;
     ".claude/CLAUDE.md".text = cavemanDefaultInstructions;
   };
 
-  home.packages = [
+  config.home.activation.cavemanClaudeHooks = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    if command -v claude >/dev/null 2>&1; then
+      ${if cfg.claudeHooks.enable then ''
+        # Upstream installer copies hook files from a read-only Nix store source; the
+        # copies inherit that read-only mode, so re-running without this chmod fails
+        # with "EACCES: permission denied" on the second and every subsequent switch
+        # (confirmed directly). --force is deliberately not used here: without it the
+        # installer correctly skips the already-installed plugin/marketplace steps
+        # (no needless network calls on every rebuild) and only re-copies hook files.
+        chmod -R u+w "$HOME/.claude/hooks" 2>/dev/null || true
+        ${node} ${installer} --only claude --with-hooks --no-mcp-shrink --non-interactive || true
+      '' else ''
+        ${node} ${installer} --uninstall --non-interactive || true
+      ''}
+    fi
+  '';
+
+  config.home.packages = [
     (pkgs.writeShellScriptBin "caveman-status" ''
       set -euo pipefail
 
@@ -106,9 +138,11 @@ in
       echo "the way it is for the other three. To force it in Cursor too: Cursor Settings > Rules >"
       echo "User Rules, and paste a short pointer at the skill (one-time manual step, per-machine)."
       echo
-      echo "Claude's caveman *skill/plugin* install (beyond the default CLAUDE.md style above) is"
-      echo "still explicit, since it mutates Claude-managed plugin/hook state:"
-      echo "caveman-claude-install-minimal or caveman-claude-install-full."
+      echo "Claude's caveman plugin + hooks + statusline (beyond the default CLAUDE.md style"
+      echo "above) install automatically on every switch (caveman.claudeHooks.enable, default"
+      echo "true) -- self-cleaning, so setting it false and rebuilding runs the real"
+      echo "'--uninstall' and removes them again. For just the plugin without hooks/statusline,"
+      echo "run caveman-claude-install-minimal by hand."
     '')
 
     (pkgs.writeShellScriptBin "caveman-upstream-dry-run" ''
@@ -126,17 +160,6 @@ in
       fi
 
       exec ${node} ${installer} --only claude --minimal --no-mcp-shrink --non-interactive "$@"
-    '')
-
-    (pkgs.writeShellScriptBin "caveman-claude-install-full" ''
-      set -euo pipefail
-
-      if ! command -v claude >/dev/null 2>&1; then
-        echo "claude command not found. Apply the profile that installs claude-code first." >&2
-        exit 1
-      fi
-
-      exec ${node} ${installer} --only claude --with-hooks --no-mcp-shrink --non-interactive "$@"
     '')
   ];
 }
