@@ -37,20 +37,15 @@ in
             env = server.env;
           };
 
-      managedSettingsFile = builtins.toFile "claude-code-managed-settings.json" (builtins.toJSON {
-        model = cfg.localCoding.model;
-        env = {
-          # Routes through the always-on Headroom compression proxy
-          # (home/features/ai/headroom.nix, aiAgents.headroom.proxies.shared -- single
-          # source of truth), which is itself configured (anthropicTargetUrl there) to
-          # forward straight on to this exact same `cfg.localCoding.anthropicBaseUrl` --
-          # same free/local Ollama destination as before, now compressed by default.
-          # Opt out: `headroom-pause`.
-          ANTHROPIC_BASE_URL = cfg.headroom.proxies.shared.url;
-          ANTHROPIC_AUTH_TOKEN = "ollama";
-          ANTHROPIC_API_KEY = "";
-        };
-      });
+      # Content lives entirely in `cfg.claude.managed.settings` (empty by default -- see
+      # its description in hosts/shared/ai-agents.nix for why this deliberately no longer
+      # hardcodes a forced ANTHROPIC_BASE_URL/AUTH_TOKEN/API_KEY/model local-Ollama
+      # override the way it used to: a managed policy overrides even user settings, so
+      # forcing it here would silently break claude.ai subscription connectors/Remote
+      # Control for anyone the policy applies to, with no easy opt-out. Free local Ollama
+      # coding for Claude is opt-in only, via the `claude-local` wrapper
+      # (home/features/ai/headroom.nix).
+      managedSettingsFile = builtins.toFile "claude-code-managed-settings.json" (builtins.toJSON cfg.claude.managed.settings);
 
       managedMcpFile = builtins.toFile "claude-code-managed-mcp.json" (builtins.toJSON (
         recursiveUpdate

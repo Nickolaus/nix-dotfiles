@@ -67,6 +67,7 @@ let
     DEFAULT_KEEP_ALIVE = os.environ.get("SESSION_PROXY_KEEP_ALIVE", "10m")
     DEFAULT_THINK = os.environ.get("SESSION_PROXY_DEFAULT_THINK", "false").strip().lower()
     DEFAULT_REASONING_EFFORT = os.environ.get("SESSION_PROXY_DEFAULT_REASONING_EFFORT", "none")
+    UPSTREAM_TIMEOUT_SECONDS = int(os.environ.get("SESSION_PROXY_TIMEOUT_SECONDS", "180"))
 
     HOP_BY_HOP_HEADERS = {
         "connection",
@@ -187,7 +188,7 @@ let
             if body:
                 headers["Content-Length"] = str(len(body))
 
-            conn = http.client.HTTPConnection(UPSTREAM_HOST, UPSTREAM_PORT, timeout=3600)
+            conn = http.client.HTTPConnection(UPSTREAM_HOST, UPSTREAM_PORT, timeout=UPSTREAM_TIMEOUT_SECONDS)
             try:
                 conn.request(self.command, self.path, body=body if body else None, headers=headers)
                 response = conn.getresponse()
@@ -302,6 +303,7 @@ let
       SESSION_PROXY_KEEP_ALIVE=${lib.escapeShellArg cfg.runtime.codingKeepAlive} \
       SESSION_PROXY_DEFAULT_THINK=false \
       SESSION_PROXY_DEFAULT_REASONING_EFFORT=none \
+      SESSION_PROXY_TIMEOUT_SECONDS=${lib.escapeShellArg (toString cfg.runtime.sessionProxy.timeoutSeconds)} \
       ${pkgs.python3}/bin/python3 ${sessionProxyScript}
   '';
 
@@ -731,6 +733,18 @@ in
           type = types.port;
           default = 11436;
           description = "Port for the session-aware coding proxy.";
+        };
+
+        timeoutSeconds = mkOption {
+          type = types.int;
+          default = 180;
+          description = ''
+            Upstream request timeout for the session-aware coding proxy. Bounds
+            worst case wait when the coding backend is slow or stuck behind
+            another request (single `OLLAMA_NUM_PARALLEL` slot shared across
+            every local-coding consumer) -- a client gets a fast, clear error
+            instead of hanging silently for however long the backend takes.
+          '';
         };
       };
     };

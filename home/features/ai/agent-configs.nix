@@ -64,20 +64,6 @@ let
         env = envRenderer server;
       };
 
-  claudeSettings = {
-    model = aiCfg.localCoding.model;
-    env = {
-      # Mirrors hosts/shared/claude-code.nix's managed-settings.json: routes through the
-      # always-on Headroom compression proxy (home/features/ai/headroom.nix,
-      # aiAgents.headroom.proxies.shared -- single source of truth), which forwards on to
-      # this same `aiCfg.localCoding.anthropicBaseUrl` -- same free/local Ollama
-      # destination as before, now compressed by default.
-      ANTHROPIC_BASE_URL = aiCfg.headroom.proxies.shared.url;
-      ANTHROPIC_AUTH_TOKEN = "ollama";
-      ANTHROPIC_API_KEY = "";
-    };
-  };
-
   cursorMcpSettings = {
     mcpServers = lib.mapAttrs (renderMcpServerForJson "cursor" renderEnvForCursor cursorHeaderAuthRenderer) (
       filterAttrs (_: server: serverEnabledFor "cursor" server) enabledMcpServers
@@ -92,9 +78,15 @@ let
 in
 {
   home.file =
+    # Deliberately does *not* touch `.claude/settings.json`: unlike Codex (whose managed
+    # config only overrides `openai_base_url` for compression, never the default provider's
+    # identity -- see hosts/shared/codex.nix), forcing ANTHROPIC_BASE_URL/AUTH_TOKEN/API_KEY
+    # here would count as "another auth source" to Claude Code and silently disable a
+    # logged-in claude.ai subscription's connectors, Remote Control, and subscription
+    # billing. Claude Code has no local-coding route at all -- Codex and OpenCode expose
+    # that natively instead (model_providers.local_coding_ollama / provider.local-ollama).
     lib.optionalAttrs (aiCfg != null && aiCfg.enable && aiCfg.targets.claude.enable)
       {
-        ".claude/settings.json".text = builtins.toJSON claudeSettings;
         ".claude/ai-agents-mcp.json".text = builtins.toJSON claudeMcpSettings;
       }
     // lib.optionalAttrs (aiCfg != null && aiCfg.enable && aiCfg.targets.cursor.enable) {

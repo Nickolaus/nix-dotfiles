@@ -459,6 +459,29 @@ in
       default = false;
     };
 
+    claude.managed.settings = mkOption {
+      type = types.attrs;
+      default = { };
+      description = ''
+        Structured contents for Claude Code's managed-settings.json (macOS:
+        /Library/Application Support/ClaudeCode/managed-settings.json; Linux:
+        /etc/claude-code/managed-settings.json), written when `claude.managed.enable`
+        is true. Empty by default -- deliberately does *not* force
+        ANTHROPIC_BASE_URL/AUTH_TOKEN/API_KEY/model here the way this used to,
+        since a managed policy takes precedence over even user settings, so
+        forcing local-Ollama routing here would silently disable claude.ai
+        subscription connectors and Remote Control for anyone the policy
+        applies to, with no easy user-level override (see
+        home/features/ai/agent-configs.nix for the same trade-off already made
+        at the user-settings layer). Claude Code has no local-coding route at
+        all here -- unlike Codex/OpenCode, it has no native multi-provider
+        config, so there's no way to offer that without either the global-auth
+        risk above or a wrapper script race with other local-coding
+        consumers for the single-loaded-model backend (see
+        home/features/ai/ollama.nix, aiAgents.headroom.proxies.shared).
+      '';
+    };
+
     headroom.proxies = mkOption {
       type = types.attrsOf (types.submodule ({ config, ... }: {
         options = {

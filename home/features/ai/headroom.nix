@@ -23,14 +23,6 @@ let
   # invocation resolves the same extras set regardless of caller.
   headroomProxyFrom = "headroom-ai[proxy]";
 
-  # `headroom wrap` can also auto-register its own MCP server / tokensave / Serena
-  # backup into the target CLI's config. We already declare `headroom`, `serena`, and
-  # `codebase-memory` MCP servers ourselves via aiAgents, and don't want a second,
-  # imperative registration path mutating agent-owned files outside Nix's control -- so
-  # every wrap invocation below opts out of all of that and only reuses the persistent
-  # proxy for compression.
-  wrapSafetyFlags = [ "--no-proxy" "--no-mcp" "--no-tokensave" "--no-serena" "--no-context-tool" ];
-
   labelFor = name: "org.nix-community.home.headroom-proxy-${name}";
   logFileFor = name: "${stateDir}/headroom-proxy-${name}.log";
   errorLogFileFor = name: "${stateDir}/headroom-proxy-${name}.error.log";
@@ -70,6 +62,58 @@ let
   # (Claude, Codex, OpenCode) use -- a naming convention in the data, not special-cased
   # machinery. Falls back gracefully if a from-scratch config ever omits it.
   sharedProxyUrl = if proxies ? shared then proxies.shared.url else null;
+
+  # Generic, opt-in local-coding surface for GUI apps and IDE/extensions (VS Code, Orca,
+  # Continue, Cline, ...) -- CLI tools already reach this via inherited shell env, but GUI
+  # apps only see the macOS *login session* environment, set once here via
+  # `launchctl setenv`. Deliberately namespaced
+  # (`LOCAL_CODING_*`) rather than the reserved names (ANTHROPIC_BASE_URL, OPENAI_API_KEY,
+  # ...) real tools auto-detect: those reserved names have tool-specific side effects we
+  # don't want session-wide (e.g. Claude Code treats ANTHROPIC_BASE_URL as "another auth
+  # source" and silently disables claude.ai subscription connectors -- see
+  # home/features/ai/agent-configs.nix). Any tool wants this, it opts in with one manual,
+  # one-time step pointing its own Base URL / API key setting at these vars (same shape as
+  # the existing Cursor step below) -- consistent single source of truth, no code change
+  # needed to onboard a future tool.
+  localCodingEnvVars = optionalAttrs (sharedProxyUrl != null) {
+    LOCAL_CODING_ANTHROPIC_BASE_URL = sharedProxyUrl;
+    LOCAL_CODING_OPENAI_BASE_URL = "${sharedProxyUrl}/v1";
+    LOCAL_CODING_API_KEY = "ollama";
+    LOCAL_CODING_MODEL = if aiCfg != null then aiCfg.localCoding.model else "";
+  };
+
+  setLocalCodingEnvScript = pkgs.writeShellScript "set-local-coding-env" (
+    ''
+      set -euo pipefail
+    '' + lib.concatStringsSep "\n" (
+      lib.mapAttrsToList (name: value: "/bin/launchctl setenv ${name} ${lib.escapeShellArg value}") localCodingEnvVars
+    )
+  );
+
+  # Native, baked-in local-coding provider for OpenCode -- same shape as Codex's
+  # `model_providers.local_coding_ollama` (hosts/shared/codex.nix): a permanent, named
+  # entry in OpenCode's own config, selectable from its `/models` picker or `--model
+  # local-ollama/<id>`, no wrapper binary needed. OpenCode's custom-provider schema
+  # requires every model to be listed explicitly (no wildcard "any model" support) --
+  # that's what previously justified a wrap-based, live-generated config instead
+  # (`headroom wrap opencode`), but the local-coding route is always exactly one pinned
+  # model (`aiAgents.localCoding.model`), so a static entry needs no live generation at
+  # all.
+  localCodingModel = if aiCfg != null then aiCfg.localCoding.model else null;
+  opencodeLocalProvider = optionalAttrs (sharedProxyUrl != null && localCodingModel != null) {
+    local-ollama = {
+      npm = "@ai-sdk/openai-compatible";
+      name = "Local Ollama (Headroom)";
+      options = {
+        baseURL = "${sharedProxyUrl}/v1";
+        apiKey = "ollama";
+      };
+      models = {
+        "${localCodingModel}" = { name = localCodingModel; };
+      };
+    };
+  };
+  opencodeLocalProviderFile = pkgs.writeText "opencode-local-provider.json" (builtins.toJSON opencodeLocalProvider);
 in
 {
   home.file.".local/state/headroom/.keep".text = "";
@@ -103,18 +147,38 @@ in
       echo
       echo "Always-on MCP tools (headroom_compress/retrieve/stats): registered for Codex, Claude Code, Cursor, and Vibe via aiAgents."
       echo
-      echo "Default routing is ON (opt-out, not opt-in) for Claude, Codex, and Vibe -- their"
-      echo "normal config already points straight at one of the proxies above, no wrapper"
-      echo "command needed."
+      echo "Default routing is ON (opt-out, not opt-in) for Codex and Vibe -- their normal"
+      echo "config already points straight at one of the proxies above, no wrapper command"
+      echo "needed."
       echo
-      echo "Still opt-in (needs a live-generated model catalog, so it stays wrap-based):"
-      echo "  headroom-opencode [args...]   - OpenCode through the shared proxy"
+      echo "OpenCode has a native 'local-ollama' provider baked into"
+      echo "~/.config/opencode/opencode.json (same shape as Codex's local_coding_ollama) --"
+      echo "opt-in, no wrapper needed: pick it from OpenCode's /models picker, or"
+      echo "'opencode --model local-ollama/${toString localCodingModel}'."
+      echo
+      echo "Claude Code has no local-coding route: it has no native multi-provider config"
+      echo "(unlike Codex/OpenCode), and forcing ANTHROPIC_BASE_URL globally would count as"
+      echo "\"another auth source\" and silently disable claude.ai subscription connectors/"
+      echo "Remote Control -- so plain 'claude' always uses your real subscription."
       echo
       echo "Cursor has no config file or env var for this -- one-time manual step:"
       echo "  Settings > Models > OpenAI API Key > Advanced > Override Base URL -> ${toString sharedProxyUrl}/v1"
       echo
-      echo "Opt out of default routing (Claude/Codex/Vibe will fail to connect until resumed"
-      echo "or rebuilt -- same accepted risk as Claude's local Ollama routing already carries):"
+      echo "Any other GUI app or IDE/extension (VS Code, Orca, Continue, Cline, ...) can opt"
+      echo "in the same way, via a generic session-wide env surface (launchctl setenv, set at"
+      echo "login and re-applied on every rebuild -- see LOCAL_CODING_* below) instead of a"
+      echo "per-tool code change. One-time step: point that tool's own Base URL / API key"
+      echo "setting at \''${env:LOCAL_CODING_ANTHROPIC_BASE_URL} (Anthropic-wire tools) or"
+      echo "\''${env:LOCAL_CODING_OPENAI_BASE_URL} (OpenAI-wire tools), API key"
+      echo "\''${env:LOCAL_CODING_API_KEY}, model \''${env:LOCAL_CODING_MODEL} -- exact"
+      echo "placeholder syntax (\''${env:VAR}, \\\$VAR, ...) depends on the tool."
+      echo "Current values:"
+      ${lib.concatStringsSep "\n" (
+        lib.mapAttrsToList (name: value: "      echo \"  ${name}=${value}\"") localCodingEnvVars
+      )}
+      echo
+      echo "Opt out of default routing (Codex/Vibe will fail to connect until resumed or"
+      echo "rebuilt; OpenCode's local-ollama provider just becomes unusable):"
       echo "  headroom-pause [name]   - stop one instance (name), or all of them if omitted"
       echo "  headroom-resume [name]  - restart one instance (name), or all of them if omitted"
       echo
@@ -146,9 +210,11 @@ in
         echo "connect until you run 'headroom-resume $name' (or rebuild)."
       else
         labels="${allLabelsShell}"
-        echo "Stopping all managed Headroom proxy instances -- Claude, Codex, and Vibe are"
-        echo "hardwired to them by default, so all three will fail to connect until you run"
-        echo "'headroom-resume' (or rebuild)."
+        echo "Stopping all managed Headroom proxy instances -- Codex and Vibe are hardwired"
+        echo "to them by default, so both will fail to connect until you run"
+        echo "'headroom-resume' (or rebuild). OpenCode's local-ollama provider also stops"
+        echo "working; the default 'claude' command (claude.ai subscription) and OpenCode's"
+        echo "other providers are unaffected."
       fi
       for label in $labels; do
         launchctl bootout "$domain/$label" 2>/dev/null || echo "$label: already stopped."
@@ -182,25 +248,57 @@ in
       fi
     '')
 
-    (pkgs.writeShellScriptBin "headroom-opencode" ''
-      set -euo pipefail
-      if ! command -v opencode >/dev/null 2>&1; then
-        echo "opencode command not found. Apply the profile that installs opencode first." >&2
-        exit 1
-      fi
-      if ! ${pkgs.curl}/bin/curl -fsS "${toString sharedProxyUrl}/health" >/dev/null 2>&1; then
-        echo "Headroom proxy is not responding at ${toString sharedProxyUrl}." >&2
-        echo "Next steps: rebuild/apply Home Manager, then check: headroom-logs" >&2
-        exit 1
-      fi
-      # OpenCode's custom-provider config requires an explicit, versioned model catalog
-      # (no wildcard "any model" support), so unlike Codex/Claude we let `headroom wrap`
-      # generate and inject that config at launch time (OPENCODE_CONFIG_CONTENT) rather
-      # than hand-maintaining a model list in Nix that would go stale.
-      exec ${uvx} --from ${lib.escapeShellArg headroomProxyFrom} headroom wrap opencode \
-        ${lib.concatStringsSep " " wrapSafetyFlags} -- "$@"
-    '')
   ];
 
-  launchd.agents = mkIf pkgs.stdenv.hostPlatform.isDarwin (builtins.listToAttrs (lib.mapAttrsToList mkProxyAgent proxies));
+  launchd.agents = mkIf pkgs.stdenv.hostPlatform.isDarwin (
+    builtins.listToAttrs (lib.mapAttrsToList mkProxyAgent proxies)
+    // optionalAttrs (localCodingEnvVars != { }) {
+      local-coding-env = {
+        enable = true;
+        config = {
+          ProgramArguments = [ "${setLocalCodingEnvScript}" ];
+          RunAtLoad = true;
+          KeepAlive = false;
+          StandardOutPath = "${stateDir}/local-coding-env.log";
+          StandardErrorPath = "${stateDir}/local-coding-env.error.log";
+        };
+      };
+    }
+  );
+
+  # `launchctl setenv` only affects the *current* login session -- RunAtLoad above covers
+  # every login going forward, but a `home-manager switch`/`darwin-rebuild switch` between
+  # logins wouldn't otherwise apply a first-time or changed value until next login. Run the
+  # same script immediately on activation so it takes effect right away too.
+  home.activation.applyLocalCodingEnv = mkIf (pkgs.stdenv.hostPlatform.isDarwin && localCodingEnvVars != { }) (
+    lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      ${setLocalCodingEnvScript} || true
+    ''
+  );
+
+  # Merges (never fully overwrites) the `local-ollama` provider into OpenCode's own
+  # ~/.config/opencode/opencode.json -- any other provider, model default, or setting the
+  # user (or `opencode auth login`) has added stays untouched; only the `provider.
+  # local-ollama` key is owned by Nix here, same restraint restoreCodexUserConfig and the
+  # Vibe config merge (this directory) take with their respective tools' user-editable
+  # config files.
+  home.activation.mergeOpencodeLocalProvider = mkIf (opencodeLocalProvider != { }) (
+    lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      opencode_dir="${config.home.homeDirectory}/.config/opencode"
+      opencode_config="$opencode_dir/opencode.json"
+      mkdir -p "$opencode_dir"
+      if [ ! -f "$opencode_config" ]; then
+        echo '{"$schema":"https://opencode.ai/config.json"}' > "$opencode_config"
+      fi
+      if ${pkgs.jq}/bin/jq empty "$opencode_config" >/dev/null 2>&1; then
+        tmp_file="$(mktemp)"
+        ${pkgs.jq}/bin/jq --slurpfile provider ${opencodeLocalProviderFile} \
+          '.provider = ((.provider // {}) + $provider[0])' \
+          "$opencode_config" > "$tmp_file"
+        mv "$tmp_file" "$opencode_config"
+      else
+        echo "warning: $opencode_config is not valid JSON; skipping local-ollama provider merge for OpenCode" >&2
+      fi
+    ''
+  );
 }
