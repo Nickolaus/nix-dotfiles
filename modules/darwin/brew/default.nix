@@ -26,11 +26,13 @@
     # trust only that cask, not the whole tap.
     extraConfig = ''
       cask "TheBoredTeam/boring-notch/boring-notch", trusted: true
+      cask "stablyai/orca/orca", trusted: true
     '';
 
     taps = [
       "aws/tap"
       "TheBoredTeam/boring-notch" # Required tap for the fully qualified boring-notch cask
+      "stablyai/orca" # Required tap for the fully qualified orca cask (Orca IDE, bundles orca-cli)
     ];
 
     # CLI tools not available or problematic in Nix
