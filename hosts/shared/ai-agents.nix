@@ -420,7 +420,9 @@ in
     };
 
     codex.requirements = {
-      enable = mkEnableOption "managed Codex requirements";
+      enable = mkEnableOption "managed Codex requirements" // {
+        default = true;
+      };
 
       settings = mkOption {
         type = types.attrs;

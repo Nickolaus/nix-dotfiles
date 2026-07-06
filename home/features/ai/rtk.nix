@@ -1,6 +1,6 @@
 { config, lib, pkgs, ... }:
 let
-  inherit (lib) mkOption types;
+  inherit (lib) escapeShellArg mkOption types;
 
   aiAgentsLib = import ../../../hosts/shared/ai-agents-lib.nix { inherit lib pkgs; };
 
@@ -8,6 +8,14 @@ let
 
   claudeSettingsFile = "${config.home.homeDirectory}/.claude/settings.json";
   cursorHooksFile = "${config.home.homeDirectory}/.cursor/hooks.json";
+  rtkConfigDir =
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      "${config.home.homeDirectory}/Library/Application Support/rtk"
+    else
+      "${config.xdg.configHome}/rtk";
+  rtkConfigFile = "${rtkConfigDir}/config.toml";
+  rtkHistoryDbFile = "${cfg.sharedStateDir}/history.db";
+  rtkTeeDir = "${cfg.sharedStateDir}/tee";
 
   # Home Manager's activation script hardcodes a minimal PATH (coreutils/jq/etc. plus
   # whatever directory the default Nix profile's `nix-env` resolves to) for its entire
@@ -33,8 +41,10 @@ let
           no behavior change needed from you.
         '';
         codex = ''
-          Codex has no hook mechanism rtk uses -- there's no transparent rewrite here.
-          Prefix commands yourself, e.g. `rtk git status` instead of `git status`.
+          Codex rewrites simple Bash calls through a managed `PreToolUse` hook here
+          (on by default -- see `rtk-status`), but hook coverage is incomplete:
+          non-Bash tools, `WebSearch`, and some richer shell paths still bypass it.
+          Use explicit `rtk <cmd>` when you need RTK filtering and the hook does not fire.
         '';
         vibe = ''
           Vibe has no native rtk integration at all (not in rtk's own supported-agent
@@ -108,6 +118,23 @@ let
 in
 {
   options.rtk = {
+    sharedStateDir = mkOption {
+      type = types.str;
+      default =
+        if pkgs.stdenv.hostPlatform.isDarwin then
+          "/private/tmp/${config.home.username}/rtk"
+        else
+          "${config.xdg.stateHome}/rtk";
+      description = ''
+        Shared RTK runtime state directory used by every agent via
+        `tracking.database_path` and `tee.directory` in RTK's own config.
+        Darwin defaults to `/private/tmp/$USER/rtk` because Codex's sandbox
+        cannot write RTK's upstream default `~/Library/Application Support/rtk`
+        data directory, while Claude/Cursor/Vibe can still use the same tmp
+        path without special handling.
+      '';
+    };
+
     claudeHook.enable = mkOption {
       type = types.bool;
       default = true;
@@ -157,6 +184,11 @@ in
           echo "  missing $rtk_bin"
         fi
         echo
+        echo "RTK config: ${rtkConfigFile}"
+        echo "RTK state:  ${cfg.sharedStateDir}"
+        echo "RTK DB:     ${rtkHistoryDbFile}"
+        echo "RTK tee:    ${rtkTeeDir}"
+        echo
 
         settings=${lib.escapeShellArg claudeSettingsFile}
         if [ -f "$settings" ] && ${pkgs.jq}/bin/jq -e \
@@ -186,10 +218,16 @@ in
         fi
         echo
 
-        echo "Codex and Vibe: no hook mechanism rtk uses exists for either -- both rely on"
-        echo "manually typing 'rtk <cmd>' (see .codex/AGENTS.md / .vibe/AGENTS.md for the"
-        echo "usage blurb this module contributes). Vibe additionally has no native rtk"
-        echo "support at all in rtk's own supported-agent list."
+        codex_requirements="/etc/codex/requirements.toml"
+        if [ -f "$codex_requirements" ] && ${pkgs.gnugrep}/bin/grep -q 'rtk-pretool.py' "$codex_requirements"; then
+          echo "Codex hook: installed   (managed PreToolUse rewrite via $codex_requirements)"
+        else
+          echo "Codex hook: missing     (no managed PreToolUse rewrite found)"
+        fi
+        echo "Codex hook scope: simple Bash calls only; non-Bash tools, WebSearch, and some"
+        echo "richer shell paths still need explicit 'rtk <cmd>'."
+        echo
+        echo "Vibe: no native rtk integration -- use explicit 'rtk <cmd>' there."
         echo
 
         echo "rtk is a stateless CLI -- no port, no daemon, no launchd agent; nothing to"
@@ -198,7 +236,14 @@ in
 
         if [ -x "$rtk_bin" ]; then
           echo "Savings summary (rtk gain):"
-          "$rtk_bin" gain 2>/dev/null | sed 's/^/  /' || echo "  (no data yet -- gain reports after rtk has wrapped at least one command)"
+          gain_err="$(mktemp)"
+          if "$rtk_bin" gain >"$gain_err.out" 2>"$gain_err"; then
+            sed 's/^/  /' "$gain_err.out"
+          else
+            echo "  rtk gain failed:"
+            sed 's/^/    /' "$gain_err"
+          fi
+          rm -f "$gain_err" "$gain_err.out"
         fi
       '')
     ];
@@ -214,6 +259,55 @@ in
     # hosts/shared/claude-code.nix pattern from earlier this session: the script always
     # runs on every switch and converges to whatever claudeHook.enable currently says,
     # in either direction, rather than being a one-shot manual install with no undo path.
+    home.activation.rtkConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      config_file=${escapeShellArg rtkConfigFile}
+      state_dir=${escapeShellArg cfg.sharedStateDir}
+      tee_dir=${escapeShellArg rtkTeeDir}
+      db_file=${escapeShellArg rtkHistoryDbFile}
+
+      mkdir -p "$(dirname "$config_file")" "$state_dir" "$tee_dir"
+
+      if [ ! -f "$config_file" ]; then
+        printf '%s\n' "" > "$config_file"
+      fi
+
+      if ${aiAgentsLib.tomlkitPython}/bin/python3 - "$config_file" "$db_file" "$tee_dir" <<'PY'
+import pathlib
+import sys
+import tomlkit
+
+config_path = pathlib.Path(sys.argv[1])
+db_file = sys.argv[2]
+tee_dir = sys.argv[3]
+
+try:
+    content = config_path.read_text() if config_path.exists() else ""
+    doc = tomlkit.parse(content) if content.strip() else tomlkit.document()
+except Exception as exc:
+    print(f"warning: {config_path} is not valid TOML; skipping RTK config merge ({exc})", file=sys.stderr)
+    raise SystemExit(1)
+
+tracking = doc.get("tracking")
+if not isinstance(tracking, tomlkit.items.Table):
+    tracking = tomlkit.table()
+doc["tracking"] = tracking
+tracking["database_path"] = db_file
+
+tee = doc.get("tee")
+if not isinstance(tee, tomlkit.items.Table):
+    tee = tomlkit.table()
+doc["tee"] = tee
+tee["directory"] = tee_dir
+
+config_path.write_text(tomlkit.dumps(doc))
+PY
+      then
+        :
+      else
+        true
+      fi
+    '';
+
     home.activation.rtkClaudeHook = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       PATH="${perUserSystemProfileBin}:$PATH"
       if command -v claude >/dev/null 2>&1; then
