@@ -47,6 +47,7 @@
 
     # GUI applications and system integrations
     casks = [
+      "claude" # Claude desktop app; not packaged in nixpkgs, Homebrew cask tracks current releases
       "cursor" # AI-powered code editor; Nix package is broken/unmaintained (v0.47.8), Homebrew provides latest (v2.1.46+)
       "lm-studio" # Local LLM desktop app; Homebrew cask tracks current releases (v0.4.18) vs nixpkgs lmstudio (v0.4.10)
       "orbstack" # Container management tool with better performance than the Nix version
