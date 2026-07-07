@@ -115,7 +115,8 @@ let
       "CODEX_GITHUB_TOKEN"
     ];
 
-    mcp_servers = lib.mapAttrs renderCodexMcpServer enabledMcpServers;
+    mcp_servers =
+      lib.mapAttrs renderCodexMcpServer enabledMcpServers;
   };
 
   existingRequirementHooks = cfg.codex.requirements.settings.hooks or { };

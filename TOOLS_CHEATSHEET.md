@@ -382,6 +382,9 @@ mcp-profile-atlassian      # default baseline + atlassian
 mcp-profile-openai-api     # default baseline + openaiDeveloperDocs
 mcp-profile-scratchpad     # default baseline + memory
 mcp-profile-onboard <profile> [repo-dir]   # Opt a repo into a profile WITHOUT committing that choice (see below)
+mcp-profile-onboard-many <profile> <root-dir>   # Batch-onboard every git repo under a directory
+mcp-profile-offboard-codex <profile> [repo-dir]   # Remove repo-local Codex profile entry for one repo
+mcp-profile-offboard-codex-many <profile> <root-dir>   # Remove repo-local Codex profile entries under a directory
 ```
 
 - `context7`, `fetch`, `sequential-thinking`, `time`, `github`, `codebase-memory`, and `headroom` are the universal baseline (`defaultProfileServers` in `hosts/shared/ai-agents.nix`) and stay natively registered for all 4 clients.
@@ -392,8 +395,19 @@ mcp-profile-onboard <profile> [repo-dir]   # Opt a repo into a profile WITHOUT c
 - **Onboarding without committing** (someone else's shared repo, or just a personal preference you don't want to impose on collaborators): `mcp-profile-onboard <profile> [repo-dir]` wires the profile into that repo's own project-native MCP config per client, entirely privately:
   - **Claude Code**: uses `claude mcp add`'s default `local` scope -- stored in `~/.claude.json` keyed by that repo's path, zero repo footprint, nothing to hide.
   - **Cursor / Codex / Vibe** (no native private-project scope): writes the entry into `.cursor/mcp.json` / `.codex/config.toml` / `.vibe/config.toml` as usual, then keeps that file out of git for *this clone only* -- via `.git/info/exclude` (a per-clone ignore list living inside `.git/` itself; never touches the shared `.gitignore`; invisible to `git status`/diffs/PRs) if the file wasn't already tracked, or `git update-index --skip-worktree <file>` if the team already committed it (git then ignores your local edit to that one file without touching history or your teammates' copies).
+- **Codex stricter rule**: unlike Cursor/Vibe, `mcp-profile-onboard` now only edits `.codex/config.toml` when that file is already tracked by the repo. If the repo does not commit a Codex config, onboarding skips Codex instead of creating a new untracked repo-local file. That keeps Codex aligned with committed repo policy and avoids local-only repo poisoning.
+- If a tracked `.codex/config.toml` is missing locally, onboarding restores the committed file from `HEAD` first, then applies the local-only Codex MCP entry.
   - Verified end-to-end: after running it, `git status` in the target repo shows nothing new.
   - Undo: `claude mcp remove <name>`; `git update-index --no-skip-worktree <file>`; or remove the line from `.git/info/exclude` and delete the file.
+- `mcp-profile-onboard` now redirects `claude mcp add` away from stdin and caps it with a 15s timeout, so it no longer steals piped repo lists or hangs indefinitely in batch loops.
+- Use `mcp-profile-onboard-many <profile> <root-dir>` for safe batch mode. It discovers git repos with `find -print0`, calls `mcp-profile-onboard` with stdin detached, and prints a final `repos/ok/failed` summary.
+- Pass `--skip-claude` to either onboarding command when you want repo-local Codex/Cursor/Vibe wiring only and plan to handle Claude's per-repo local scope separately.
+- Use `mcp-profile-offboard-codex` / `mcp-profile-offboard-codex-many` to remove earlier repo-local Codex profile entries when migrating to the stricter policy.
+- Codex offboarding is also conservative: if removing the profile entry would empty a tracked `.codex/config.toml`, the helper restores the committed `HEAD` version instead of deleting or blanking the repo-owned file.
+- Best practice split:
+  Codex: only layer private MCP onto repos that already commit `.codex/config.toml`.
+  Claude Code: prefer native `local` scope.
+  Cursor / Vibe: repo-local onboarding remains the practical fallback until they gain a private per-project scope.
 
 #### Serena Code Intelligence
 ```bash

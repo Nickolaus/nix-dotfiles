@@ -567,17 +567,17 @@ in
         })
         config.aiAgents.mcpServers
       ++ lib.concatMap
-        (profileName:
-          let
-            profile = config.aiAgents.mcpProfiles.${profileName};
-            unknown = builtins.filter (s: !(config.aiAgents.mcpServers ? ${s})) profile.servers;
+      (profileName:
+        let
+          profile = config.aiAgents.mcpProfiles.${profileName};
+          unknown = builtins.filter (s: !(config.aiAgents.mcpServers ? ${s})) profile.servers;
           in
           [{
             assertion = unknown == [ ];
             message =
               "aiAgents.mcpProfiles.${profileName}.servers references unknown aiAgents.mcpServers: "
-              + builtins.concatStringsSep ", " unknown;
-          }])
-        (builtins.attrNames config.aiAgents.mcpProfiles);
+            + builtins.concatStringsSep ", " unknown;
+        }])
+      (builtins.attrNames config.aiAgents.mcpProfiles);
   };
 }

@@ -28,15 +28,18 @@ let
       // optionalAttrs (rawServer.env != { }) { env = rawServer.env; }
       // optionalAttrs (rawServer.inheritEnv != [ ]) { inheritEnv = rawServer.inheritEnv; };
 
-  mkProfileManifest = profileName: profile:
-    pkgs.writeText "mcp-profile-${profileName}.json" (builtins.toJSON {
+  mkServerManifest = name: serverNames:
+    pkgs.writeText "mcp-profile-${name}.json" (builtins.toJSON {
       mcpServers = builtins.listToAttrs (map
         (serverName: {
           name = serverName;
           value = renderProfileServerManifest serverName aiCfg.mcpServers.${serverName};
         })
-        profile.servers);
+        serverNames);
     });
+
+  mkProfileManifest = profileName: profile:
+    mkServerManifest profileName profile.servers;
 
   # One shared script for every profile: reads the pre-resolved, build-time
   # manifest named by argv[1], resolves inheritEnv/bearerTokenEnvVar from its
@@ -162,6 +165,45 @@ let
     with open(config_path, "w") as f:
         f.write(tomlkit.dumps(doc))
   '';
+
+  offboardCodexScript = pkgs.writeText "mcp-profile-offboard-codex.py" ''
+    import os
+    import sys
+
+    import tomlkit
+
+    config_path, name, tracked_mode = sys.argv[1], sys.argv[2], sys.argv[3]
+    tracked = tracked_mode == "tracked"
+
+    try:
+        with open(config_path) as f:
+            doc = tomlkit.parse(f.read())
+    except FileNotFoundError:
+        print("missing")
+        raise SystemExit(0)
+
+    changed = False
+    servers = doc.get("mcp_servers")
+    if servers is not None and name in servers:
+        del servers[name]
+        changed = True
+        if len(list(servers.keys())) == 0:
+            del doc["mcp_servers"]
+
+    rendered = tomlkit.dumps(doc).strip()
+    if rendered == "":
+        if tracked:
+            print("restore-tracked" if changed else "empty")
+            raise SystemExit(0)
+        os.remove(config_path)
+        print("deleted" if changed else "empty")
+        raise SystemExit(0)
+
+    with open(config_path, "w") as f:
+        f.write(tomlkit.dumps(doc))
+
+    print("updated" if changed else "unchanged")
+  '';
 in
 {
   home.packages =
@@ -213,11 +255,39 @@ in
         set -euo pipefail
 
         known_profiles="${lib.concatStringsSep " " profileNames}"
+        skip_claude=0
+
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --skip-claude)
+              skip_claude=1
+              shift
+              ;;
+            --help|-h)
+              echo "Usage: mcp-profile-onboard [--skip-claude] <profile> [repo-dir]" >&2
+              echo "Known profiles: $known_profiles" >&2
+              exit 0
+              ;;
+            --)
+              shift
+              break
+              ;;
+            -*)
+              echo "Unknown option: $1" >&2
+              echo "Usage: mcp-profile-onboard [--skip-claude] <profile> [repo-dir]" >&2
+              exit 1
+              ;;
+            *)
+              break
+              ;;
+          esac
+        done
+
         profile="''${1:-}"
         repo_dir="''${2:-.}"
 
         if [ -z "$profile" ]; then
-          echo "Usage: mcp-profile-onboard <profile> [repo-dir]" >&2
+          echo "Usage: mcp-profile-onboard [--skip-claude] <profile> [repo-dir]" >&2
           echo "Known profiles: $known_profiles" >&2
           exit 1
         fi
@@ -249,16 +319,31 @@ in
         echo "    never committed, never touches the shared .gitignore"
         echo
 
-        if command -v claude >/dev/null 2>&1; then
+        if [ "$skip_claude" -eq 1 ]; then
+          echo "-- Claude Code --"
+          echo "   skipped (--skip-claude)"
+          echo
+        elif command -v claude >/dev/null 2>&1; then
           echo "-- Claude Code (local scope: private, ~/.claude.json, zero repo footprint) --"
           claude_err="$(mktemp)"
-          if claude mcp add --transport stdio "$entry_name" -- "$binary" >"$claude_err" 2>&1; then
+          claude_status=0
+          if ${pkgs.coreutils}/bin/timeout 15s \
+            claude mcp add --transport stdio "$entry_name" -- "$binary" \
+            >"$claude_err" 2>&1 < /dev/null; then
             echo "   added"
-          elif grep -qi "already exists" "$claude_err"; then
-            echo "   already registered"
           else
+            claude_status=$?
+          fi
+
+          if [ "$claude_status" -eq 124 ]; then
+            echo "   warning: 'claude mcp add' timed out after 15s; rerun this repo manually or use --skip-claude in batch mode" >&2
+          elif [ "$claude_status" -ne 0 ] && grep -qi "already exists" "$claude_err"; then
+            echo "   already registered"
+          elif [ "$claude_status" -ne 0 ]; then
             echo "   warning: 'claude mcp add' failed:" >&2
             cat "$claude_err" >&2
+          else
+            :
           fi
           rm -f "$claude_err"
           echo
@@ -280,6 +365,29 @@ in
           fi
         }
 
+        keep_private_tracked_only() {
+          rel="$1"
+          if git ls-files --error-unmatch "$rel" >/dev/null 2>&1; then
+            if [ ! -f "$rel" ]; then
+              mkdir -p "$(dirname "$rel")"
+              if git show "HEAD:$rel" > "$rel" 2>/dev/null; then
+                echo "   restored tracked $rel from HEAD before applying local-only MCP entry"
+              else
+                echo "   skipped: failed to restore tracked $rel from HEAD" >&2
+                rm -f "$rel"
+                return 1
+              fi
+            fi
+            git update-index --skip-worktree "$rel"
+            echo "   $rel is tracked by the team -- marked --skip-worktree: your local edit never"
+            echo "   shows in 'git status'/diffs/PRs (undo: git update-index --no-skip-worktree $rel)"
+            return 0
+          fi
+
+          echo "   skipped: $rel is not tracked in this repo, so Codex stays aligned with committed config only"
+          return 1
+        }
+
         echo "-- Cursor --"
         mkdir -p .cursor
         [ -f .cursor/mcp.json ] || echo '{}' > .cursor/mcp.json
@@ -290,9 +398,9 @@ in
         echo
 
         echo "-- Codex --"
-        mkdir -p .codex
-        ${onboardPython}/bin/python3 ${onboardCodexScript} .codex/config.toml "$entry_name" "$binary"
-        keep_private ".codex/config.toml"
+        if keep_private_tracked_only ".codex/config.toml"; then
+          ${onboardPython}/bin/python3 ${onboardCodexScript} .codex/config.toml "$entry_name" "$binary"
+        fi
         echo
 
         echo "-- Vibe --"
@@ -302,6 +410,185 @@ in
         echo
 
         echo "Done. 'git status' in $root should show nothing new from this."
+      '')
+
+      (pkgs.writeShellScriptBin "mcp-profile-onboard-many" ''
+        set -euo pipefail
+
+        skip_claude=0
+        known_profiles="${lib.concatStringsSep " " profileNames}"
+
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --skip-claude)
+              skip_claude=1
+              shift
+              ;;
+            --help|-h)
+              echo "Usage: mcp-profile-onboard-many [--skip-claude] <profile> <root-dir>" >&2
+              echo "Known profiles: $known_profiles" >&2
+              exit 0
+              ;;
+            --)
+              shift
+              break
+              ;;
+            -*)
+              echo "Unknown option: $1" >&2
+              echo "Usage: mcp-profile-onboard-many [--skip-claude] <profile> <root-dir>" >&2
+              exit 1
+              ;;
+            *)
+              break
+              ;;
+          esac
+        done
+
+        profile="''${1:-}"
+        root_dir="''${2:-.}"
+
+        if [ -z "$profile" ] || [ -z "$root_dir" ]; then
+          echo "Usage: mcp-profile-onboard-many [--skip-claude] <profile> <root-dir>" >&2
+          echo "Known profiles: $known_profiles" >&2
+          exit 1
+        fi
+
+        case " $known_profiles " in
+          *" $profile "*) ;;
+          *)
+            echo "Unknown profile '$profile'. Known profiles: $known_profiles" >&2
+            exit 1
+            ;;
+        esac
+
+        root_dir="$(${pkgs.coreutils}/bin/realpath "$root_dir")"
+
+        total=0
+        ok=0
+        failed=0
+
+        while IFS= read -r -d "" gitdir; do
+          repo="''${gitdir%/.git}"
+          total=$((total + 1))
+          echo "==> $repo"
+          if [ "$skip_claude" -eq 1 ]; then
+            if mcp-profile-onboard --skip-claude "$profile" "$repo" < /dev/null; then
+              ok=$((ok + 1))
+            else
+              failed=$((failed + 1))
+              echo "FAILED: $repo" >&2
+            fi
+          elif mcp-profile-onboard "$profile" "$repo" < /dev/null; then
+            ok=$((ok + 1))
+          else
+            failed=$((failed + 1))
+            echo "FAILED: $repo" >&2
+          fi
+          echo
+        done < <(${pkgs.findutils}/bin/find "$root_dir" -name .git -type d -prune -print0)
+
+        echo "Done. repos=$total ok=$ok failed=$failed"
+      '')
+
+      (pkgs.writeShellScriptBin "mcp-profile-offboard-codex" ''
+        set -euo pipefail
+
+        known_profiles="${lib.concatStringsSep " " profileNames}"
+        profile="''${1:-}"
+        repo_dir="''${2:-.}"
+
+        if [ -z "$profile" ]; then
+          echo "Usage: mcp-profile-offboard-codex <profile> [repo-dir]" >&2
+          echo "Known profiles: $known_profiles" >&2
+          exit 1
+        fi
+        case " $known_profiles " in
+          *" $profile "*) ;;
+          *)
+            echo "Unknown profile '$profile'. Known profiles: $known_profiles" >&2
+            exit 1
+            ;;
+        esac
+
+        binary="mcp-profile-$profile"
+        entry_name="$binary"
+
+        cd "$repo_dir"
+        root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+          echo "$(pwd) is not inside a git repo." >&2
+          exit 1
+        }
+        cd "$root"
+
+        config_rel=".codex/config.toml"
+        config_path="$root/$config_rel"
+        tracked_mode="untracked"
+        if git ls-files --error-unmatch "$config_rel" >/dev/null 2>&1; then
+          tracked_mode="tracked"
+        fi
+
+        status="$(${onboardPython}/bin/python3 ${offboardCodexScript} "$config_path" "$entry_name" "$tracked_mode")"
+
+        case "$status" in
+          missing)
+            echo "No $config_rel in $root"
+            ;;
+          updated)
+            echo "Removed $entry_name from $config_rel in $root"
+            ;;
+          unchanged)
+            echo "$entry_name not present in $config_rel in $root"
+            ;;
+          deleted)
+            echo "Removed $entry_name and deleted empty $config_rel in $root"
+            ;;
+          empty)
+            echo "$config_rel already empty in $root"
+            ;;
+          restore-tracked)
+            if git show "HEAD:$config_rel" > "$config_path" 2>/dev/null; then
+              echo "Restored tracked $config_rel in $root to committed HEAD version after removing $entry_name"
+            else
+              echo "Failed to restore tracked $config_rel from HEAD in $root" >&2
+              exit 1
+            fi
+            ;;
+          *)
+            echo "Unexpected status '$status' from codex offboard helper" >&2
+            exit 1
+            ;;
+        esac
+
+        if git ls-files --error-unmatch "$config_rel" >/dev/null 2>&1; then
+          git update-index --no-skip-worktree "$config_rel" >/dev/null 2>&1 || true
+        else
+          if [ ! -e "$config_rel" ] && [ -f .git/info/exclude ]; then
+            tmp="$(mktemp)"
+            ${pkgs.gnugrep}/bin/grep -vxF "$config_rel" .git/info/exclude > "$tmp" || true
+            mv "$tmp" .git/info/exclude
+          fi
+        fi
+      '')
+
+      (pkgs.writeShellScriptBin "mcp-profile-offboard-codex-many" ''
+        set -euo pipefail
+
+        known_profiles="${lib.concatStringsSep " " profileNames}"
+        profile="''${1:-}"
+        root_dir="''${2:-.}"
+
+        if [ -z "$profile" ] || [ -z "$root_dir" ]; then
+          echo "Usage: mcp-profile-offboard-codex-many <profile> <root-dir>" >&2
+          echo "Known profiles: $known_profiles" >&2
+          exit 1
+        fi
+
+        root_dir="$(${pkgs.coreutils}/bin/realpath "$root_dir")"
+
+        while IFS= read -r -d "" gitdir; do
+          repo="''${gitdir%/.git}"
+          mcp-profile-offboard-codex "$profile" "$repo"
+        done < <(${pkgs.findutils}/bin/find "$root_dir" -name .git -type d -prune -print0)
       '')
     ];
 }
