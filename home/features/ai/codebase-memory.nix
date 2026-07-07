@@ -22,8 +22,12 @@ let
 
     Scoped repo setup should keep `auto_index=true` inside that scoped cache, so
     the repo indexes automatically on first MCP connection and the background
-    watcher keeps it fresh. Example cache shape:
-    `CBM_CACHE_DIR=$HOME/.cache/codebase-memory-mcp/repos/<repo-slug>`.
+    watcher keeps it fresh. Prefer repo-relative cache paths like
+    `.codex/cache/codebase-memory` with that cache ignored by git.
+
+    In GUI-launched clients, use the system-profile command path
+    `/run/current-system/sw/bin/codebase-memory-mcp` from project sessions.
+    GUI processes may not inherit the shell or Home Manager profile `PATH`.
 
     New task: call `get_architecture` or `get_graph_schema` first for a
     token-cheap overview instead of reading files to get oriented.
@@ -94,9 +98,9 @@ in
 
       echo
       echo "Scoped repo setup keeps auto_index but avoids cross-repo graph bleed:"
-      echo '  export CBM_CACHE_DIR="$HOME/.cache/codebase-memory-mcp/repos/<repo-slug>"'
-      echo '  codebase-memory-mcp config set auto_index true'
-      echo '  add CBM_CACHE_DIR to the repo-native MCP entry for codebase-memory-mcp'
+      echo '  command = "/run/current-system/sw/bin/codebase-memory-mcp"'
+      echo '  CBM_CACHE_DIR = ".codex/cache/codebase-memory"'
+      echo '  CBM_CACHE_DIR=.codex/cache/codebase-memory codebase-memory-mcp config set auto_index true'
       echo
       echo "Global instructions (scoped graph usage and boundary rules) are merged into"
       echo "the same .codex/AGENTS.md, .claude/CLAUDE.md, and .vibe/AGENTS.md that caveman-status"

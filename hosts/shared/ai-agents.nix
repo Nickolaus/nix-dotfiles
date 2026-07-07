@@ -319,7 +319,7 @@ in
         };
         codebase-memory = {
           type = "stdio";
-          command = "codebase-memory-mcp";
+          command = "/run/current-system/sw/bin/codebase-memory-mcp";
           # codebase-memory-mcp persists all project DBs under one cache root
           # by default and intentionally supports cross-repo graph queries.
           # Keep it out of native/global MCP registration and profiles unless a

@@ -3,7 +3,7 @@ command = "uvx"
 args = ["mcp-nixos"]
 
 [mcp_servers.codebase-memory]
-command = "codebase-memory-mcp"
+command = "/run/current-system/sw/bin/codebase-memory-mcp"
 
 [mcp_servers.codebase-memory.env]
-CBM_CACHE_DIR = "/Users/C.Hessel/.cache/codebase-memory-mcp/repos/nix-dotfiles"
+CBM_CACHE_DIR = ".codex/cache/codebase-memory"
