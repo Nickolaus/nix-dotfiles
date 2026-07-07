@@ -22,7 +22,6 @@ let
     "sequential-thinking"
     "time"
     "github"
-    "codebase-memory"
     "headroom"
   ];
 
@@ -321,6 +320,13 @@ in
         codebase-memory = {
           type = "stdio";
           command = "codebase-memory-mcp";
+          # codebase-memory-mcp persists all project DBs under one cache root
+          # by default and intentionally supports cross-repo graph queries.
+          # Keep it out of native/global MCP registration and profiles unless a
+          # repo supplies a project-local MCP entry with a scoped CBM_CACHE_DIR.
+          # That preserves upstream auto_index while preventing unrelated repo
+          # names/graphs from entering every session.
+          targets = [ ];
         };
         headroom = {
           type = "stdio";
@@ -567,17 +573,17 @@ in
         })
         config.aiAgents.mcpServers
       ++ lib.concatMap
-      (profileName:
-        let
-          profile = config.aiAgents.mcpProfiles.${profileName};
-          unknown = builtins.filter (s: !(config.aiAgents.mcpServers ? ${s})) profile.servers;
+        (profileName:
+          let
+            profile = config.aiAgents.mcpProfiles.${profileName};
+            unknown = builtins.filter (s: !(config.aiAgents.mcpServers ? ${s})) profile.servers;
           in
           [{
             assertion = unknown == [ ];
             message =
               "aiAgents.mcpProfiles.${profileName}.servers references unknown aiAgents.mcpServers: "
-            + builtins.concatStringsSep ", " unknown;
-        }])
-      (builtins.attrNames config.aiAgents.mcpProfiles);
+              + builtins.concatStringsSep ", " unknown;
+          }])
+        (builtins.attrNames config.aiAgents.mcpProfiles);
   };
 }
