@@ -144,4 +144,20 @@ rec {
         else
           server.command;
     };
+
+  skillTargetDir = target: {
+    codex = ".agents/skills";
+    claude = ".claude/skills";
+    cursor = ".cursor/skills";
+    vibe = ".agents/skills";
+  }.${target};
+
+  skillTargetPath = target: name: "${skillTargetDir target}/${name}";
+
+  renderedSkillPathsFor = enabledTargets: name: skill:
+    lib.unique (map (target: skillTargetPath target name) (
+      builtins.filter
+        (target: builtins.elem target enabledTargets && builtins.elem target skill.targets)
+        [ "codex" "claude" "cursor" "vibe" ]
+    ));
 }

@@ -1,5 +1,29 @@
-{ lib, pkgs, ... }:
+{ lib, osConfig ? { }, pkgs, ... }:
 let
+  aiAgentsLib = import ../../../hosts/shared/ai-agents-lib.nix { inherit lib pkgs; };
+  aiCfg = if osConfig ? aiAgents then osConfig.aiAgents else null;
+  catalogEnabled = aiCfg != null && aiCfg.enable && aiCfg.catalog.enable;
+  enabledTargets =
+    if catalogEnabled then
+      builtins.filter (target: aiCfg.targets.${target}.enable) [ "codex" "claude" "cursor" "vibe" ]
+    else
+      [ ];
+  graphifyAutoStatus =
+    if catalogEnabled && builtins.hasAttr "graphify-auto" aiCfg.catalog.skills then
+      lib.concatMapStringsSep "\n"
+        (path: ''
+          path="$HOME/${path}/SKILL.md"
+          if [ -f "$path" ]; then
+            echo "  ok      $path"
+          else
+            echo "  missing $path  (home-manager switch installs it)"
+          fi
+        '')
+        (aiAgentsLib.renderedSkillPathsFor enabledTargets "graphify-auto" aiCfg.catalog.skills.graphify-auto)
+    else
+      ''
+        echo "  missing aiAgents.catalog.skills.graphify-auto"
+      '';
   uv = "${pkgs.uv}/bin/uv";
 
   # PyPI package is `graphifyy`; `graphify` is the command it provides. `anthropic`
@@ -29,34 +53,6 @@ let
     codex = ".codex/skills/graphify/SKILL.md";
     agents = ".agents/skills/graphify/SKILL.md";
   };
-  autoSkillPath = {
-    claude = ".claude/skills/graphify-auto/SKILL.md";
-    codex = ".codex/skills/graphify-auto/SKILL.md";
-    agents = ".agents/skills/graphify-auto/SKILL.md";
-  };
-
-  graphifyAutoSkill = ''
-    ---
-    name: graphify-auto
-    description: "Use when working in a repository and the task needs codebase architecture, code relationships, implementation planning, ticket-driven investigation, Graphify, graphify-out, or a persistent project graph. Ensures the repo's Graphify graph exists and is current on demand before querying or falling back."
-    ---
-
-    # Graphify Auto
-
-    When a repository task benefits from Graphify context, run `graphify-ensure` from the repo root before saying no graph exists.
-
-    Workflow:
-    1. If inside a git repo, run `graphify-ensure`.
-    2. If `graphify-out/graph.json` or `graphify-out/graph.json.gz` exists after that, use Graphify's normal query/path/explain flow for codebase-oriented questions.
-    3. If `graphify-ensure` is unavailable or fails, use repo-scoped codebase-memory when available.
-    4. Fall back to `rg` only for narrow text probes or when graph/codebase MCP options are unavailable.
-
-    Ticket-driven work:
-    - Fetch ticket body first.
-    - If Jira/Atlassian returns app-shell HTML, login pages, or opaque connector output twice, ask for pasted ticket text.
-    - If Atlassian MCP tools are absent, say Codex needs direct Atlassian HTTP MCP plus OAuth: `mcp-profile-onboard atlassian <repo>`, then `codex mcp login atlassian`, then a new Codex session.
-  '';
-
   # All platforms this machine onboards for a *project*-scope, shipped-with-the-repo
   # install (unlike global scope, cursor's project-relative rule file is exactly the
   # right shape here).
@@ -204,14 +200,8 @@ in
       echo "          project-relative, see graphify-onboard"
       echo
       echo "Graphify auto skill (Nix-managed lazy trigger for graphify-ensure):"
-      ${lib.concatMapStringsSep "\n" (p: ''
-        path="$HOME/${autoSkillPath.${p}}"
-        if [ -f "$path" ]; then
-          echo "  ok      $path"
-        else
-          echo "  missing $path  (home-manager switch installs it)"
-        fi
-      '') globalPlatforms}
+      echo "  Source of truth: aiAgents.catalog.skills.graphify-auto"
+      ${graphifyAutoStatus}
 
       echo
       if [ -f "graphify-out/graph.json" ] || [ -f "graphify-out/graph.json.gz" ]; then
@@ -388,8 +378,4 @@ in
     '')
   ];
 
-  home.file =
-    lib.mapAttrs'
-      (platform: path: lib.nameValuePair path { text = graphifyAutoSkill; })
-      autoSkillPath;
 }

@@ -4,6 +4,7 @@ let
 in
 {
   imports = [
+    ./ai-agent-catalog.nix
     ./ai-agents.nix
     ./ai-agents-derived.nix
     ./claude-code.nix

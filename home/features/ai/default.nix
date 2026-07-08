@@ -1,5 +1,6 @@
 { ... }: {
   imports = [
+    ./agent-catalog.nix
     ./agent-configs.nix
     ./caveman.nix
     ./codebase-memory.nix

@@ -1,7 +1,33 @@
-{ config, flake, lib, pkgs, ... }:
+{ config, flake, lib, osConfig ? { }, pkgs, ... }:
 let
   cfg = config.caveman;
   cavemanSrc = flake.inputs.caveman;
+  aiAgentsLib = import ../../../hosts/shared/ai-agents-lib.nix { inherit lib pkgs; };
+  aiCfg = if osConfig ? aiAgents then osConfig.aiAgents else null;
+  catalogEnabled = aiCfg != null && aiCfg.enable && aiCfg.catalog.enable;
+  enabledTargets =
+    if catalogEnabled then
+      builtins.filter (target: aiCfg.targets.${target}.enable) [ "codex" "claude" "cursor" "vibe" ]
+    else
+      [ ];
+  cavemanCatalogSkills =
+    if catalogEnabled then
+      lib.filterAttrs (_: skill: skill.owner == "caveman" && skill.managed) aiCfg.catalog.skills
+    else
+      { };
+  cavemanSkillStatus = lib.concatMapStringsSep "\n"
+    (skill:
+      lib.concatMapStringsSep "\n"
+        (path: ''
+          skill_path="$HOME/${path}/SKILL.md"
+          if [ -f "$skill_path" ]; then
+            echo "  ok      $skill_path"
+          else
+            echo "  missing $skill_path"
+          fi
+        '')
+        (aiAgentsLib.renderedSkillPathsFor enabledTargets skill cavemanCatalogSkills.${skill}))
+    (builtins.attrNames cavemanCatalogSkills);
   # Home Manager's activation script hardcodes a minimal PATH for its entire run that
   # never includes nix-darwin's per-user system profile directory, where `claude`
   # actually lives -- confirmed directly (a real `darwin-rebuild switch` run showed this
@@ -9,33 +35,6 @@ let
   # time). Same fix already established for launchd-facing scripts elsewhere
   # (ollama.nix/headroom.nix's `launchdPath`).
   perUserSystemProfileBin = "/etc/profiles/per-user/${config.home.username}/bin";
-  cavemanSkills = [
-    "caveman"
-    "caveman-commit"
-    "caveman-review"
-    "caveman-compress"
-    "caveman-help"
-    "caveman-stats"
-    "cavecrew"
-  ];
-  # Codex and Vibe both follow the Agent Skills spec and read ~/.agents/skills/ directly.
-  # Cursor discovers skills from *either* ~/.agents/skills/ or its own ~/.cursor/skills/
-  # (cursor.com/docs/skills) -- both are documented, auto-scanned, global locations with
-  # no manifest/registration step, so skillDestDirs just fans the same
-  # cavemanSkills/cavemanSrc pair out to both prefixes instead of hand-duplicating the
-  # list. Cursor's own built-in skills live separately under ~/.cursor/skills-cursor/ and
-  # are unaffected.
-  skillDirPrefixes = [ ".agents/skills" ".cursor/skills" ];
-  skillDestDirs = builtins.listToAttrs (lib.concatMap
-    (prefix: map
-      (skill: {
-        name = "${prefix}/${skill}";
-        value = {
-          source = cavemanSrc + "/skills/${skill}";
-        };
-      })
-      cavemanSkills)
-    skillDirPrefixes);
   node = "${pkgs.nodejs}/bin/node";
   installer = "${cavemanSrc}/bin/install.js";
 
@@ -75,7 +74,7 @@ in
     '';
   };
 
-  config.home.file = skillDestDirs // {
+  config.home.file = {
     ".codex/AGENTS.md".text = cavemanDefaultInstructions;
     ".vibe/AGENTS.md".text = cavemanDefaultInstructions;
     ".claude/CLAUDE.md".text = cavemanDefaultInstructions;
@@ -106,17 +105,9 @@ in
       echo "Caveman source: ${cavemanSrc}"
       echo "User-level skills (auto-discovered, no manifest needed):"
       echo "  Codex + Vibe follow the Agent Skills spec and read ~/.agents/skills/"
-      echo "  Cursor also scans ~/.cursor/skills/ (cursor.com/docs/skills) -- same content, mirrored"
-      for prefix in ${builtins.concatStringsSep " " (map lib.escapeShellArg skillDirPrefixes)}; do
-        for skill in ${builtins.concatStringsSep " " cavemanSkills}; do
-          skill_path="$HOME/$prefix/$skill/SKILL.md"
-          if [ -f "$skill_path" ]; then
-            echo "  ok      $skill_path"
-          else
-            echo "  missing $skill_path"
-          fi
-        done
-      done
+      echo "  Cursor also scans ~/.cursor/skills/ (cursor.com/docs/skills) -- catalog renders both"
+      echo "  Source of truth: aiAgents.catalog.skills (owner=caveman)"
+      ${cavemanSkillStatus}
       echo
       legacy_path="$HOME/.codex/skills/caveman/SKILL.md"
       if [ -e "$legacy_path" ]; then
