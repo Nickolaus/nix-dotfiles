@@ -406,12 +406,13 @@ in
         same per-invocation isolation they already have today (see the MCP
         gateway sharing discussion this option's design is based on).
         Independent of each server's `targets`/`enabled` fields: those
-        govern direct native registration into the 4 clients above, profiles
-        are a separate, explicit opt-in -- the two mechanisms together are
-        how a server goes "off by default, on via profile" (see
-        `defaultProfileServers` and the six servers above with
-        `targets = [ ]`). A repo pulls a profile in with one committed
-        stdio entry in its own project-native MCP config (`.mcp.json`,
+        govern direct native registration into the 4 clients above. Profiles
+        are a separate, explicit opt-in for servers that are safe to aggregate
+        through `mcp-profile-*`; repo-scoped-only servers such as
+        `codebase-memory` stay out of both native registration and profiles
+        until a repo supplies project-local MCP config with scoped state. A
+        repo pulls a profile in with one committed stdio entry in its own
+        project-native MCP config (`.mcp.json`,
         `.cursor/mcp.json`, `.codex/config.toml`, `.vibe/config.toml`),
         e.g. `{ "command": "mcp-profile-nix-dotfiles" }`.
       '';

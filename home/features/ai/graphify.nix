@@ -29,6 +29,33 @@ let
     codex = ".codex/skills/graphify/SKILL.md";
     agents = ".agents/skills/graphify/SKILL.md";
   };
+  autoSkillPath = {
+    claude = ".claude/skills/graphify-auto/SKILL.md";
+    codex = ".codex/skills/graphify-auto/SKILL.md";
+    agents = ".agents/skills/graphify-auto/SKILL.md";
+  };
+
+  graphifyAutoSkill = ''
+    ---
+    name: graphify-auto
+    description: "Use when working in a repository and the task needs codebase architecture, code relationships, implementation planning, ticket-driven investigation, Graphify, graphify-out, or a persistent project graph. Ensures the repo's Graphify graph exists and is current on demand before querying or falling back."
+    ---
+
+    # Graphify Auto
+
+    When a repository task benefits from Graphify context, run `graphify-ensure` from the repo root before saying no graph exists.
+
+    Workflow:
+    1. If inside a git repo, run `graphify-ensure`.
+    2. If `graphify-out/graph.json` or `graphify-out/graph.json.gz` exists after that, use Graphify's normal query/path/explain flow for codebase-oriented questions.
+    3. If `graphify-ensure` is unavailable or fails, use repo-scoped codebase-memory when available.
+    4. Fall back to `rg` only for narrow text probes or when graph/codebase MCP options are unavailable.
+
+    Ticket-driven work:
+    - Fetch ticket body first.
+    - If Jira/Atlassian returns app-shell HTML, login pages, or opaque connector output twice, ask for pasted ticket text.
+    - If Atlassian MCP tools are absent, say Codex needs direct Atlassian HTTP MCP plus OAuth: `mcp-profile-onboard atlassian <repo>`, then `codex mcp login atlassian`, then a new Codex session.
+  '';
 
   # All platforms this machine onboards for a *project*-scope, shipped-with-the-repo
   # install (unlike global scope, cursor's project-relative rule file is exactly the
@@ -36,6 +63,65 @@ let
   projectPlatforms = [ "claude" "codex" "cursor" "agents" ];
 
   mkArgsShell = extra: p: lib.concatStringsSep " " (mkInstall extra p);
+
+  graphifyRunFunction = ''
+      graphify_run() {
+        if [ -n "''${GEMINI_API_KEY:-}" ] \
+          || [ -n "''${GOOGLE_API_KEY:-}" ] \
+          || [ -n "''${MOONSHOT_API_KEY:-}" ] \
+          || [ -n "''${ANTHROPIC_API_KEY:-}" ] \
+          || [ -n "''${OPENAI_API_KEY:-}" ] \
+          || [ -n "''${DEEPSEEK_API_KEY:-}" ]; then
+          graphify "$@"
+          return "$?"
+        fi
+
+        echo "No semantic Graphify API key found; using temporary code-only scan."
+        backup_ignore=""
+        had_ignore=0
+        if [ -f .graphifyignore ]; then
+          backup_ignore="$(mktemp "''${TMPDIR:-/tmp}/graphifyignore.XXXXXX")"
+          cp .graphifyignore "$backup_ignore"
+          had_ignore=1
+        fi
+
+    printf '%s\n' \
+      "" \
+      "# graphify-ensure temporary code-only fallback" \
+      "*.md" \
+      "*.mdx" \
+      "*.txt" \
+      "*.rst" \
+      "*.adoc" \
+      "*.pdf" \
+      "*.png" \
+      "*.jpg" \
+      "*.jpeg" \
+      "*.gif" \
+      "*.webp" \
+      "*.mp4" \
+      "*.mp3" \
+      "*.wav" \
+      ".claude/" \
+      ".codex/skills/graphify/" \
+      ".cursor/rules/graphify.mdc" \
+      ".agents/skills/graphify/" \
+      >> .graphifyignore
+
+        set +e
+        graphify "$@"
+        rc="$?"
+        set -e
+
+        if [ "$had_ignore" = "1" ]; then
+          cp "$backup_ignore" .graphifyignore
+          rm -f "$backup_ignore"
+        else
+          rm -f .graphifyignore
+        fi
+        return "$rc"
+      }
+  '';
 in
 {
   # Two layers, deliberately not conflated:
@@ -116,13 +202,23 @@ in
       '') globalPlatforms}
       echo "  n/a     cursor has no global scope -- its .cursor/rules/graphify.mdc is always"
       echo "          project-relative, see graphify-onboard"
+      echo
+      echo "Graphify auto skill (Nix-managed lazy trigger for graphify-ensure):"
+      ${lib.concatMapStringsSep "\n" (p: ''
+        path="$HOME/${autoSkillPath.${p}}"
+        if [ -f "$path" ]; then
+          echo "  ok      $path"
+        else
+          echo "  missing $path  (home-manager switch installs it)"
+        fi
+      '') globalPlatforms}
 
       echo
       if [ -f "graphify-out/graph.json" ] || [ -f "graphify-out/graph.json.gz" ]; then
         echo "This directory has a project-scope graph: graphify-out/"
       else
-        echo "No project-scope graph here. Ad-hoc: 'graphify .'  Ready-to-ship setup"
-        echo "(graph + project skill files + auto-rebuild hooks): graphify-onboard"
+        echo "No project-scope graph here. Create/update it now: graphify-ensure"
+        echo "Ready-to-ship setup (same graph + project skill files + hooks): graphify-onboard"
       fi
       echo "Aggregate multiple local repo graphs for cross-repo queries: graphify global add <graph.json> --as <name>"
     '')
@@ -143,6 +239,81 @@ in
       '') globalPlatforms}
     '')
 
+    # Lazy per-repo automation: create the project graph when missing and update it
+    # when present. This is intentionally an explicit command rather than a shell
+    # chpwd hook: building a graph writes repo files and can be expensive, so agents
+    # should run it when Graphify context is needed, not on every directory change.
+    (pkgs.writeShellScriptBin "graphify-ensure" ''
+      set -euo pipefail
+
+      if [ "''${1:-}" = "--help" ] || [ "''${1:-}" = "-h" ]; then
+        echo "Usage: graphify-ensure [repo-dir]"
+        echo "Create graphify-out/ if missing, update it if present, and ensure project skill files/hooks."
+        exit 0
+      fi
+
+      target="''${1:-.}"
+      cd "$target"
+
+      if ! command -v graphify >/dev/null 2>&1; then
+        echo "graphify not found on PATH. Run 'home-manager switch' first (installs it globally)." >&2
+        exit 1
+      fi
+
+      ${graphifyRunFunction}
+
+      if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+        cd "$git_root"
+        is_git=1
+      else
+        is_git=0
+      fi
+
+      if [ -f graphify-out/graph.json ] || [ -f graphify-out/graph.json.gz ]; then
+        echo "==> Updating Graphify project graph ($(pwd))"
+        graphify_run update . || graphify_run . --update
+      else
+        echo "==> Creating Graphify project graph ($(pwd))"
+        graphify_run .
+      fi
+      echo
+
+      echo "==> Ensuring project-scoped Graphify skill files"
+      ${lib.concatMapStringsSep "\n" (p: ''
+        echo "  graphify ${mkArgsShell [ "--project" ] p}"
+        graphify ${mkArgsShell [ "--project" ] p} || echo "  warning: '${p}' install failed" >&2
+      '') projectPlatforms}
+      echo
+
+      if [ "$is_git" = "1" ]; then
+        echo "==> Ensuring Graphify git hooks"
+        hooks_dir="$(git rev-parse --git-path hooks)"
+        mkdir -p "$hooks_dir"
+        for hook in post-commit post-checkout; do
+          hook_path="$hooks_dir/$hook"
+          if [ -L "$hook_path" ]; then
+            tmp_hook="$hook_path.graphify-tmp"
+            cat "$hook_path" > "$tmp_hook"
+            chmod 755 "$tmp_hook"
+            mv "$tmp_hook" "$hook_path"
+          fi
+        done
+        graphify hook install || echo "  warning: hook install failed" >&2
+        echo
+
+        if [ -f .gitignore ] && ! grep -qF "graphify-out/cost.json" .gitignore; then
+          printf '\n# Graphify (local-only artifact)\ngraphify-out/cost.json\n' >> .gitignore
+          echo "==> Appended graphify-out/cost.json to .gitignore"
+          echo
+        fi
+
+        echo "==> Project graph state:"
+        git status --porcelain -- graphify-out .graphifyignore .gitignore \
+          .claude .codex .cursor .agents CLAUDE.md AGENTS.md \
+          2>/dev/null | sed 's/^/  /'
+      fi
+    '')
+
     # Onboards a repo onto Graphify, ready to ship: builds the initial graph, installs
     # project-scoped skill files for every platform this machine onboards, and wires
     # git hooks for auto-rebuild + conflict-free graph.json merges -- upstream's own
@@ -161,6 +332,8 @@ in
         exit 1
       fi
 
+      ${graphifyRunFunction}
+
       if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
         echo "Warning: $(pwd) is not inside a git repo -- 'graphify hook install' will be skipped." >&2
         is_git=0
@@ -169,7 +342,7 @@ in
       fi
 
       echo "==> Building the graph ($(pwd))"
-      graphify .
+      graphify_run .
       echo
 
       echo "==> Installing project-scoped skill files"
@@ -181,6 +354,17 @@ in
 
       if [ "$is_git" = "1" ]; then
         echo "==> Installing git hooks (auto-rebuild on commit + conflict-free graph.json merges)"
+        hooks_dir="$(git rev-parse --git-path hooks)"
+        mkdir -p "$hooks_dir"
+        for hook in post-commit post-checkout; do
+          hook_path="$hooks_dir/$hook"
+          if [ -L "$hook_path" ]; then
+            tmp_hook="$hook_path.graphify-tmp"
+            cat "$hook_path" > "$tmp_hook"
+            chmod 755 "$tmp_hook"
+            mv "$tmp_hook" "$hook_path"
+          fi
+        done
         graphify hook install || echo "  warning: hook install failed" >&2
         echo
       fi
@@ -203,4 +387,9 @@ in
       echo "no extra keys). Re-run after edits with: graphify update ."
     '')
   ];
+
+  home.file =
+    lib.mapAttrs'
+      (platform: path: lib.nameValuePair path { text = graphifyAutoSkill; })
+      autoSkillPath;
 }

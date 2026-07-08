@@ -41,6 +41,24 @@ let
   mkProfileManifest = profileName: profile:
     mkServerManifest profileName profile.servers;
 
+  # Codex handles OAuth for HTTP MCP servers natively. Do not hide those behind
+  # the FastMCP stdio profile proxy, or `codex mcp login <name>` has no real
+  # remote HTTP server to authenticate. Profile onboarding still uses the proxy
+  # for Cursor/Vibe and for non-OAuth stdio aggregations.
+  codexDirectProfileServers = {
+    atlassian = {
+      atlassian = {
+        url = aiCfg.mcpServers.atlassian.url;
+      };
+    };
+  };
+
+  codexDirectProfileCase = lib.concatStringsSep "\n" (map
+    (profileName: ''
+      ${profileName}) codex_direct_json=${lib.escapeShellArg (builtins.toJSON codexDirectProfileServers.${profileName})} ;;
+    '')
+    (builtins.attrNames codexDirectProfileServers));
+
   # One shared script for every profile: reads the pre-resolved, build-time
   # manifest named by argv[1], resolves inheritEnv/bearerTokenEnvVar from its
   # own environment at run time, and proxies the composed server set over
@@ -98,6 +116,7 @@ let
     '';
 
   narrowedServers = [ "serena" "chrome-devtools" "puppeteer" "atlassian" "openaiDeveloperDocs" "memory" ];
+  repoScopedOnlyServers = [ "codebase-memory" ];
 
   # Codex (`[mcp_servers.<name>]` dict-of-tables) and Vibe (`[[mcp_servers]]`
   # array-of-tables keyed by a `name` field) use different TOML shapes for the
@@ -109,11 +128,13 @@ let
   onboardPython = aiAgentsLib.tomlkitPython;
 
   onboardCodexScript = pkgs.writeText "mcp-profile-onboard-codex.py" ''
+    import json
     import sys
 
     import tomlkit
 
     config_path, name, command = sys.argv[1], sys.argv[2], sys.argv[3]
+    direct_entries = json.loads(sys.argv[4]) if len(sys.argv) > 4 else {}
 
     try:
         with open(config_path) as f:
@@ -126,9 +147,19 @@ let
         servers = tomlkit.table()
         doc["mcp_servers"] = servers
 
-    table = tomlkit.table()
-    table["command"] = command
-    servers[name] = table
+    if direct_entries:
+        if name in servers:
+            del servers[name]
+
+        for server_name, server in direct_entries.items():
+            table = tomlkit.table()
+            for key, value in server.items():
+                table[key] = value
+            servers[server_name] = table
+    else:
+        table = tomlkit.table()
+        table["command"] = command
+        servers[name] = table
 
     with open(config_path, "w") as f:
         f.write(tomlkit.dumps(doc))
@@ -167,12 +198,14 @@ let
   '';
 
   offboardCodexScript = pkgs.writeText "mcp-profile-offboard-codex.py" ''
+    import json
     import os
     import sys
 
     import tomlkit
 
     config_path, name, tracked_mode = sys.argv[1], sys.argv[2], sys.argv[3]
+    direct_entries = json.loads(sys.argv[4]) if len(sys.argv) > 4 else {}
     tracked = tracked_mode == "tracked"
 
     try:
@@ -184,9 +217,13 @@ let
 
     changed = False
     servers = doc.get("mcp_servers")
-    if servers is not None and name in servers:
-        del servers[name]
-        changed = True
+    names = [name] + list(direct_entries.keys())
+    if servers is not None:
+        for server_name in names:
+            if server_name in servers:
+                del servers[server_name]
+                changed = True
+
         if len(list(servers.keys())) == 0:
             del doc["mcp_servers"]
 
@@ -227,11 +264,20 @@ in
         echo "targets = [ ]) -- reachable only via one of the profiles above:"
         echo "  ${lib.concatStringsSep ", " narrowedServers}"
         echo
+        echo "Repo-scoped only (declared in aiAgents, but not native/profile-loaded):"
+        echo "  ${lib.concatStringsSep ", " repoScopedOnlyServers}"
+        echo "  Register these in project-native MCP config with scoped per-repo state."
+        echo
         echo "Reference a profile's binary from a repo's own project-native MCP config to"
         echo "opt in -- run 'mcp-profile-onboard <profile> [repo-dir]' to do this without"
         echo "committing your personal profile choice into that repo (see its own --help/output"
         echo "for the per-client mechanism), or by hand, e.g.:"
         echo '  .cursor/mcp.json: { "mcpServers": { "nix-dotfiles": { "command": "mcp-profile-nix-dotfiles" } } }'
+        echo
+        echo "Codex OAuth note: profiles that contain OAuth HTTP servers are written as"
+        echo "direct Codex HTTP MCP entries instead of stdio profile proxies. Example:"
+        echo "  mcp-profile-onboard atlassian <repo>"
+        echo "  codex mcp login atlassian"
       '')
 
       # Wires a profile into a target repo's own project-native MCP config
@@ -314,6 +360,10 @@ in
         cd "$root"
 
         entry_name="$binary"
+        codex_direct_json='{}'
+        case "$profile" in
+          ${codexDirectProfileCase}
+        esac
 
         echo "==> Onboarding '$profile' ($binary) into $root -- kept private to this clone,"
         echo "    never committed, never touches the shared .gitignore"
@@ -399,7 +449,11 @@ in
 
         echo "-- Codex --"
         if keep_private_tracked_only ".codex/config.toml"; then
-          ${onboardPython}/bin/python3 ${onboardCodexScript} .codex/config.toml "$entry_name" "$binary"
+          ${onboardPython}/bin/python3 ${onboardCodexScript} .codex/config.toml "$entry_name" "$binary" "$codex_direct_json"
+          if [ "$codex_direct_json" != '{}' ]; then
+            echo "   Codex uses direct HTTP MCP entries for this profile so native OAuth works."
+            echo "   Run 'codex mcp login atlassian' from this repo, then start a new Codex session."
+          fi
         fi
         echo
 
@@ -512,6 +566,10 @@ in
 
         binary="mcp-profile-$profile"
         entry_name="$binary"
+        codex_direct_json='{}'
+        case "$profile" in
+          ${codexDirectProfileCase}
+        esac
 
         cd "$repo_dir"
         root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
@@ -527,7 +585,7 @@ in
           tracked_mode="tracked"
         fi
 
-        status="$(${onboardPython}/bin/python3 ${offboardCodexScript} "$config_path" "$entry_name" "$tracked_mode")"
+        status="$(${onboardPython}/bin/python3 ${offboardCodexScript} "$config_path" "$entry_name" "$tracked_mode" "$codex_direct_json")"
 
         case "$status" in
           missing)

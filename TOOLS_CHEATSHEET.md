@@ -387,7 +387,7 @@ mcp-profile-offboard-codex <profile> [repo-dir]   # Remove repo-local Codex prof
 mcp-profile-offboard-codex-many <profile> <root-dir>   # Remove repo-local Codex profile entries under a directory
 ```
 
-- `context7`, `fetch`, `sequential-thinking`, `time`, `github`, `codebase-memory`, and `headroom` are the universal baseline (`defaultProfileServers` in `hosts/shared/ai-agents.nix`) and stay natively registered for all 4 clients.
+- `context7`, `fetch`, `sequential-thinking`, `time`, `github`, and `headroom` are the universal baseline (`defaultProfileServers` in `hosts/shared/ai-agents.nix`) and stay natively registered for all 4 clients. `codebase-memory` is declared but intentionally `targets = [ ]`; repos should register it only with scoped `CBM_CACHE_DIR` in project-native MCP config to avoid global cross-repo graph bleed.
 - `serena`, `chrome-devtools`, `puppeteer`, `atlassian`, `openaiDeveloperDocs`, and `memory` are `targets = [ ]` -- not natively loaded anywhere -- and reachable only through the profile above that carries them.
 - Every non-`default` profile is `defaultProfileServers ++ [ ... ]` in Nix, not a hand-relisted set, so the baseline can't drift between profiles.
 - Each `mcp-profile-<name>` binary is a FastMCP proxy (`home/features/ai/mcp-profiles.nix`, `uv run` since FastMCP isn't in nixpkgs) spawned fresh per invocation and exited after -- never a persistent or shared process, so unrelated repos/sessions never multiplex onto the same Serena workspace, browser session, or other stateful backend.
@@ -429,7 +429,8 @@ serena-claude          # Launch Claude Code with Serena's prompt override
 
 #### Codebase Memory (Code Knowledge Graph)
 ```bash
-codebase-memory-status              # Live: config, cache dir, indexed projects
+codex-ai-status                     # Active Codex MCPs, repo-scoped codebase-memory, Graphify presence
+codebase-memory-status              # Global cache plus current repo-scoped cache details
 codebase-memory-mcp cli list_projects
 codebase-memory-mcp cli search_graph '{"name_pattern": ".*Handler.*"}'
 codebase-memory-mcp cli trace_path '{"function_name": "Search", "direction": "both"}'
@@ -437,9 +438,9 @@ codebase-memory-mcp config set auto_index false   # opt-out: default is on
 ```
 
 - Installed declaratively from the pinned upstream flake input (`github:DeusData/codebase-memory-mcp`), built from source — no upstream `install.sh`/`curl | bash` involved.
-- The shared `aiAgents` MCP config enables it for Codex, Claude Code, Cursor, and Vibe as a stdio server (`codebase-memory-mcp`, resolved via `PATH`).
-- Zero LLM tokens for indexing: pure tree-sitter + Hybrid LSP static analysis in a single C binary. Persists its graph at `~/.cache/codebase-memory-mcp/` (override with `CBM_CACHE_DIR`).
-- `auto_index` defaults **on** (opt-out, matching the Headroom/Caveman precedent) via an idempotent `home.activation` script — confirmed empirically that a bare MCP handshake with `auto_index=true` indexes the current repo with zero explicit tool calls; with it off, nothing indexes until an agent (or the user) explicitly asks. The setting lives in a mutable local SQLite config db (`~/.cache/codebase-memory-mcp/_config.db`), not a file Nix can manage directly, so it's asserted on every switch instead.
+- The shared `aiAgents` MCP config declares it, but does not natively register it. Add it per repo through project-native MCP config with scoped `CBM_CACHE_DIR`.
+- Zero LLM tokens for indexing: pure tree-sitter + Hybrid LSP static analysis in a single C binary. Upstream's default graph cache is `~/.cache/codebase-memory-mcp/`; this repo pattern uses `.codex/cache/codebase-memory` via `CBM_CACHE_DIR`.
+- Keep `auto_index=true` inside each repo-scoped cache. The global upstream cache may be empty or have `auto_index=false`; that does not mean project Codex MCP is broken. The setting lives in the selected cache's mutable SQLite config db, not a Nix-owned file.
 - `index_repository` requires an **absolute** `repo_path` — a relative path (e.g. `"."`) triggers a documented upstream bug (`store.corrupt`, self-heals by deleting and requiring a re-index).
 - Prefer it for structural questions on indexed repos — call graphs (`trace_path`), regex/label search (`search_graph`), dead code, git-diff blast radius (`detect_changes`), and read-only Cypher queries (`query_graph`) — instead of grepping file-by-file. Indexing quality is language-dependent, not model-dependent (no LLM involved at all): Hybrid LSP semantic resolution only covers Python/TS-JS/PHP/C#/Go/C/C++/Java/Kotlin/Rust — Nix-heavy repos (like this one) fall back to structural/tree-sitter-only edges.
 - `codebase-memory.nix` contributes a short "use the graph, not broad reads" section to the same **global**, cross-repo `.codex/AGENTS.md` / `.claude/CLAUDE.md` / `.vibe/AGENTS.md` that `caveman.nix` writes — Home Manager merges multiple modules' `home.file.<path>.text` via `types.lines` (string concatenation), so each feature owns its own section without a shared registry.
