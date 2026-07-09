@@ -29,7 +29,7 @@
     };
 
     gstack = {
-      url = "github:garrytan/gstack/11de390be1be6849eb9a15f91ff4922dd16c589a";
+      url = "github:garrytan/gstack/main";
       flake = false;
     };
 

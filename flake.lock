@@ -162,8 +162,8 @@
       },
       "original": {
         "owner": "garrytan",
+        "ref": "main",
         "repo": "gstack",
-        "rev": "11de390be1be6849eb9a15f91ff4922dd16c589a",
         "type": "github"
       }
     },
