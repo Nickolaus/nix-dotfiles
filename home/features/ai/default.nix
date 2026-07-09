@@ -11,5 +11,6 @@
     ./rtk.nix
     ./serena.nix
     ./vibe.nix
+    ./workflow-receipts.nix
   ];
 }
