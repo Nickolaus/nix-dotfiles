@@ -47,9 +47,9 @@ let
     let
       server = aiAgentsLib.effectiveServerFor target rawServer;
     in
-    if server.type == "http" then
+    if aiAgentsLib.isUrlTransport server then
       {
-        type = "http";
+        type = server.type;
         url = server.url;
       } // optionalAttrs (server.headers != { } || server.bearerTokenEnvVar != null) {
         headers = server.headers // optionalAttrs (server.bearerTokenEnvVar != null) {

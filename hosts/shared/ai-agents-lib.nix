@@ -92,6 +92,8 @@ rec {
         if override.startupTimeoutSec != null then override.startupTimeoutSec else server.startupTimeoutSec;
     };
 
+  isUrlTransport = server: server.type == "http" || server.type == "sse";
+
   isolatedStdioLauncher = name: server:
     pkgs.writeShellScript "ai-agent-mcp-${name}" (
       ''

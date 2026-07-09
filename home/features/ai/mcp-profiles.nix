@@ -18,8 +18,8 @@ let
   # its own ambient environment at run time, the same trust boundary Claude
   # Code's own MCP rendering already relies on for inherited session env.
   renderProfileServerManifest = name: rawServer:
-    if rawServer.type == "http" then
-      { transport = "http"; url = rawServer.url; }
+    if aiAgentsLib.isUrlTransport rawServer then
+      { transport = rawServer.type; url = rawServer.url; }
       // optionalAttrs (rawServer.headers != { }) { headers = rawServer.headers; }
       // optionalAttrs (rawServer.bearerTokenEnvVar != null) { bearerTokenEnvVar = rawServer.bearerTokenEnvVar; }
     else

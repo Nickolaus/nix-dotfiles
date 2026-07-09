@@ -5,6 +5,7 @@
     ./caveman.nix
     ./chonkie.nix
     ./codebase-memory.nix
+    ./crawl4ai.nix
     ./graphify.nix
     ./headroom.nix
     ./mcp-profiles.nix

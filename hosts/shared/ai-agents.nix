@@ -8,6 +8,7 @@ let
     ;
 
   clientType = types.enum [ "codex" "claude" "cursor" "vibe" ];
+  transportType = types.enum [ "http" "sse" "stdio" ];
 
   # Servers that stay natively registered for all 4 clients (targets unchanged
   # below): universal, cheap, no meaningful downside to loading every session.
@@ -28,7 +29,7 @@ let
   mcpServerTargetOverrideType = types.submodule ({ ... }: {
     options = {
       type = mkOption {
-        type = types.nullOr (types.enum [ "http" "stdio" ]);
+        type = types.nullOr transportType;
         default = null;
         description = "Target-specific MCP transport type override.";
       };
@@ -104,7 +105,7 @@ let
       };
 
       type = mkOption {
-        type = types.enum [ "http" "stdio" ];
+        type = transportType;
         default = "http";
         description = "Neutral MCP transport type for per-tool renderers.";
       };
@@ -247,6 +248,34 @@ in
       };
     };
 
+    crawl4ai = {
+      port = mkOption {
+        type = types.port;
+        default = 11235;
+        description = "Loopback port for the local Crawl4AI API/MCP server.";
+      };
+
+      apiTokenEnvVar = mkOption {
+        type = types.str;
+        default = "CRAWL4AI_API_TOKEN";
+        description = "Environment variable containing the Crawl4AI API bearer token.";
+      };
+
+      serverUrl = mkOption {
+        type = types.str;
+        readOnly = true;
+        default = "http://127.0.0.1:${toString config.aiAgents.crawl4ai.port}";
+        description = "Loopback Crawl4AI API server URL derived from aiAgents.crawl4ai.port.";
+      };
+
+      mcpSseUrl = mkOption {
+        type = types.str;
+        readOnly = true;
+        default = "${config.aiAgents.crawl4ai.serverUrl}/mcp/sse";
+        description = "Crawl4AI MCP SSE URL derived from aiAgents.crawl4ai.serverUrl.";
+      };
+    };
+
     mcpServers = mkOption {
       type = types.attrsOf mcpServerType;
       default = {
@@ -281,6 +310,15 @@ in
           command = "${pkgs.nodejs}/bin/npx";
           args = [ "-y" "puppeteer-mcp-server@latest" ];
           isolateWorkingDirectory = true;
+          targets = [ ];
+        };
+        # JS-capable crawling and extraction -- not natively registered. It is
+        # reachable through aiAgents.mcpProfiles.web-crawl after the local,
+        # token-protected Crawl4AI server is started explicitly.
+        crawl4ai = {
+          type = "sse";
+          url = config.aiAgents.crawl4ai.mcpSseUrl;
+          bearerTokenEnvVar = config.aiAgents.crawl4ai.apiTokenEnvVar;
           targets = [ ];
         };
         fetch = {
@@ -383,6 +421,10 @@ in
         web = {
           servers = defaultProfileServers ++ [ "chrome-devtools" "puppeteer" ];
           description = "Browser automation / frontend work.";
+        };
+        web-crawl = {
+          servers = defaultProfileServers ++ [ "crawl4ai" ];
+          description = "Explicit Crawl4AI site crawling/extraction; requires local crawl4ai-server.";
         };
         atlassian = {
           servers = defaultProfileServers ++ [ "atlassian" ];
@@ -550,15 +592,15 @@ in
       lib.mapAttrsToList
         (name: server: {
           assertion =
-            if server.type == "http" then
-              server.url != null
+            if server.type == "stdio" then
+              server.command != null
             else
-              server.command != null;
+              server.url != null;
           message =
-            if server.type == "http" then
-              "aiAgents.mcpServers.${name}.url must be set for HTTP MCP servers."
+            if server.type == "stdio" then
+              "aiAgents.mcpServers.${name}.command must be set for stdio MCP servers."
             else
-              "aiAgents.mcpServers.${name}.command must be set for stdio MCP servers.";
+              "aiAgents.mcpServers.${name}.url must be set for ${server.type} MCP servers.";
         })
         config.aiAgents.mcpServers
       ++ lib.mapAttrsToList

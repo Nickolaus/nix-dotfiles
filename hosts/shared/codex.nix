@@ -17,7 +17,7 @@ let
     let
       server = aiAgentsLib.effectiveServerFor "codex" rawServer;
     in
-    (if server.type == "http" then
+    (if aiAgentsLib.isUrlTransport server then
       {
         url = server.url;
       }

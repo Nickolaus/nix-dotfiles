@@ -16,7 +16,10 @@ let
 
   # Vibe's config.toml requires an explicit `transport` per server -- unlike
   # Codex/Claude/Cursor, which infer stdio vs. http from which fields are set.
-  transportFor = server: if server.type == "http" then "streamable-http" else "stdio";
+  transportFor = server:
+    if server.type == "http" then "streamable-http"
+    else if server.type == "sse" then "sse"
+    else "stdio";
 
   # Codex gets bearer-token auth for HTTP MCP servers via its native
   # `bearer_token_env_var` field; Vibe has an equally native equivalent
@@ -28,7 +31,7 @@ let
     in
     { inherit name; transport = transportFor server; }
     // (
-      if server.type == "http" then
+      if aiAgentsLib.isUrlTransport server then
         { url = server.url; }
         // optionalAttrs (server.headers != { }) { headers = server.headers; }
         // optionalAttrs (server.bearerTokenEnvVar != null) {

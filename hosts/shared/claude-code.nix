@@ -15,9 +15,9 @@ let
     let
       server = aiAgentsLib.effectiveServerFor "claude" rawServer;
     in
-    if server.type == "http" then
+    if aiAgentsLib.isUrlTransport server then
       {
-        type = "http";
+        type = server.type;
         url = server.url;
       } // optionalAttrs (server.headers != { } || server.bearerTokenEnvVar != null) {
         # Claude Code expands `${VAR}` in .mcp.json headers from the shell
