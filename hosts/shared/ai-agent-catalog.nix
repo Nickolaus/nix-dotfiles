@@ -13,6 +13,7 @@ let
 
   aiSources = import ../../flake/ai-agent-sources.nix { inherit flake; };
   cavemanSrc = aiSources.skills.caveman;
+  gstackSrc = aiSources.skills.gstack;
   mattpocockSkillsSrc = aiSources.skills.mattpocock-skills;
 
   mattpocockSkill = { category, name, implicit }: {
@@ -84,31 +85,6 @@ let
     - Fetch ticket body first.
     - If Jira/Atlassian returns app-shell HTML, login pages, or opaque connector output twice, ask for pasted ticket text.
     - If Atlassian MCP tools are absent, say Codex needs direct Atlassian HTTP MCP plus OAuth: `mcp-profile-onboard atlassian <repo>`, then `codex mcp login atlassian`, then a new Codex session.
-  '';
-
-  browserQaLabSkill = ''
-    ---
-    name: browser-qa-lab
-    description: "Use when validating browser UI, frontend behavior, screenshots, persisted browser state, or user-flow QA with the existing web MCP profile."
-    ---
-
-    # Browser QA Lab
-
-    Use this skill for browser-facing QA of a local app, site, or frontend flow.
-
-    Tooling boundary:
-    - Use the existing `mcp-profile-web` profile when browser MCP tools are needed.
-    - The profile already owns `chrome-devtools` and `puppeteer`.
-    - Do not add or start tunnels, ngrok, remote browser sharing, pair-agent, telemetry, or a long-lived browser daemon.
-
-    QA workflow:
-    1. Identify target URL, expected flow, and any required local server command from repo context.
-    2. Exercise the user flow in the browser profile, including stateful behavior when relevant.
-    3. Capture concise evidence such as screenshot names, tested URL, viewport, and pass/fail result.
-    4. Do not store cookies, tokens, localStorage secrets, prompts, raw logs, or full file contents in notes.
-    5. After QA, log the outcome with `ai-receipt-log --kind qa --status <pass|fail|needs-work|blocked> --summary <text> --evidence <text>`.
-
-    If the web MCP profile is not available, say to run `mcp-profile-onboard web <repo>` and start a new agent session, then use non-browser checks only when they still answer the QA question.
   '';
 
   skillType = types.submodule ({ ... }: {
@@ -354,12 +330,20 @@ in
               })
             mattpocockProductivitySkills)
         // {
-          browser-qa-lab = {
-            text = browserQaLabSkill;
+          browse = {
+            source = gstackSrc + "/browse";
             targets = [ "codex" "claude" "cursor" "vibe" ];
-            trust = "local-authored";
-            owner = "nix-dotfiles";
-            implicit = true;
+            trust = "pinned-flake";
+            owner = "github:garrytan/gstack";
+            implicit = false;
+          };
+
+          qa-only = {
+            source = gstackSrc + "/qa-only";
+            targets = [ "codex" "claude" "cursor" "vibe" ];
+            trust = "pinned-flake";
+            owner = "github:garrytan/gstack";
+            implicit = false;
           };
 
           graphify-auto = {

@@ -150,6 +150,23 @@
         "type": "github"
       }
     },
+    "gstack": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1782405765,
+        "narHash": "sha256-ZVnY33E7b6j200PyN0zrOjxu1yjKfi55jLWSMp6MbL8=",
+        "owner": "garrytan",
+        "repo": "gstack",
+        "rev": "11de390be1be6849eb9a15f91ff4922dd16c589a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "garrytan",
+        "repo": "gstack",
+        "rev": "11de390be1be6849eb9a15f91ff4922dd16c589a",
+        "type": "github"
+      }
+    },
     "home-manager": {
       "inputs": {
         "nixpkgs": [
@@ -485,6 +502,7 @@
         "caveman": "caveman",
         "codebase-memory-mcp": "codebase-memory-mcp",
         "disko": "disko",
+        "gstack": "gstack",
         "home-manager": "home-manager",
         "impermanence": "impermanence",
         "mac-app-util": "mac-app-util",

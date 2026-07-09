@@ -8,6 +8,7 @@
   # single purpose-oriented place to resolve pinned skill, MCP, and tool sources.
   skills = {
     caveman = flake.inputs.caveman;
+    gstack = flake.inputs.gstack;
     mattpocock-skills = flake.inputs.mattpocock-skills;
   };
 

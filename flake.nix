@@ -28,6 +28,11 @@
       flake = false;
     };
 
+    gstack = {
+      url = "github:garrytan/gstack/11de390be1be6849eb9a15f91ff4922dd16c589a";
+      flake = false;
+    };
+
     serena.url = "github:oraios/serena/v1.5.3";
 
     codebase-memory-mcp.url = "github:DeusData/codebase-memory-mcp/v0.8.1";
