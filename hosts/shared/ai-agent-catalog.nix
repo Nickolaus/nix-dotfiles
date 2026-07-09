@@ -65,6 +65,42 @@ let
     "cavecrew"
   ];
 
+  browserQaLabSkill = ''
+    ---
+    name: browser-qa-lab
+    description: "Use when validating browser UI, frontend behavior, screenshots, persisted browser state, or user-flow QA with the existing web MCP profile and curated gstack browser references."
+    ---
+
+    # Browser QA Lab
+
+    Use this skill for browser-facing QA of a local app, site, or frontend flow.
+
+    Repo policy:
+    - Use the existing `mcp-profile-web` profile when browser MCP tools are needed.
+    - The profile owns `chrome-devtools` and `puppeteer`.
+    - Do not run raw gstack `/browse`, `/qa`, `/qa-only`, `$B`, setup, upgrade, telemetry, tunnel, pair-agent, ngrok, or GBrain flows from the upstream references.
+    - Do not add a long-lived browser daemon.
+
+    Curated upstream references from the pinned `github:garrytan/gstack` input are rendered under `references/`.
+    Read them for browser QA ideas, evidence patterns, and flow coverage, but follow this file's repo policy first.
+
+    QA workflow:
+    1. Run `ai-receipt-status` before QA and treat commit mismatch warnings as stale evidence.
+    2. Identify target URL, expected flow, and any required local server command from repo context.
+    3. Exercise the user flow with available browser MCP tools; include stateful behavior when relevant.
+    4. Capture concise evidence: screenshot names, tested URL, viewport, and pass/fail result.
+    5. Do not store cookies, tokens, localStorage secrets, prompts, raw logs, full paths, or full file contents in notes.
+    6. After QA, log outcome with `ai-receipt-log --kind qa --status <pass|fail|needs-work|blocked> --summary <text> --evidence <text>`.
+
+    If the web MCP profile is not available, say to run `mcp-profile-onboard web <repo>` and start a new agent session. Use non-browser checks only when they still answer the QA question.
+  '';
+
+  browserQaLabReferences = {
+    "references/BROWSER.md" = builtins.readFile (gstackSrc + "/BROWSER.md");
+    "references/browse/SKILL.md" = builtins.readFile (gstackSrc + "/browse/SKILL.md");
+    "references/qa-only/SKILL.md" = builtins.readFile (gstackSrc + "/qa-only/SKILL.md");
+  };
+
   graphifyAutoSkill = ''
     ---
     name: graphify-auto
@@ -99,6 +135,12 @@ let
         type = types.nullOr types.lines;
         default = null;
         description = "Generated SKILL.md contents for local-authored catalog skills.";
+      };
+
+      extraFiles = mkOption {
+        type = types.attrsOf types.lines;
+        default = { };
+        description = "Additional files rendered relative to the skill directory for curated reference slices.";
       };
 
       targets = mkOption {
@@ -330,20 +372,13 @@ in
               })
             mattpocockProductivitySkills)
         // {
-          browse = {
-            source = gstackSrc + "/browse";
+          browser-qa-lab = {
+            text = browserQaLabSkill;
+            extraFiles = browserQaLabReferences;
             targets = [ "codex" "claude" "cursor" "vibe" ];
             trust = "pinned-flake";
-            owner = "github:garrytan/gstack";
-            implicit = false;
-          };
-
-          qa-only = {
-            source = gstackSrc + "/qa-only";
-            targets = [ "codex" "claude" "cursor" "vibe" ];
-            trust = "pinned-flake";
-            owner = "github:garrytan/gstack";
-            implicit = false;
+            owner = "github:garrytan/gstack via nix-dotfiles policy";
+            implicit = true;
           };
 
           graphify-auto = {
@@ -384,6 +419,12 @@ in
         (name: skill: {
           assertion = !skill.managed || ((skill.source != null) != (skill.text != null));
           message = "aiAgents.catalog.skills.${name} must set exactly one of source or text when managed.";
+        })
+        cfg.skills
+      ++ lib.mapAttrsToList
+        (name: skill: {
+          assertion = skill.extraFiles == { } || (skill.managed && skill.text != null);
+          message = "aiAgents.catalog.skills.${name}.extraFiles requires a managed text skill.";
         })
         cfg.skills
       ++ lib.mapAttrsToList

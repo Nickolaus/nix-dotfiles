@@ -13,7 +13,7 @@ let
 
   renderedPathsFor = aiAgentsLib.renderedSkillPathsFor enabledTargets;
 
-  managedSkillEntries = lib.concatMap
+  managedMainSkillEntries = lib.concatMap
     (name:
       let
         skill = cfg.skills.${name};
@@ -30,6 +30,25 @@ let
         })
         renderedPaths))
     (builtins.attrNames cfg.skills);
+
+  managedExtraSkillEntries = lib.concatMap
+    (name:
+      let
+        skill = cfg.skills.${name};
+        renderedPaths = renderedPathsFor name skill;
+      in
+      lib.optionals skill.managed (lib.concatMap
+        (path:
+          lib.mapAttrsToList
+            (relPath: text: {
+              name = "${path}/${relPath}";
+              value = { inherit text; };
+            })
+            skill.extraFiles)
+        renderedPaths))
+    (builtins.attrNames cfg.skills);
+
+  managedSkillEntries = managedMainSkillEntries ++ managedExtraSkillEntries;
 
   roleCountsByTarget = builtins.listToAttrs (map
     (target: {
