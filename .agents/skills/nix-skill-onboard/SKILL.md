@@ -17,6 +17,7 @@ This skill is itself project-local. Keep its source of truth under `.agents/skil
 
    - `AGENTS.md`
    - `hosts/shared/ai-agent-catalog.nix`
+   - `flake/ai-agent-sources.nix`
    - `home/features/ai/agent-catalog.nix`
    - `hosts/shared/ai-agents-lib.nix`
    - `flake.nix`
@@ -55,7 +56,7 @@ This skill is itself project-local. Keep its source of truth under `.agents/skil
 
    ```nix
    my-skill = {
-     source = flake.inputs.some-source + "/skills/my-skill";
+     source = aiSources.skills.some-source + "/skills/my-skill";
      targets = [ "codex" "claude" ];
      trust = "pinned-flake";
      owner = "github:owner/repo";
@@ -96,16 +97,22 @@ This skill is itself project-local. Keep its source of truth under `.agents/skil
 
 6. Pin external GitHub sources through Nix.
 
-   Prefer a pinned flake input:
+   Nix flake inputs must be declared statically in `flake.nix`. Add the pinned input there under the AI agent source inputs section, then expose it through the typed registry in `flake/ai-agent-sources.nix`. Pin by release tag when available, otherwise by commit; avoid branch refs unless explicitly requested. Catalog and AI feature modules should consume `flake/ai-agent-sources.nix`, not reach directly into `flake.inputs`.
 
    ```nix
+   # flake.nix
    some-skills = {
-     url = "github:owner/repo/rev-or-tag";
+     url = "github:owner/repo/<tag-or-commit>";
      flake = false;
+   };
+
+   # flake/ai-agent-sources.nix
+   skills = {
+     some-skills = flake.inputs.some-skills;
    };
    ```
 
-   Then reference `flake.inputs.some-skills + "/path/to/skill"`.
+   Then reference `aiSources.skills.some-skills + "/path/to/skill"` from catalog modules.
 
    Do not use `npx skills add`, `skill-installer`, public registry auto-install, or activation-time downloads as the production rollout mechanism. Use those only for scouting.
 
@@ -114,7 +121,7 @@ This skill is itself project-local. Keep its source of truth under `.agents/skil
    For skill-only catalog edits, run focused checks:
 
    ```bash
-   nixpkgs-fmt --check hosts/shared/ai-agent-catalog.nix home/features/ai/agent-catalog.nix hosts/shared/ai-agents-lib.nix
+   nixpkgs-fmt --check flake/ai-agent-sources.nix hosts/shared/ai-agent-catalog.nix home/features/ai/agent-catalog.nix hosts/shared/ai-agents-lib.nix
    agent-catalog-check
    agent-catalog-status
    ```

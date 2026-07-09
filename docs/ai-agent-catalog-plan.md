@@ -114,7 +114,7 @@ aiAgents.catalog = {
 
   skills = {
     caveman = {
-      source = flake.inputs.caveman + "/skills/caveman";
+      source = aiSources.skills.caveman + "/skills/caveman";
       targets = [ "codex" "claude" "cursor" "vibe" ];
       trust = "pinned-flake";
       implicit = true;
@@ -345,6 +345,9 @@ feature modules.
 Recommended local layout after implementation:
 
 ```text
+flake/
+  ai-agent-sources.nix       # typed registry for AI-owned flake inputs
+
 hosts/shared/
   ai-agent-catalog.nix       # option schema and default catalog entries
   ai-agents-lib.nix          # shared render/validation helpers
@@ -364,8 +367,16 @@ docs/
   ai-agent-catalog-plan.md   # this plan
 ```
 
-`agents/skills` is optional. Existing pinned flake inputs can stay where they
-are. Use it only for local-authored skills whose source should live in this repo.
+`agents/skills` is optional. Use it only for local-authored skills whose source
+should live in this repo.
+
+Nix flake inputs must remain statically declared in `flake.nix`, so external
+AI-owned inputs still get pinned there under an AI agent source section. Their
+typed use-site registry belongs in `flake/ai-agent-sources.nix`. Catalog and AI
+feature modules should consume that registry instead of reaching directly into
+`flake.inputs`, keeping skill repositories, MCP server flakes, and agent-tool
+sources grouped without placing flake-level source data inside host module
+folders.
 
 ## Status And Operations
 

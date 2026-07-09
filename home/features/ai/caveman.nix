@@ -1,7 +1,8 @@
 { config, flake, lib, osConfig ? { }, pkgs, ... }:
 let
   cfg = config.caveman;
-  cavemanSrc = flake.inputs.caveman;
+  aiSources = import ../../../flake/ai-agent-sources.nix { inherit flake; };
+  cavemanSrc = aiSources.skills.caveman;
   aiAgentsLib = import ../../../hosts/shared/ai-agents-lib.nix { inherit lib pkgs; };
   aiCfg = if osConfig ? aiAgents then osConfig.aiAgents else null;
   catalogEnabled = aiCfg != null && aiCfg.enable && aiCfg.catalog.enable;

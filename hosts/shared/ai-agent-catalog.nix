@@ -11,7 +11,49 @@ let
     "external-experimental"
   ];
 
-  cavemanSrc = flake.inputs.caveman;
+  aiSources = import ../../flake/ai-agent-sources.nix { inherit flake; };
+  cavemanSrc = aiSources.skills.caveman;
+  mattpocockSkillsSrc = aiSources.skills.mattpocock-skills;
+
+  mattpocockSkill = { category, name, implicit }: {
+    inherit name;
+    value = {
+      source = mattpocockSkillsSrc + "/skills/${category}/${name}";
+      targets = [ "codex" ];
+      trust = "pinned-flake";
+      owner = "github:mattpocock/skills";
+      inherit implicit;
+    };
+  };
+
+  mattpocockEngineeringSkills = [
+    { name = "ask-matt"; implicit = false; }
+    { name = "code-review"; implicit = true; }
+    { name = "codebase-design"; implicit = true; }
+    { name = "diagnosing-bugs"; implicit = true; }
+    { name = "domain-modeling"; implicit = true; }
+    { name = "grill-with-docs"; implicit = false; }
+    { name = "implement"; implicit = false; }
+    { name = "improve-codebase-architecture"; implicit = false; }
+    { name = "prototype"; implicit = true; }
+    { name = "research"; implicit = true; }
+    { name = "resolving-merge-conflicts"; implicit = true; }
+    { name = "setup-matt-pocock-skills"; implicit = false; }
+    { name = "tdd"; implicit = true; }
+    { name = "to-spec"; implicit = false; }
+    { name = "to-tickets"; implicit = false; }
+    { name = "triage"; implicit = false; }
+    { name = "wayfinder"; implicit = false; }
+  ];
+
+  mattpocockProductivitySkills = [
+    { name = "grill-me"; implicit = false; }
+    { name = "grilling"; implicit = true; }
+    { name = "handoff"; implicit = false; }
+    { name = "teach"; implicit = false; }
+    { name = "writing-great-skills"; implicit = false; }
+  ];
+
   cavemanSkills = [
     "caveman"
     "caveman-commit"
@@ -270,6 +312,22 @@ in
               };
             })
             cavemanSkills)
+        // builtins.listToAttrs
+          (map
+            (skill:
+              mattpocockSkill {
+                category = "engineering";
+                inherit (skill) name implicit;
+              })
+            mattpocockEngineeringSkills)
+        // builtins.listToAttrs
+          (map
+            (skill:
+              mattpocockSkill {
+                category = "productivity";
+                inherit (skill) name implicit;
+              })
+            mattpocockProductivitySkills)
         // {
           graphify-auto = {
             text = graphifyAutoSkill;

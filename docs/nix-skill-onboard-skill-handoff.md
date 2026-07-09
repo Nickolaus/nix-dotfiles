@@ -37,10 +37,11 @@ First read:
 3. docs/ai-agent-catalog-plan.md
 4. docs/ai-agent-catalog-implementation-handoff.md
 5. hosts/shared/ai-agent-catalog.nix
-6. home/features/ai/agent-catalog.nix
-7. hosts/shared/ai-agents-lib.nix
-8. flake.nix
-9. scripts/check-config.sh
+6. flake/ai-agent-sources.nix
+7. home/features/ai/agent-catalog.nix
+8. hosts/shared/ai-agents-lib.nix
+9. flake.nix
+10. scripts/check-config.sh
 
 Then produce a concrete implementation plan for the skill: files to add,
 symlink to add, skill name/description, workflow, validation, and focused
@@ -118,6 +119,14 @@ Key files:
     `external-experimental`.
   - Managed skills require exactly one of `source` or `text`.
   - Managed skill frontmatter is checked at Nix evaluation.
+
+- `flake/ai-agent-sources.nix`
+  - Defines the typed registry for pinned AI-owned flake inputs used by skill
+    repositories, MCP servers, and related agent tooling.
+  - Does not declare flake inputs; Nix requires those to stay static in
+    `flake.nix`.
+  - Keeps catalog and feature modules from reaching directly into
+    `flake.inputs`.
 
 - `home/features/ai/agent-catalog.nix`
   - Renders catalog skills into target-specific Home Manager files.
@@ -240,7 +249,7 @@ The skill body should instruct the agent to follow this workflow.
 
    ```nix
    my-skill = {
-     source = flake.inputs.some-source + "/skills/my-skill";
+     source = aiSources.skills.some-source + "/skills/my-skill";
      targets = [ "codex" "claude" "cursor" "vibe" ];
      trust = "pinned-flake";
      owner = "github:owner/repo";
@@ -281,16 +290,27 @@ The skill body should instruct the agent to follow this workflow.
 
 6. If adding GitHub source.
 
-   Prefer pinned flake input:
+   Nix flake inputs must be declared statically in `flake.nix`. Add the pinned
+   input there under the AI agent source inputs section, then expose it through
+   the typed registry in `flake/ai-agent-sources.nix`. Pin by release tag when
+   available, otherwise by commit; avoid branch refs unless explicitly
+   requested. Catalog and AI feature modules should consume
+   `flake/ai-agent-sources.nix`, not reach directly into `flake.inputs`.
 
    ```nix
+   # flake.nix
    some-skills = {
-     url = "github:owner/repo/<rev-or-tag>";
+     url = "github:owner/repo/<tag-or-commit>";
      flake = false;
+   };
+
+   # flake/ai-agent-sources.nix
+   skills = {
+     some-skills = flake.inputs.some-skills;
    };
    ```
 
-   Then use `flake.inputs.some-skills + "/path/to/skill"`.
+   Then use `aiSources.skills.some-skills + "/path/to/skill"`.
 
    Do not use `npx skills add`, `skill-installer`, or registry install as the
    production rollout mechanism. Those are discovery/scouting tools only.
@@ -300,7 +320,7 @@ The skill body should instruct the agent to follow this workflow.
    Run focused checks after edits:
 
    ```bash
-   nixpkgs-fmt --check hosts/shared/ai-agent-catalog.nix home/features/ai/agent-catalog.nix hosts/shared/ai-agents-lib.nix
+   nixpkgs-fmt --check flake/ai-agent-sources.nix hosts/shared/ai-agent-catalog.nix home/features/ai/agent-catalog.nix hosts/shared/ai-agents-lib.nix
    agent-catalog-check
    agent-catalog-status
    ```

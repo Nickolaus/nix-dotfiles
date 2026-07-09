@@ -1,7 +1,9 @@
 { flake, lib, pkgs, ... }:
 let
   system = pkgs.stdenv.hostPlatform.system;
-  codebaseMemoryMcpPackage = flake.inputs.codebase-memory-mcp.packages.${system}.default;
+  aiSources = import ../../../flake/ai-agent-sources.nix { inherit flake; };
+  codebaseMemoryMcpSource = aiSources.mcps.codebase-memory;
+  codebaseMemoryMcpPackage = codebaseMemoryMcpSource.packages.${system}.default;
   cbmBin = "${codebaseMemoryMcpPackage}/bin/codebase-memory-mcp";
   aiAgentsLib = import ../../../hosts/shared/ai-agents-lib.nix { inherit lib pkgs; };
   tomlkitPython = aiAgentsLib.tomlkitPython;
@@ -147,7 +149,7 @@ in
     (pkgs.writeShellScriptBin "codebase-memory-status" ''
       set -euo pipefail
 
-      echo "codebase-memory-mcp source: ${flake.inputs.codebase-memory-mcp}"
+      echo "codebase-memory-mcp source: ${codebaseMemoryMcpSource}"
       echo "codebase-memory-mcp package: ${codebaseMemoryMcpPackage}"
       echo
 

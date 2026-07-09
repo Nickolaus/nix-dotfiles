@@ -63,6 +63,7 @@ The new session should inspect these files before planning edits:
 - [AGENTS.md](../AGENTS.md)
 - [docs/ai-agent-catalog-plan.md](./ai-agent-catalog-plan.md)
 - [hosts/shared/ai-agents.nix](../hosts/shared/ai-agents.nix)
+- [flake/ai-agent-sources.nix](../flake/ai-agent-sources.nix)
 - [hosts/shared/ai-agents-lib.nix](../hosts/shared/ai-agents-lib.nix)
 - [hosts/shared/ai-agents-default.nix](../hosts/shared/ai-agents-default.nix)
 - [hosts/shared/codex.nix](../hosts/shared/codex.nix)

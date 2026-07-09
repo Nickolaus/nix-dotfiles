@@ -1,7 +1,9 @@
 { flake, pkgs, ... }:
 let
   system = pkgs.stdenv.hostPlatform.system;
-  serenaPackage = flake.inputs.serena.packages.${system}.default;
+  aiSources = import ../../../flake/ai-agent-sources.nix { inherit flake; };
+  serenaSource = aiSources.mcps.serena;
+  serenaPackage = serenaSource.packages.${system}.default;
 in
 {
   home.packages = [
@@ -10,7 +12,7 @@ in
     (pkgs.writeShellScriptBin "serena-status" ''
       set -euo pipefail
 
-      echo "Serena source: ${flake.inputs.serena}"
+      echo "Serena source: ${serenaSource}"
       echo "Serena package: ${serenaPackage}"
       echo
 

@@ -16,8 +16,15 @@
 
     mac-app-util.url = "github:hraban/mac-app-util";
 
+    # AI agent source inputs. Flake input declarations must stay static here;
+    # flake/ai-agent-sources.nix groups their typed use sites.
     caveman = {
       url = "github:JuliusBrussee/caveman/v1.8.2";
+      flake = false;
+    };
+
+    mattpocock-skills = {
+      url = "github:mattpocock/skills/v1.1.0";
       flake = false;
     };
 

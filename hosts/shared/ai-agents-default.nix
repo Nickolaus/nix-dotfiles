@@ -1,6 +1,7 @@
 { flake, pkgs, ... }:
 let
   system = pkgs.stdenv.hostPlatform.system;
+  aiSources = import ../../flake/ai-agent-sources.nix { inherit flake; };
 in
 {
   imports = [
@@ -15,6 +16,6 @@ in
   # Manager profile PATH. Put this MCP server in the system profile so
   # project-local MCP config can use /run/current-system/sw/bin consistently.
   environment.systemPackages = [
-    flake.inputs.codebase-memory-mcp.packages.${system}.default
+    aiSources.mcps.codebase-memory.packages.${system}.default
   ];
 }
