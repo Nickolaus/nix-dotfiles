@@ -447,6 +447,22 @@ codebase-memory-mcp config set auto_index false   # opt-out: default is on
 - We deliberately did **not** run the upstream `install` command's *other* side effects (Claude Code skills + `PreToolUse` hook, Codex `SessionStart` reminder) since those write into **project-local** files (`.claude/settings.json`, `.codex/config.toml` inside each repo) outside Nix's control — same reasoning as Serena above.
 - Complementary to Graphify, not a replacement: Graphify is the cross-modal (code + docs + papers + media), LLM-driven deep-dive with visual/report artifacts, invoked on demand; `codebase-memory-mcp` is the always-on, free, sub-ms structural backend for routine code navigation.
 
+#### Chonkie RAG Chunking
+
+```bash
+chonkie-status # Check uv tool install, extras, wrappers, Headroom port boundary
+chonkie-rag-smoke # Local recursive chunking smoke test; no provider call
+chonkie-serve --port 8000 # Localhost API wrapper with Headroom port guard
+chonkie-update # Manual uv tool upgrade
+```
+
+- Installed via `uv tool install "chonkie[cli,semantic,code,api,viz]"`, not `chonkie[all]`.
+- Use for explicit RAG ingestion, chunking strategy comparisons, code-aware chunking, and local chunking API experiments.
+- Keep Graphify/codebase-memory for repo structure, architecture, call graph, and impact questions.
+- No default Headroom tuning: do not set global `OPENAI_BASE_URL` / `OPENAI_API_BASE` for Chonkie. Route provider-backed Chonkie pipelines explicitly.
+- Codex and Claude subscription auth remain untouched. Chonkie provider-backed features use provider API SDKs/keys, not ChatGPT or Claude Code subscription entitlements.
+- `chonkie-serve` defaults to localhost and refuses Headroom proxy ports.
+
 #### Headroom (Context Compression)
 ```bash
 headroom-status                 # Health for every registered proxy, default-routing status, wrapper usage hints

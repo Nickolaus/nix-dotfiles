@@ -3,6 +3,7 @@
     ./agent-catalog.nix
     ./agent-configs.nix
     ./caveman.nix
+    ./chonkie.nix
     ./codebase-memory.nix
     ./graphify.nix
     ./headroom.nix

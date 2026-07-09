@@ -396,6 +396,14 @@ in
             implicit = false;
             managed = false;
           };
+
+          chonkie = {
+            targets = [ "codex" "claude" "cursor" "vibe" ];
+            trust = "external-experimental";
+            owner = "github:chonkie-inc/skills";
+            implicit = false;
+            managed = false;
+          };
         };
       description = "Declarative reusable AI-agent skills.";
     };
