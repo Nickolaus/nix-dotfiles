@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codebase Memory Auto"
+  short_description: "Self-heal repo-scoped CBM setup"
+  default_prompt: "Use $codebase-memory-auto to inspect code relationships and repair repo-scoped codebase-memory setup when needed."

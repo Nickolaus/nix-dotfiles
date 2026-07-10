@@ -123,6 +123,8 @@ let
     - If Atlassian MCP tools are absent, say Codex needs direct Atlassian HTTP MCP plus OAuth: `mcp-profile-onboard atlassian <repo>`, then `codex mcp login atlassian`, then a new Codex session.
   '';
 
+  codebaseMemoryAutoSrc = ../../.agents/skills/codebase-memory-auto;
+
   skillType = types.submodule ({ ... }: {
     options = {
       source = mkOption {
@@ -386,6 +388,14 @@ in
             targets = [ "codex" "claude" "vibe" ];
             trust = "local-authored";
             owner = "graphify";
+            implicit = true;
+          };
+
+          codebase-memory-auto = {
+            source = codebaseMemoryAutoSrc;
+            targets = [ "codex" ];
+            trust = "local-authored";
+            owner = "nix-dotfiles";
             implicit = true;
           };
 

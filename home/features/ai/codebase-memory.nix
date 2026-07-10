@@ -252,9 +252,16 @@ in
 
       echo
       echo "Ticket tooling:"
-      if printf '%s\n' "$codex_mcp_output" | grep -qiE 'atlassian|jira'; then
-        echo "  Atlassian/Jira MCP appears configured for this Codex project."
+      if [ -f "$git_root/.codex/config.toml" ] && grep -q '^\[mcp_servers\.atlassian\]' "$git_root/.codex/config.toml"; then
+        echo "  Atlassian/Jira MCP is configured as a direct Codex HTTP server."
         echo "  If ticket fetch still returns login/app-shell HTML, run:"
+        echo "    codex mcp login atlassian"
+        echo "  Then start a new Codex session."
+      elif [ -f "$git_root/.codex/config.toml" ] && grep -q '^\[mcp_servers\.mcp-profile-atlassian\]' "$git_root/.codex/config.toml"; then
+        echo "  legacy mcp-profile-atlassian stdio entry found."
+        echo "  Codex OAuth needs a direct [mcp_servers.atlassian] HTTP entry instead."
+        echo "  Run:"
+        echo "    mcp-profile-onboard atlassian $git_root"
         echo "    codex mcp login atlassian"
         echo "  Then start a new Codex session."
       else
@@ -281,7 +288,8 @@ in
         if [ -n "$scoped_cache" ]; then
           echo "  scoped dir: $scoped_cache"
           (cd "$git_root" && CBM_CACHE_DIR="$scoped_cache" ${cbmBin} config list 2>/dev/null) | sed 's/^/  /'
-          echo "  CLI cache view below can lag/diverge from the live MCP process; use MCP list_projects/index_status inside Codex."
+          echo "  CLI cache view below is diagnostic only and can lag/diverge from the live MCP process."
+          echo "  Inside Codex, MCP list_projects/index_status is authoritative."
           (cd "$git_root" && CBM_CACHE_DIR="$scoped_cache" ${cbmBin} cli list_projects 2>/dev/null) | sed 's/^/  /'
         else
           echo "  no CBM_CACHE_DIR found in project config"

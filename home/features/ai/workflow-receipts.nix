@@ -186,7 +186,7 @@ let
         else
           "\($kind): \($r.status) [\($r.branch)] \($r.summary)\n  ts: \($r.ts)\n  commit: \($r.commit)" +
           (if ($r.evidence // "") != "" then "\n  evidence: \($r.evidence)" else "" end) +
-          (if $r.commit != $head then "\n  warning: receipt commit differs from HEAD" else "" end)
+        (if $r.commit != $head then "\n  stale: receipt commit differs from HEAD; re-check before relying" else "" end)
         end
     ' "$receipt_file"
   '';

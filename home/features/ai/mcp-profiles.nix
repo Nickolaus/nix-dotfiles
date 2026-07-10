@@ -415,29 +415,6 @@ in
           fi
         }
 
-        keep_private_tracked_only() {
-          rel="$1"
-          if git ls-files --error-unmatch "$rel" >/dev/null 2>&1; then
-            if [ ! -f "$rel" ]; then
-              mkdir -p "$(dirname "$rel")"
-              if git show "HEAD:$rel" > "$rel" 2>/dev/null; then
-                echo "   restored tracked $rel from HEAD before applying local-only MCP entry"
-              else
-                echo "   skipped: failed to restore tracked $rel from HEAD" >&2
-                rm -f "$rel"
-                return 1
-              fi
-            fi
-            git update-index --skip-worktree "$rel"
-            echo "   $rel is tracked by the team -- marked --skip-worktree: your local edit never"
-            echo "   shows in 'git status'/diffs/PRs (undo: git update-index --no-skip-worktree $rel)"
-            return 0
-          fi
-
-          echo "   skipped: $rel is not tracked in this repo, so Codex stays aligned with committed config only"
-          return 1
-        }
-
         echo "-- Cursor --"
         mkdir -p .cursor
         [ -f .cursor/mcp.json ] || echo '{}' > .cursor/mcp.json
@@ -448,12 +425,12 @@ in
         echo
 
         echo "-- Codex --"
-        if keep_private_tracked_only ".codex/config.toml"; then
-          ${onboardPython}/bin/python3 ${onboardCodexScript} .codex/config.toml "$entry_name" "$binary" "$codex_direct_json"
-          if [ "$codex_direct_json" != '{}' ]; then
-            echo "   Codex uses direct HTTP MCP entries for this profile so native OAuth works."
-            echo "   Run 'codex mcp login atlassian' from this repo, then start a new Codex session."
-          fi
+        mkdir -p .codex
+        ${onboardPython}/bin/python3 ${onboardCodexScript} .codex/config.toml "$entry_name" "$binary" "$codex_direct_json"
+        keep_private ".codex/config.toml"
+        if [ "$codex_direct_json" != '{}' ]; then
+          echo "   Codex uses direct HTTP MCP entries for this profile so native OAuth works."
+          echo "   Run 'codex mcp login atlassian' from this repo, then start a new Codex session."
         fi
         echo
 
