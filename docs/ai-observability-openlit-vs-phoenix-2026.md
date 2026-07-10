@@ -182,7 +182,8 @@ repo-owned outcome data to Phoenix-only or OpenLIT-only APIs.
 Prioritize signals that do not need prompt, output, or file-content capture:
 
 - `ai-receipt-log` outcomes: plan, review, QA, ship, decision statuses over
-  config commits.
+  config commits. This is now emitted as metadata-only `ai.workflow.receipt`
+  spans when Phoenix is reachable.
 - `rtk gain`: output-compression savings.
 - `headroom-status`: proxy state, upstream route, compression health.
 - `scripts/hot-benchmark.sh`: model latency, quality score, retry/error data.
@@ -190,6 +191,11 @@ Prioritize signals that do not need prompt, output, or file-content capture:
 
 This answers setup-quality questions without reading prompts, outputs, file
 contents, or private ticket text.
+
+Codex hook events are grouped into one Phoenix trace per Codex session and keep
+only structural attributes: hook event, tool category, payload shape hash/key
+counts, size classes, exit-status class, commit/dirty state, and hashed repo
+location identifiers.
 
 ### Phase 4: Subscription-Agent Metadata
 

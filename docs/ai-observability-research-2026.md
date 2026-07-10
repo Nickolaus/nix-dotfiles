@@ -219,15 +219,20 @@ The helper surface is implemented in `home/features/ai/observability.nix`.
   `openlit-1.23.0` into XDG state and starts Docker Compose only when invoked.
   `ai-observe-openlit-hook-audit` prints the disposable-config/uninstall/privacy
   checklist without installing hooks.
-- Smoke telemetry remains metadata-only and uses the `ai.setup.*` contract from
-  this document with `ai.setup.backend` set to the active backend. It also marks
-  whether repo-owned signals are locally available: workflow receipts,
-  `headroom-status`, `rtk gain`, and `scripts/hot-benchmark.sh`.
+- Smoke telemetry remains metadata-only and uses the `ai.setup.*` contract to
+  document the active backend. It also marks whether repo-owned signals are
+  locally available: workflow receipts, `headroom-status`, `rtk gain`, and
+  `scripts/hot-benchmark.sh`.
+- `ai-receipt-log` emits metadata-only workflow outcome spans when Phoenix is
+  reachable. It records kind, status, commit, dirty state, repo id, branch hash,
+  and summary/evidence shape only; summary/evidence text is not exported.
 - Codex now has a managed metadata-only hook through the existing
   `/etc/codex/requirements.toml` mechanism. It emits lifecycle/tool event names,
-  repo commit/dirty state, and hashed working-directory identifiers. It
-  deliberately never serializes prompt text, shell commands, tool args, file
-  paths, file contents, or tool output.
+  repo commit/dirty state, hashed working-directory identifiers, payload shape
+  hashes/key counts, size classes, and exit-status classes. Hook events are
+  grouped into one Phoenix trace per Codex session. It deliberately never
+  serializes prompt text, shell commands, tool args, file paths, file contents,
+  or tool output.
 - Claude Code is integrated by an explicit `ai-observe-claude` wrapper using
   Claude Code's official OpenTelemetry environment variables. The wrapper enables
   traces and sets content gates off (`OTEL_LOG_USER_PROMPTS=0`,

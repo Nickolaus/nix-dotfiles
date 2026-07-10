@@ -133,6 +133,98 @@ let
         return hashlib.sha256(value.encode("utf-8", "replace")).hexdigest()[:16]
 
 
+    def hash_int(value, bits):
+        hashed = hashlib.sha256(value.encode("utf-8", "replace")).hexdigest()
+        integer = int(hashed[: bits // 4], 16)
+        return integer or 1
+
+
+    def key_count(value):
+        return len(value) if isinstance(value, dict) else 0
+
+
+    def shape_hash(value):
+        if isinstance(value, dict):
+            shape = "\n".join(sorted(str(key) for key in value.keys()))
+        elif isinstance(value, list):
+            shape = "list"
+        elif value is None:
+            shape = "none"
+        else:
+            shape = type(value).__name__
+        return hash_value(shape)
+
+
+    def size_class(value):
+        if value is None:
+            return "none"
+        try:
+            size = len(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+        except Exception:
+            return "unknown"
+        if size == 0:
+            return "empty"
+        if size <= 128:
+            return "tiny"
+        if size <= 1024:
+            return "small"
+        if size <= 8192:
+            return "medium"
+        return "large"
+
+
+    def tool_category(tool_name):
+        if tool_name == "Bash":
+            return "shell"
+        if tool_name == "apply_patch":
+            return "code_edit"
+        if tool_name.startswith("multi_agent") or tool_name in {"spawn_agent", "wait_agent", "close_agent"}:
+            return "subagent"
+        if tool_name in {"web.run", "fetch", "curl"}:
+            return "network"
+        if tool_name == "none":
+            return "lifecycle"
+        return "tool"
+
+
+    def event_role(hook_event):
+        if hook_event in {"SessionStart", "Stop"}:
+            return "lifecycle"
+        if hook_event in {"PreToolUse", "PostToolUse"}:
+            return "tool"
+        if hook_event == "PermissionRequest":
+            return "permission"
+        if hook_event in {"SubagentStart", "SubagentStop"}:
+            return "subagent"
+        return "agent"
+
+
+    def exit_status_class(payload, tool_response):
+        if safe_bool(payload.get("error")):
+            return "error"
+        if isinstance(tool_response, dict):
+            for key in ("exit_code", "exitCode", "return_code", "returncode"):
+                value = tool_response.get(key)
+                if isinstance(value, int):
+                    return "zero" if value == 0 else "nonzero"
+            success = tool_response.get("success")
+            if isinstance(success, bool):
+                return "zero" if success else "nonzero"
+        return "unknown"
+
+
+    def permission_decision_class(payload):
+        for key in ("permission_decision", "permissionDecision", "decision"):
+            value = safe_str(payload.get(key)).lower()
+            if value in {"allow", "allowed", "approve", "approved"}:
+                return "allow"
+            if value in {"deny", "denied", "reject", "rejected"}:
+                return "deny"
+            if value in {"ask", "prompt"}:
+                return "ask"
+        return "none"
+
+
     def git_value(args, cwd):
         try:
             result = subprocess.run(
@@ -164,7 +256,16 @@ let
         git_root = git_value(["rev-parse", "--show-toplevel"], cwd)
         git_commit = git_value(["rev-parse", "HEAD"], git_root or cwd) or "unknown"
         dirty = bool(git_value(["status", "--short", "--untracked-files=all"], git_root or cwd))
-        has_tool_output = payload.get("tool_response") is not None or payload.get("tool_output") is not None
+        tool_input = payload.get("tool_input")
+        tool_response = payload.get("tool_response")
+        legacy_tool_output = payload.get("tool_output")
+        has_tool_output = tool_response is not None or legacy_tool_output is not None
+        tool_name = safe_str(payload.get("tool_name")) or "none"
+        session_id = safe_str(payload.get("session_id")) or "unknown"
+        turn_id = safe_str(payload.get("turn_id")) or "unknown"
+        trace_group = session_id if session_id != "unknown" else turn_id
+        if trace_group == "unknown":
+            trace_group = hash_value(cwd)
 
         attributes = {
             "ai.setup.agent": "codex",
@@ -175,13 +276,27 @@ let
             "ai.agent.vendor": "openai",
             "ai.agent.client": "codex",
             "ai.agent.hook_event": hook_event,
-            "ai.agent.tool_name": safe_str(payload.get("tool_name")) or "none",
-            "ai.agent.session_id": safe_str(payload.get("session_id")) or "unknown",
-            "ai.agent.turn_id": safe_str(payload.get("turn_id")) or "unknown",
+            "ai.agent.event_role": event_role(hook_event),
+            "ai.agent.tool_name": tool_name,
+            "ai.agent.tool_category": tool_category(tool_name),
+            "ai.agent.session_id": session_id,
+            "ai.agent.turn_id": turn_id,
+            "ai.agent.trace_scope": "session",
+            "ai.agent.trace_group_hash": hash_value(trace_group),
             "ai.agent.cwd_hash": hash_value(cwd),
             "ai.agent.git_root_hash": hash_value(git_root),
-            "ai.agent.has_tool_input": isinstance(payload.get("tool_input"), dict),
+            "ai.agent.payload_shape_hash": shape_hash(payload),
+            "ai.agent.payload_key_count": key_count(payload),
+            "ai.agent.has_tool_input": isinstance(tool_input, dict),
             "ai.agent.has_tool_output": has_tool_output,
+            "ai.agent.tool_input_shape_hash": shape_hash(tool_input),
+            "ai.agent.tool_input_key_count": key_count(tool_input),
+            "ai.agent.tool_input_size_class": size_class(tool_input),
+            "ai.agent.tool_response_shape_hash": shape_hash(tool_response or legacy_tool_output),
+            "ai.agent.tool_response_key_count": key_count(tool_response or legacy_tool_output),
+            "ai.agent.tool_response_size_class": size_class(tool_response or legacy_tool_output),
+            "ai.agent.exit_status_class": exit_status_class(payload, tool_response),
+            "ai.agent.permission_decision_class": permission_decision_class(payload),
             "ai.agent.permission_requested": hook_event == "PermissionRequest",
             "ai.agent.success": not safe_bool(payload.get("error")),
         }
@@ -203,7 +318,17 @@ let
             )
             trace.set_tracer_provider(provider)
             tracer = trace.get_tracer("nix-dotfiles.ai-observability.codex", "1")
-            with tracer.start_as_current_span("ai.agent.codex." + hook_event) as span:
+            parent = trace.NonRecordingSpan(
+                trace.SpanContext(
+                    trace_id=hash_int("codex-session:" + trace_group, 128),
+                    span_id=hash_int("codex-session-root:" + trace_group, 64),
+                    is_remote=True,
+                    trace_flags=trace.TraceFlags(trace.TraceFlags.SAMPLED),
+                    trace_state=trace.TraceState(),
+                )
+            )
+            parent_context = trace.set_span_in_context(parent)
+            with tracer.start_as_current_span("ai.agent.codex." + hook_event, context=parent_context) as span:
                 for key, value in attributes.items():
                     span.set_attribute(key, value)
             provider.shutdown()

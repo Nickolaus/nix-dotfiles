@@ -506,8 +506,13 @@ ai-observe-openlit-down        # Stop OpenLIT compose project without deleting s
 - Helpers do not set global provider base URLs, `PHOENIX_COLLECTOR_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`.
 - Codex gets a managed metadata-only hook through `/etc/codex/requirements.toml`
   and `/etc/codex/hooks/ai-observe-metadata.py`. It records lifecycle/tool event
-  names, repo commit/dirty state, and hashed working-directory identifiers; it
+  names, repo commit/dirty state, hashed working-directory identifiers, payload
+  shape hashes/key counts, size classes, and exit-status classes. Hook events
+  share a Phoenix trace per Codex session so UI timelines are inspectable; it
   never records prompts, shell commands, file contents, tool args, or outputs.
+- `ai-receipt-log` emits metadata-only workflow outcome spans to Phoenix when
+  reachable. It records kind/status/commit/dirty and summary/evidence shape
+  only, not summary or evidence text.
 - Claude Code subscription auth stays intact. Use `ai-observe-claude` when you
   want official Claude Code OTel traces sent to Phoenix with content gates set
   off (`OTEL_LOG_USER_PROMPTS=0`, `OTEL_LOG_TOOL_DETAILS=0`,
