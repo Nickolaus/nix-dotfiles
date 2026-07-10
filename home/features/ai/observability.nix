@@ -93,6 +93,37 @@ let
       fi
     }
 
+    wait_http_ready() {
+      local url="$1"
+      local pid_file="$2"
+      local log_file="$3"
+      local timeout_seconds="''${4:-30}"
+
+      if ${curl} \
+        --fail \
+        --silent \
+        --show-error \
+        --output /dev/null \
+        --max-time 2 \
+        --retry 999 \
+        --retry-delay 1 \
+        --retry-max-time "$timeout_seconds" \
+        --retry-connrefused \
+        --retry-all-errors \
+        "$url" >/dev/null 2>&1; then
+        return 0
+      fi
+
+      if ! pid_running "$pid_file"; then
+        echo "Process exited during startup; recent log:" >&2
+        tail -n 80 "$log_file" >&2 || true
+      else
+        echo "Process is running but $url did not become reachable within ''${timeout_seconds}s." >&2
+        echo "Inspect $log_file" >&2
+      fi
+      return 1
+    }
+
     pid_running() {
       local pid_file="$1"
       if [ ! -f "$pid_file" ]; then
@@ -586,28 +617,10 @@ in
           >> "$phoenix_log_file" 2>&1 &
         echo "$!" > "$phoenix_pid_file"
 
-        for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
-          if ${curl} -fsS "$phoenix_url" >/dev/null 2>&1; then
-            echo "Phoenix started (pid $(cat "$phoenix_pid_file"))"
-            echo "Phoenix UI: $phoenix_url"
-            exit 0
-          fi
-
-          if ! pid_running "$phoenix_pid_file"; then
-            echo "Phoenix exited during startup; recent log:" >&2
-            tail -n 80 "$phoenix_log_file" >&2 || true
-            exit 1
-          fi
-
-          ${sleep} 1
-        done
-
-        if pid_running "$phoenix_pid_file"; then
+        if wait_http_ready "$phoenix_url" "$phoenix_pid_file" "$phoenix_log_file" 30; then
           echo "Phoenix started (pid $(cat "$phoenix_pid_file"))"
           echo "Phoenix UI: $phoenix_url"
-          echo "Warning: process is running but UI did not become reachable within 30s; inspect $phoenix_log_file" >&2
         else
-          echo "Phoenix did not stay running; inspect $phoenix_log_file" >&2
           exit 1
         fi
       '')
