@@ -466,19 +466,30 @@ chonkie-update # Manual uv tool upgrade
 - Codex and Claude subscription auth remain untouched. Chonkie provider-backed features use provider API SDKs/keys, not ChatGPT or Claude Code subscription entitlements.
 - `chonkie-serve` defaults to localhost and refuses Headroom proxy ports.
 
-#### OpenLIT Local AI Observability
+#### Local AI Observability
 ```bash
-ai-observe-status              # Show OpenLIT release, state dir, ports, reachability, hook status
-ai-observe-doctor              # Check Docker/git/curl/jq, port guardrails, and global env safety
-ai-observe-up                  # Fetch pinned OpenLIT release and start Docker Compose explicitly
+ai-observe-status              # Show selected backend, state dir, reachability, hook status
+ai-observe-doctor              # Check backend prerequisites, port guardrails, and global env safety
+ai-observe-up                  # Start selected backend explicitly
 ai-observe-smoke               # Send one metadata-only synthetic OTLP trace
-ai-observe-down                # Stop the OpenLIT compose project without deleting state
+ai-observe-down                # Stop selected backend without deleting state
+
+ai-observe-phoenix-up          # Start Docker-free Phoenix via uvx on localhost
+ai-observe-phoenix-status      # Show Phoenix pid, state, log, and UI reachability
+ai-observe-phoenix-smoke       # Send one metadata-only trace to Phoenix
+ai-observe-phoenix-down        # Stop helper-managed Phoenix process
+
+ai-observe-openlit-up          # Fetch pinned OpenLIT release and start Docker Compose explicitly
+ai-observe-openlit-status      # Show OpenLIT release, compose status, and reachability
+ai-observe-openlit-smoke       # Send one metadata-only trace to OpenLIT OTLP HTTP
+ai-observe-openlit-down        # Stop OpenLIT compose project without deleting state
 ```
 
-- Runtime source is pinned to OpenLIT release `openlit-1.23.0`.
-- UI binds to `http://127.0.0.1:3010`; OTLP HTTP binds to `http://127.0.0.1:4318`.
-- State lives outside the repo under `~/.local/state/ai-observability/openlit`.
-- Helpers do not set global provider base URLs or `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- Default backend is Phoenix because it runs locally without Docker/OrbStack.
+- Phoenix UI/OTLP HTTP binds to `http://127.0.0.1:6006`; Phoenix OTLP gRPC binds to `127.0.0.1:4317`; state lives outside the repo under `~/.local/state/ai-observability/phoenix`.
+- OpenLIT remains available as explicit optional backend/lab; runtime source is pinned to OpenLIT release `openlit-1.23.0`.
+- OpenLIT UI binds to `http://127.0.0.1:3010`; OTLP HTTP binds to `http://127.0.0.1:4318`.
+- Helpers do not set global provider base URLs, `PHOENIX_COLLECTOR_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`.
 - Coding-agent hooks for Codex, Claude Code, and Cursor are not installed by these helpers; audit OpenLIT's hook installer first.
 - Capture mode is metadata-only: no prompts, outputs, secrets, cookies, private ticket text, or file contents.
 

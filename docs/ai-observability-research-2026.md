@@ -138,9 +138,9 @@ Phase 3: quality/eval integration
   - "RTK on/off"
 - Store results with config commit and metric schema version.
 
-Phase 4: optional Langfuse/Phoenix comparison
+Phase 4: optional backend comparison
 
-- Replay the same OTel events into Langfuse or Phoenix.
+- Replay the same OTel events into OpenLIT, Langfuse, or another backend.
 - Compare:
   - local resource footprint;
   - usefulness of trace UI;
@@ -149,12 +149,13 @@ Phase 4: optional Langfuse/Phoenix comparison
   - backup/export story;
   - how much custom adapter code is needed.
 
-## Implementation Shape If Approved Later
+## Superseded Initial Implementation Shape
 
-Create `home/features/ai/observability.nix`, disabled by default or explicit-use only:
+This section captured the first OpenLIT-oriented implementation shape before
+the Phoenix comparison. It is superseded by the implementation notes below:
 
-- `aiObservability.enable = false` by default unless user wants always-installed helpers.
-- `aiObservability.backend = "openlit"` initially.
+- `aiObservability.enable = true` for helper availability.
+- `aiObservability.backend = "phoenix"` by default.
 - Helper commands:
   - `ai-observe-status`
   - `ai-observe-up`
@@ -162,7 +163,7 @@ Create `home/features/ai/observability.nix`, disabled by default or explicit-use
   - `ai-observe-doctor`
   - `ai-observe-smoke`
 - No global `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT`, or provider auth changes.
-- Docker Compose remains explicit local runtime, not Home Manager activation side effect.
+- Docker Compose remains explicit OpenLIT-only runtime, not Home Manager activation side effect.
 - Nix manages scripts/config/templates; Docker runs backend services.
 
 ## Risks
@@ -194,17 +195,21 @@ Go for research-to-prototype only if we accept these guardrails:
 
 Recommended next step: design Phase 0 schema plus OpenLIT isolated smoke test. Do not install agent hooks yet.
 
-## Implementation Note
+## Implementation Notes
 
-The first PoC is implemented as explicit helper commands in
-`home/features/ai/observability.nix`.
+The helper surface is implemented in `home/features/ai/observability.nix`.
 
-- `ai-observe-up` fetches the pinned OpenLIT release tag `openlit-1.23.0` into
-  XDG state and starts Docker Compose only when invoked.
-- `ai-observe-status`, `ai-observe-doctor`, `ai-observe-smoke`, and
-  `ai-observe-down` provide the local command surface.
-- The UI is remapped to `http://127.0.0.1:3010`; OTLP HTTP stays on
-  `http://127.0.0.1:4318`.
-- Smoke telemetry is metadata-only and uses the `ai.setup.*` contract from this
-  document.
-- Coding-agent hooks remain audit-only and are not installed by this PoC.
+- Default backend is Phoenix, not OpenLIT, so normal local observability does
+  not require Docker/OrbStack. `ai-observe-up` dispatches to
+  `ai-observe-phoenix-up` and starts Phoenix via `uvx --from arize-phoenix`
+  with `PHOENIX_HOST=127.0.0.1`, `PHOENIX_PORT=6006`, and
+  `PHOENIX_GRPC_PORT=4317`.
+- Phoenix state, pid, and logs live outside the repo under
+  `${config.xdg.stateHome}/ai-observability/phoenix`; the helper also sets an
+  explicit SQLite URL in that directory.
+- OpenLIT remains available behind explicit commands
+  `ai-observe-openlit-up/status/smoke/down`; it still fetches release tag
+  `openlit-1.23.0` into XDG state and starts Docker Compose only when invoked.
+- Smoke telemetry remains metadata-only and uses the `ai.setup.*` contract from
+  this document with `ai.setup.backend` set to the active backend.
+- Coding-agent hooks remain audit-only and are not installed by either backend.
