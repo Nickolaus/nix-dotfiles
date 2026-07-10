@@ -480,6 +480,34 @@ in
       };
     };
 
+    observability = {
+      enable = mkEnableOption "local metadata-only AI observability integration" // {
+        default = true;
+      };
+
+      backend = mkOption {
+        type = types.enum [ "phoenix" ];
+        default = "phoenix";
+        description = "Local AI observability backend used by managed agent integrations.";
+      };
+
+      phoenixUrl = mkOption {
+        type = types.str;
+        default = "http://127.0.0.1:6006";
+        description = "Loopback Phoenix UI and OTLP HTTP collector URL.";
+      };
+
+      captureMode = mkOption {
+        type = types.enum [ "metadata-only" ];
+        default = "metadata-only";
+        description = "Managed agent integrations emit metadata only; prompt and tool content capture is intentionally unavailable here.";
+      };
+    };
+
+    codex.observability.enable = mkEnableOption "managed metadata-only Codex observability hook" // {
+      default = true;
+    };
+
     codex.managed.enable = mkEnableOption "system-managed Codex policy under /etc/codex" // {
       default = true;
     };

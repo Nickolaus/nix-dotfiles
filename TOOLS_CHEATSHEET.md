@@ -477,6 +477,7 @@ ai-observe-phoenix-up          # Start Docker-free Phoenix package on localhost
 ai-observe-phoenix-status      # Show Phoenix pid, state, log, and UI reachability
 ai-observe-phoenix-smoke       # Send one metadata-only trace to Phoenix
 ai-observe-phoenix-down        # Stop helper-managed Phoenix process
+ai-observe-claude              # Run Claude Code with local metadata-only OTel tracing
 
 ai-observe-openlit-up          # Fetch pinned OpenLIT release and start Docker Compose explicitly
 ai-observe-openlit-status      # Show OpenLIT release, compose status, and reachability
@@ -490,13 +491,27 @@ ai-observe-openlit-down        # Stop OpenLIT compose project without deleting s
   `packages.<system>.arize-phoenix` from `packages/arize-phoenix/uv.lock` via
   uv2nix, and `aiObservability.phoenixPackage` defaults to that package.
 - Phoenix UI/OTLP HTTP binds to `http://127.0.0.1:6006`; Phoenix OTLP gRPC binds to `127.0.0.1:4317`; state lives outside the repo under `~/.local/state/ai-observability/phoenix`.
+- `aiObservability.autoStart = true` installs a macOS user LaunchAgent
+  (`org.nix-community.home.ai-observability-phoenix`) with `RunAtLoad` and
+  `KeepAlive`, so UI and OTLP ingest are available after login. `ai-observe-up`
+  and `ai-observe-down` are launchd-aware.
 - OpenLIT remains available as explicit optional backend/lab; runtime source is pinned to OpenLIT release `openlit-1.23.0`.
 - OpenLIT UI binds to `http://127.0.0.1:3010`; OTLP HTTP binds to `http://127.0.0.1:4318`.
 - `ai-observe-smoke` uses a Nix-packaged OpenTelemetry Python exporter and
   includes repo-owned signal availability for workflow receipts, Headroom, RTK,
   and hot benchmark scripts.
 - Helpers do not set global provider base URLs, `PHOENIX_COLLECTOR_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`.
-- Coding-agent hooks for Codex, Claude Code, and Cursor are not installed by these helpers; audit OpenLIT's hook installer first.
+- Codex gets a managed metadata-only hook through `/etc/codex/requirements.toml`
+  and `/etc/codex/hooks/ai-observe-metadata.py`. It records lifecycle/tool event
+  names, repo commit/dirty state, and hashed working-directory identifiers; it
+  never records prompts, shell commands, file contents, tool args, or outputs.
+- Claude Code subscription auth stays intact. Use `ai-observe-claude` when you
+  want official Claude Code OTel traces sent to Phoenix with content gates set
+  off (`OTEL_LOG_USER_PROMPTS=0`, `OTEL_LOG_TOOL_DETAILS=0`,
+  `OTEL_LOG_TOOL_CONTENT=0`, `OTEL_LOG_RAW_API_BODIES=0`). Plain `claude`
+  remains untouched.
+- OpenLIT/Cursor coding-agent hooks are still audit-only; use
+  `ai-observe-openlit-hook-audit` before any content-capable vendor hook test.
 - Capture mode is metadata-only: no prompts, outputs, secrets, cookies, private ticket text, or file contents.
 
 #### Headroom (Context Compression)

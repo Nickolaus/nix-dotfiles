@@ -8,6 +8,7 @@ let
     mkIf
     mkOption
     optional
+    optionalAttrs
     removePrefix
     types
     unique
@@ -28,6 +29,8 @@ let
   python = "${pkgs.python3}/bin/python3";
   rm = "${pkgs.coreutils}/bin/rm";
   sleep = "${pkgs.coreutils}/bin/sleep";
+  isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
+  launchdPath = "/etc/profiles/per-user/${config.home.username}/bin:/usr/bin:/bin:/usr/sbin:/sbin";
   otelSmokePython = pkgs.python3.withPackages (pythonPackages: [
     pythonPackages.opentelemetry-sdk
     pythonPackages.opentelemetry-exporter-otlp-proto-http
@@ -36,11 +39,34 @@ let
 
   phoenixUrl = "http://127.0.0.1:${toString cfg.phoenixPort}";
   phoenixLogFile = "${cfg.phoenixStateDir}/phoenix.log";
+  phoenixErrorLogFile = "${cfg.phoenixStateDir}/phoenix.error.log";
   phoenixPidFile = "${cfg.phoenixStateDir}/phoenix.pid";
   phoenixSqlDatabaseUrl = "sqlite:///${cfg.phoenixStateDir}/phoenix.db";
   phoenixPackageConfigured = cfg.phoenixPackage != null;
   phoenixPackageLabel = if phoenixPackageConfigured then cfg.phoenixPackage.name else "not configured";
   phoenixCommand = if phoenixPackageConfigured then "${cfg.phoenixPackage}/bin/${cfg.phoenixBinaryName}" else "";
+  phoenixLaunchdName = "ai-observability-phoenix";
+  phoenixLaunchdLabel = "org.nix-community.home.${phoenixLaunchdName}";
+  phoenixLaunchdPlist = "${config.home.homeDirectory}/Library/LaunchAgents/${phoenixLaunchdLabel}.plist";
+  phoenixServeScript = pkgs.writeShellScript "ai-observe-phoenix-serve" ''
+    set -euo pipefail
+    ${mkdir} -p ${escapeShellArg cfg.phoenixStateDir}
+    cd ${escapeShellArg cfg.phoenixStateDir}
+    echo "$$" > ${escapeShellArg phoenixPidFile}
+    export PHOENIX_WORKING_DIR=${escapeShellArg cfg.phoenixStateDir}
+    export PHOENIX_SQL_DATABASE_URL=${escapeShellArg phoenixSqlDatabaseUrl}
+    export PHOENIX_HOST=127.0.0.1
+    export PHOENIX_PORT=${toString cfg.phoenixPort}
+    export PHOENIX_GRPC_PORT=${toString cfg.phoenixGrpcPort}
+    export PHOENIX_TELEMETRY_ENABLED=false
+    export OPENINFERENCE_HIDE_INPUTS=true
+    export OPENINFERENCE_HIDE_OUTPUTS=true
+    export OPENINFERENCE_HIDE_INPUT_MESSAGES=true
+    export OPENINFERENCE_HIDE_OUTPUT_MESSAGES=true
+    export OPENINFERENCE_HIDE_LLM_PROMPTS=true
+    export OPENINFERENCE_HIDE_LLM_TOOLS=true
+    exec ${escapeShellArg phoenixCommand} serve
+  '';
 
   openlitUiUrl = "http://127.0.0.1:${toString cfg.openlitUiPort}";
   openlitOtlpHttpUrl = "http://127.0.0.1:${toString cfg.openlitOtlpHttpPort}";
@@ -72,11 +98,16 @@ let
     phoenix_package=${escapeShellArg phoenixPackageLabel}
     phoenix_package_configured=${if phoenixPackageConfigured then "true" else "false"}
     phoenix_command=${escapeShellArg phoenixCommand}
+    phoenix_autostart=${if cfg.autoStart then "true" else "false"}
+    phoenix_launchd_name=${escapeShellArg phoenixLaunchdName}
+    phoenix_launchd_label=${escapeShellArg phoenixLaunchdLabel}
+    phoenix_launchd_plist=${escapeShellArg phoenixLaunchdPlist}
     phoenix_state_dir=${escapeShellArg cfg.phoenixStateDir}
     phoenix_port=${toString cfg.phoenixPort}
     phoenix_grpc_port=${toString cfg.phoenixGrpcPort}
     phoenix_url=${escapeShellArg phoenixUrl}
     phoenix_log_file=${escapeShellArg phoenixLogFile}
+    phoenix_error_log_file=${escapeShellArg phoenixErrorLogFile}
     phoenix_pid_file=${escapeShellArg phoenixPidFile}
     phoenix_sql_database_url=${escapeShellArg phoenixSqlDatabaseUrl}
 
@@ -163,6 +194,23 @@ let
       ${kill} -0 "$pid" >/dev/null 2>&1
     }
 
+    phoenix_launchd_domain() {
+      printf 'gui/%s' "$(/usr/bin/id -u)"
+    }
+
+    phoenix_launchd_loaded() {
+      command -v launchctl >/dev/null 2>&1 &&
+        launchctl print "$(phoenix_launchd_domain)/$phoenix_launchd_label" >/dev/null 2>&1
+    }
+
+    phoenix_launchd_bootstrap() {
+      if [ ! -f "$phoenix_launchd_plist" ]; then
+        return 1
+      fi
+      launchctl bootstrap "$(phoenix_launchd_domain)" "$phoenix_launchd_plist" >/dev/null 2>&1 || true
+      launchctl kickstart -k "$(phoenix_launchd_domain)/$phoenix_launchd_label" >/dev/null 2>&1 || true
+    }
+
     print_hook_status() {
       local found=false
       for path in "$HOME/.codex/config.toml" "$HOME/.claude/settings.json" "$HOME/.cursor/hooks.json"; do
@@ -174,6 +222,23 @@ let
       if [ "$found" = false ]; then
         echo "  ok      no OpenLIT coding-agent hooks detected in Codex/Claude/Cursor configs"
       fi
+    }
+
+    print_agent_observability_status() {
+      echo "Agent telemetry:"
+      if command -v ai-observe-claude >/dev/null 2>&1; then
+        echo "  ok      Claude wrapper available: ai-observe-claude"
+      else
+        echo "  missing Claude wrapper: ai-observe-claude"
+      fi
+
+      if [ -f /etc/codex/hooks/ai-observe-metadata.py ] && [ -f /etc/codex/requirements.toml ]; then
+        echo "  ok      Codex managed metadata hook installed"
+      else
+        echo "  missing Codex managed metadata hook; rebuild system config"
+      fi
+
+      echo "  note    prompt/output/tool content capture remains disabled"
     }
 
     print_openlit_hook_audit_checklist() {
@@ -390,6 +455,17 @@ in
       description = "AI observability backend used by generic ai-observe helper commands.";
     };
 
+    autoStart = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Start and keep Phoenix running with a macOS user launchd agent when the
+        Phoenix backend is selected. This makes the local UI and OTLP trace
+        ingest available after login without Docker, OrbStack, tmux, or a
+        manual helper command.
+      '';
+    };
+
     captureMode = mkOption {
       type = types.enum [ "metadata-only" "sampled-content" "full-content" ];
       default = "metadata-only";
@@ -553,6 +629,7 @@ in
         echo
         echo "Coding-agent hooks:"
         print_hook_status
+        print_agent_observability_status
 
         echo
         if [ "$failed" = true ]; then
@@ -597,6 +674,9 @@ in
         echo "OTLP gRPC:       127.0.0.1:$phoenix_grpc_port"
         echo "Capture mode:    $capture_mode"
         echo "Log file:        $phoenix_log_file"
+        echo "Error log:       $phoenix_error_log_file"
+        echo "Autostart:       $phoenix_autostart"
+        echo "LaunchAgent:     $phoenix_launchd_label"
         echo
 
         if [ "$phoenix_package_configured" = true ] && [ -x "$phoenix_command" ]; then
@@ -613,6 +693,18 @@ in
           echo "Phoenix process: not running"
         fi
 
+        if [ "$phoenix_autostart" = true ] && [ -f "$phoenix_launchd_plist" ]; then
+          if phoenix_launchd_loaded; then
+            echo "LaunchAgent:     loaded"
+          else
+            echo "LaunchAgent:     installed but not loaded"
+          fi
+        elif [ "$phoenix_autostart" = true ]; then
+          echo "LaunchAgent:     enabled but plist missing; rebuild Home Manager"
+        else
+          echo "LaunchAgent:     disabled"
+        fi
+
         if ${curl} -fsS "$phoenix_url" >/dev/null 2>&1; then
           echo "UI reachability: ok"
         else
@@ -622,6 +714,7 @@ in
         echo
         echo "Coding-agent hooks:"
         print_hook_status
+        print_agent_observability_status
       '')
 
       (pkgs.writeShellScriptBin "ai-observe-phoenix-up" ''
@@ -653,38 +746,22 @@ in
           exit 1
         fi
 
+        if [ "$phoenix_autostart" = true ] && [ -f "$phoenix_launchd_plist" ] && command -v launchctl >/dev/null 2>&1; then
+          echo "Starting Phoenix LaunchAgent on $phoenix_url"
+          phoenix_launchd_bootstrap
+          if wait_http_ready "$phoenix_url" "$phoenix_pid_file" "$phoenix_log_file" 30; then
+            echo "Phoenix LaunchAgent started"
+            echo "Phoenix UI: $phoenix_url"
+            exit 0
+          fi
+          exit 1
+        fi
+
         echo "Starting Phoenix on $phoenix_url"
         echo "State dir: $phoenix_state_dir"
         echo "Log file:  $phoenix_log_file"
 
-        ${nohup} ${bash} -c '
-          set -euo pipefail
-          state_dir="$1"
-          sql_database_url="$2"
-          port="$3"
-          grpc_port="$4"
-          phoenix_bin="$5"
-
-          cd "$state_dir"
-          export PHOENIX_WORKING_DIR="$state_dir"
-          export PHOENIX_SQL_DATABASE_URL="$sql_database_url"
-          export PHOENIX_HOST=127.0.0.1
-          export PHOENIX_PORT="$port"
-          export PHOENIX_GRPC_PORT="$grpc_port"
-          export PHOENIX_TELEMETRY_ENABLED=false
-          export OPENINFERENCE_HIDE_INPUTS=true
-          export OPENINFERENCE_HIDE_OUTPUTS=true
-          export OPENINFERENCE_HIDE_INPUT_MESSAGES=true
-          export OPENINFERENCE_HIDE_OUTPUT_MESSAGES=true
-          export OPENINFERENCE_HIDE_LLM_PROMPTS=true
-          export OPENINFERENCE_HIDE_LLM_TOOLS=true
-          exec "$phoenix_bin" serve
-        ' ai-observe-phoenix \
-          "$phoenix_state_dir" \
-          "$phoenix_sql_database_url" \
-          "$phoenix_port" \
-          "$phoenix_grpc_port" \
-          "$phoenix_command" \
+        ${nohup} ${escapeShellArg phoenixServeScript} \
           >> "$phoenix_log_file" 2>&1 &
         echo "$!" > "$phoenix_pid_file"
 
@@ -699,6 +776,16 @@ in
       (pkgs.writeShellScriptBin "ai-observe-phoenix-down" ''
         set -euo pipefail
         ${commonShell}
+
+        if [ "$phoenix_autostart" = true ] && [ -f "$phoenix_launchd_plist" ] && command -v launchctl >/dev/null 2>&1; then
+          if phoenix_launchd_loaded; then
+            echo "Stopping Phoenix LaunchAgent $phoenix_launchd_label"
+            launchctl bootout "$(phoenix_launchd_domain)/$phoenix_launchd_label" 2>/dev/null || true
+            ${rm} -f "$phoenix_pid_file"
+            echo "Phoenix LaunchAgent stopped"
+            exit 0
+          fi
+        fi
 
         if ! pid_running "$phoenix_pid_file"; then
           if [ -f "$phoenix_pid_file" ]; then
@@ -737,6 +824,33 @@ in
         fi
 
         send_smoke_trace "$phoenix_url" "phoenix"
+      '')
+
+      (pkgs.writeShellScriptBin "ai-observe-claude" ''
+        set -euo pipefail
+        ${commonShell}
+
+        if ! command -v claude >/dev/null 2>&1; then
+          echo "claude command not found on PATH" >&2
+          exit 127
+        fi
+
+        export CLAUDE_CODE_ENABLE_TELEMETRY=1
+        export CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1
+        export OTEL_TRACES_EXPORTER=otlp
+        export OTEL_METRICS_EXPORTER=none
+        export OTEL_LOGS_EXPORTER=none
+        export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+        export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
+        export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="$phoenix_url/v1/traces"
+        export OTEL_LOG_USER_PROMPTS=0
+        export OTEL_LOG_ASSISTANT_RESPONSES=0
+        export OTEL_LOG_TOOL_DETAILS=0
+        export OTEL_LOG_TOOL_CONTENT=0
+        export OTEL_LOG_RAW_API_BODIES=0
+        export OTEL_RESOURCE_ATTRIBUTES="service.name=nix-dotfiles-claude-code,ai.setup.backend=phoenix,ai.setup.capture_mode=metadata-only"
+
+        exec claude "$@"
       '')
 
       (pkgs.writeShellScriptBin "ai-observe-openlit-status" ''
@@ -835,5 +949,23 @@ in
         send_smoke_trace "$openlit_otlp_http_url" "openlit"
       '')
     ];
+
+    launchd.agents = mkIf (isDarwin && cfg.backend == "phoenix" && cfg.autoStart && phoenixPackageConfigured) {
+      ${phoenixLaunchdName} = {
+        enable = true;
+        config = {
+          ProgramArguments = [ "${phoenixServeScript}" ];
+          RunAtLoad = true;
+          KeepAlive = true;
+          ProcessType = "Background";
+          StandardOutPath = phoenixLogFile;
+          StandardErrorPath = phoenixErrorLogFile;
+          EnvironmentVariables = {
+            PATH = launchdPath;
+            HOME = config.home.homeDirectory;
+          };
+        };
+      };
+    };
   };
 }

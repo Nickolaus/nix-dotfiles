@@ -200,11 +200,12 @@ Recommended next step: design Phase 0 schema plus OpenLIT isolated smoke test. D
 The helper surface is implemented in `home/features/ai/observability.nix`.
 
 - Default backend is Phoenix, not OpenLIT, so normal local observability does
-  not require Docker/OrbStack. `ai-observe-up` dispatches to
-  `ai-observe-phoenix-up` and starts a declaratively supplied Phoenix package
-  with `PHOENIX_HOST=127.0.0.1`, `PHOENIX_PORT=6006`, and
-  `PHOENIX_GRPC_PORT=4317`. The helper refuses to fetch `arize-phoenix` with
-  `uvx`; it defaults to this repo's uv2nix-built
+  not require Docker/OrbStack. `aiObservability.autoStart = true` installs a
+  macOS user LaunchAgent for Phoenix (`RunAtLoad`, `KeepAlive`). `ai-observe-up`
+  and `ai-observe-down` are launchd-aware, while the server still runs from the
+  declaratively supplied Phoenix package with `PHOENIX_HOST=127.0.0.1`,
+  `PHOENIX_PORT=6006`, and `PHOENIX_GRPC_PORT=4317`. The helper refuses to
+  fetch `arize-phoenix` with `uvx`; it defaults to this repo's uv2nix-built
   `packages.<system>.arize-phoenix` package.
 - Phoenix state, pid, and logs live outside the repo under
   `${config.xdg.stateHome}/ai-observability/phoenix`; the helper also sets an
@@ -218,4 +219,17 @@ The helper surface is implemented in `home/features/ai/observability.nix`.
   this document with `ai.setup.backend` set to the active backend. It also marks
   whether repo-owned signals are locally available: workflow receipts,
   `headroom-status`, `rtk gain`, and `scripts/hot-benchmark.sh`.
-- Coding-agent hooks remain audit-only and are not installed by either backend.
+- Codex now has a managed metadata-only hook through the existing
+  `/etc/codex/requirements.toml` mechanism. It emits lifecycle/tool event names,
+  repo commit/dirty state, and hashed working-directory identifiers. It
+  deliberately never serializes prompt text, shell commands, tool args, file
+  paths, file contents, or tool output.
+- Claude Code is integrated by an explicit `ai-observe-claude` wrapper using
+  Claude Code's official OpenTelemetry environment variables. The wrapper enables
+  traces and sets content gates off (`OTEL_LOG_USER_PROMPTS=0`,
+  `OTEL_LOG_ASSISTANT_RESPONSES=0`, `OTEL_LOG_TOOL_DETAILS=0`,
+  `OTEL_LOG_TOOL_CONTENT=0`, `OTEL_LOG_RAW_API_BODIES=0`). Plain `claude`
+  remains untouched so subscription/OAuth connectors and Remote Control are not
+  changed by global base-url or auth mutation.
+- OpenLIT/Cursor coding-agent hooks remain audit-only. Use
+  `ai-observe-openlit-hook-audit` before any content-capable vendor hook test.

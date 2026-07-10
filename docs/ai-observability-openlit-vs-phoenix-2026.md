@@ -137,8 +137,9 @@ Change `aiObservability` default backend from OpenLIT Docker to Phoenix native:
 - `aiObservability.phoenixGrpcPort = 4317`.
 - `aiObservability.phoenixStateDir =
   "${config.xdg.stateHome}/ai-observability/phoenix"`.
-- Provide explicit helper commands first; add an optional launchd service only
-  if always-on UI proves useful.
+- Provide explicit helper commands and a macOS user LaunchAgent by default
+  (`aiObservability.autoStart = true`), because Phoenix UI and OTLP ingest are
+  the same process.
 
 Recommended scoped environment for Phoenix commands:
 
@@ -188,7 +189,15 @@ Prioritize signals that do not need prompt, output, or file-content capture:
 This answers setup-quality questions without reading prompts, outputs, file
 contents, or private ticket text.
 
-### Phase 4: OpenLIT Optional Hook Lab
+### Phase 4: Subscription-Agent Metadata
+
+Codex subscription/Auth usage can be observed with a managed metadata-only hook
+because it runs locally and can ignore content-bearing hook fields. Claude Code
+subscription/OAuth usage should be observed with its official OpenTelemetry
+trace exporter through a scoped wrapper or env, with prompt/tool/content gates
+disabled. Do not mutate provider auth or global base URLs for observability.
+
+### Phase 5: OpenLIT Optional Hook Lab
 
 Keep OpenLIT support behind an explicit backend command:
 

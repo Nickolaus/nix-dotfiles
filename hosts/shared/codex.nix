@@ -1,13 +1,21 @@
 { config, lib, pkgs, ... }:
 
 let
-  inherit (lib) filterAttrs mkIf mkMerge optionalAttrs;
+  inherit (lib) filterAttrs mkIf mkMerge optional optionalAttrs;
 
   aiAgentsLib = import ./ai-agents-lib.nix { inherit lib pkgs; };
   tomlFormat = pkgs.formats.toml { };
   cfg = config.aiAgents;
 
   managedHooksDir = "/etc/codex/hooks";
+  codexObservabilityEnabled =
+    cfg.observability.enable
+    && cfg.codex.observability.enable
+    && cfg.observability.captureMode == "metadata-only";
+  codexObservePython = pkgs.python3.withPackages (pythonPackages: [
+    pythonPackages.opentelemetry-sdk
+    pythonPackages.opentelemetry-exporter-otlp-proto-http
+  ]);
 
   enabledMcpServers =
     filterAttrs (_: server: server.enabled && builtins.elem "codex" server.targets) cfg.mcpServers;
@@ -96,6 +104,128 @@ let
     raise SystemExit(main())
   '';
 
+  codexObserveHook = pkgs.writeText "codex-ai-observe-metadata.py" ''
+    import hashlib
+    import json
+    import logging
+    import os
+    import subprocess
+    import sys
+
+    from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+
+    def safe_str(value):
+        return value if isinstance(value, str) else ""
+
+
+    def safe_bool(value):
+        return isinstance(value, bool) and value
+
+
+    def hash_value(value):
+        if not value:
+            return "unknown"
+        return hashlib.sha256(value.encode("utf-8", "replace")).hexdigest()[:16]
+
+
+    def git_value(args, cwd):
+        try:
+            result = subprocess.run(
+                ["${pkgs.git}/bin/git", "-c", "core.fsmonitor=false", *args],
+                cwd=cwd or None,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+        except Exception:
+            return ""
+        if result.returncode != 0:
+            return ""
+        return result.stdout.strip()
+
+
+    def main() -> int:
+        endpoint_base, backend, capture_mode, hook_event = sys.argv[1:5]
+        if capture_mode != "metadata-only":
+            return 0
+
+        try:
+            payload = json.load(sys.stdin)
+        except Exception:
+            payload = {}
+
+        cwd = safe_str(payload.get("cwd")) or safe_str(payload.get("working_directory")) or os.environ.get("PWD", "")
+        git_root = git_value(["rev-parse", "--show-toplevel"], cwd)
+        git_commit = git_value(["rev-parse", "HEAD"], git_root or cwd) or "unknown"
+        dirty = bool(git_value(["status", "--short", "--untracked-files=all"], git_root or cwd))
+
+        attributes = {
+            "ai.setup.agent": "codex",
+            "ai.setup.backend": backend,
+            "ai.setup.capture_mode": capture_mode,
+            "ai.setup.config_commit": git_commit,
+            "ai.setup.dirty": dirty,
+            "ai.agent.vendor": "openai",
+            "ai.agent.client": "codex",
+            "ai.agent.hook_event": hook_event,
+            "ai.agent.tool_name": safe_str(payload.get("tool_name")) or "none",
+            "ai.agent.session_id": safe_str(payload.get("session_id")) or "unknown",
+            "ai.agent.turn_id": safe_str(payload.get("turn_id")) or "unknown",
+            "ai.agent.cwd_hash": hash_value(cwd),
+            "ai.agent.git_root_hash": hash_value(git_root),
+            "ai.agent.has_tool_input": isinstance(payload.get("tool_input"), dict),
+            "ai.agent.has_tool_output": payload.get("tool_output") is not None,
+            "ai.agent.permission_requested": hook_event == "PermissionRequest",
+            "ai.agent.success": not safe_bool(payload.get("error")),
+        }
+
+        try:
+            logging.disable(logging.CRITICAL)
+            provider = TracerProvider(
+                resource=Resource.create(
+                    {
+                        "service.name": "nix-dotfiles-codex-hooks",
+                        "service.version": "1",
+                    }
+                )
+            )
+            provider.add_span_processor(
+                SimpleSpanProcessor(
+                    OTLPSpanExporter(endpoint=endpoint_base.rstrip("/") + "/v1/traces", timeout=1)
+                )
+            )
+            trace.set_tracer_provider(provider)
+            tracer = trace.get_tracer("nix-dotfiles.ai-observability.codex", "1")
+            with tracer.start_as_current_span("ai.agent.codex." + hook_event) as span:
+                for key, value in attributes.items():
+                    span.set_attribute(key, value)
+            provider.shutdown()
+        except Exception:
+            return 0
+
+        return 0
+
+
+    raise SystemExit(main())
+  '';
+
+  codexObserveHookEntry = eventName: {
+    hooks = [
+      {
+        type = "command";
+        command = "${codexObservePython}/bin/python3 ${managedHooksDir}/ai-observe-metadata.py ${lib.escapeShellArg cfg.observability.phoenixUrl} ${lib.escapeShellArg cfg.observability.backend} ${lib.escapeShellArg cfg.observability.captureMode} ${eventName}";
+        timeout = 5;
+        statusMessage = "Recording metadata-only AI observability event";
+      }
+    ];
+  };
+
   managedConfigSettings = {
     # Redirects the built-in "openai" provider (default `codex`, ChatGPT sign-in *or* an
     # API key -- either stays intact) through the always-on Headroom compression proxy
@@ -132,7 +262,14 @@ let
       existingRequirementHooks
       // {
         managed_dir = managedHooksDir;
-        PreToolUse = (existingRequirementHooks.PreToolUse or [ ]) ++ [
+        SessionStart = (existingRequirementHooks.SessionStart or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "SessionStart");
+        UserPromptSubmit = (existingRequirementHooks.UserPromptSubmit or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "UserPromptSubmit");
+        Stop = (existingRequirementHooks.Stop or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "Stop");
+        SubagentStart = (existingRequirementHooks.SubagentStart or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "SubagentStart");
+        SubagentStop = (existingRequirementHooks.SubagentStop or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "SubagentStop");
+        PostToolUse = (existingRequirementHooks.PostToolUse or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "PostToolUse");
+        PermissionRequest = (existingRequirementHooks.PermissionRequest or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "PermissionRequest");
+        PreToolUse = (existingRequirementHooks.PreToolUse or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "PreToolUse") ++ [
           {
             matcher = "^Bash$";
             hooks = [
@@ -156,6 +293,7 @@ in
     }
     (mkIf cfg.codex.requirements.enable {
       environment.etc."codex/hooks/rtk-pretool.py".source = rtkCodexPretoolHook;
+      environment.etc."codex/hooks/ai-observe-metadata.py".source = codexObserveHook;
       environment.etc."codex/requirements.toml".source =
         tomlFormat.generate "codex-requirements.toml" codexRequirementsSettings;
     })
