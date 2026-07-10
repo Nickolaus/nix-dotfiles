@@ -155,7 +155,9 @@ OPENINFERENCE_HIDE_LLM_TOOLS=true
 ```
 
 Keep those scoped to helper commands or service definitions, not global shell
-profile state.
+profile state. The Home Manager Phoenix wrapper enforces this by execing the
+server through `env -i` with only `HOME`, `PATH`, `PHOENIX_*`, and
+`OPENINFERENCE_*` in scope.
 
 ### Phase 2: Keep The Schema Backend-Neutral
 

@@ -495,6 +495,9 @@ ai-observe-openlit-down        # Stop OpenLIT compose project without deleting s
   (`org.nix-community.home.ai-observability-phoenix`) with `RunAtLoad` and
   `KeepAlive`, so UI and OTLP ingest are available after login. `ai-observe-up`
   and `ai-observe-down` are launchd-aware.
+- The Phoenix server process execs through an `env -i` allowlist containing
+  only `HOME`, `PATH`, `PHOENIX_*`, and `OPENINFERENCE_*`; provider credentials
+  and MCP tokens are not forwarded into the Phoenix process environment.
 - OpenLIT remains available as explicit optional backend/lab; runtime source is pinned to OpenLIT release `openlit-1.23.0`.
 - OpenLIT UI binds to `http://127.0.0.1:3010`; OTLP HTTP binds to `http://127.0.0.1:4318`.
 - `ai-observe-smoke` uses a Nix-packaged OpenTelemetry Python exporter and

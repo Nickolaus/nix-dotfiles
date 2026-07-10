@@ -21,6 +21,7 @@ let
   bash = "${pkgs.bash}/bin/bash";
   curl = "${pkgs.curl}/bin/curl";
   docker = "${pkgs.docker}/bin/docker";
+  env = "${pkgs.coreutils}/bin/env";
   git = "${pkgs.git}/bin/git";
   grep = "${pkgs.gnugrep}/bin/grep";
   kill = "${pkgs.coreutils}/bin/kill";
@@ -53,19 +54,22 @@ let
     ${mkdir} -p ${escapeShellArg cfg.phoenixStateDir}
     cd ${escapeShellArg cfg.phoenixStateDir}
     echo "$$" > ${escapeShellArg phoenixPidFile}
-    export PHOENIX_WORKING_DIR=${escapeShellArg cfg.phoenixStateDir}
-    export PHOENIX_SQL_DATABASE_URL=${escapeShellArg phoenixSqlDatabaseUrl}
-    export PHOENIX_HOST=127.0.0.1
-    export PHOENIX_PORT=${toString cfg.phoenixPort}
-    export PHOENIX_GRPC_PORT=${toString cfg.phoenixGrpcPort}
-    export PHOENIX_TELEMETRY_ENABLED=false
-    export OPENINFERENCE_HIDE_INPUTS=true
-    export OPENINFERENCE_HIDE_OUTPUTS=true
-    export OPENINFERENCE_HIDE_INPUT_MESSAGES=true
-    export OPENINFERENCE_HIDE_OUTPUT_MESSAGES=true
-    export OPENINFERENCE_HIDE_LLM_PROMPTS=true
-    export OPENINFERENCE_HIDE_LLM_TOOLS=true
-    exec ${escapeShellArg phoenixCommand} serve
+    exec ${env} -i \
+      HOME=${escapeShellArg config.home.homeDirectory} \
+      PATH=${escapeShellArg launchdPath} \
+      PHOENIX_WORKING_DIR=${escapeShellArg cfg.phoenixStateDir} \
+      PHOENIX_SQL_DATABASE_URL=${escapeShellArg phoenixSqlDatabaseUrl} \
+      PHOENIX_HOST=127.0.0.1 \
+      PHOENIX_PORT=${toString cfg.phoenixPort} \
+      PHOENIX_GRPC_PORT=${toString cfg.phoenixGrpcPort} \
+      PHOENIX_TELEMETRY_ENABLED=false \
+      OPENINFERENCE_HIDE_INPUTS=true \
+      OPENINFERENCE_HIDE_OUTPUTS=true \
+      OPENINFERENCE_HIDE_INPUT_MESSAGES=true \
+      OPENINFERENCE_HIDE_OUTPUT_MESSAGES=true \
+      OPENINFERENCE_HIDE_LLM_PROMPTS=true \
+      OPENINFERENCE_HIDE_LLM_TOOLS=true \
+      ${escapeShellArg phoenixCommand} serve
   '';
 
   openlitUiUrl = "http://127.0.0.1:${toString cfg.openlitUiPort}";
@@ -192,6 +196,13 @@ let
         return 1
       fi
       ${kill} -0 "$pid" >/dev/null 2>&1
+    }
+
+    listener_has_pid() {
+      local listeners="$1"
+      local pid="$2"
+      [ -n "$pid" ] &&
+        printf '%s\n' "$listeners" | ${grep} -Eq "^[^[:space:]]+[[:space:]]+$pid[[:space:]]"
     }
 
     phoenix_launchd_domain() {
@@ -607,8 +618,17 @@ in
               ;;
             *)
               if listeners="$(port_listeners "$port")" && [ -n "$listeners" ]; then
-                echo "warning port $port already has listener:"
-                printf '%s\n' "$listeners" | sed 's/^/        /'
+                expected_pid=""
+                if [ "$backend" = "phoenix" ] && pid_running "$phoenix_pid_file"; then
+                  expected_pid="$(cat "$phoenix_pid_file" 2>/dev/null || true)"
+                fi
+
+                if [ "$backend" = "phoenix" ] && listener_has_pid "$listeners" "$expected_pid"; then
+                  echo "ok      port $port has managed Phoenix listener (pid $expected_pid)"
+                else
+                  echo "warning port $port already has listener:"
+                  printf '%s\n' "$listeners" | sed 's/^/        /'
+                fi
               else
                 echo "ok      port $port has no listener"
               fi
