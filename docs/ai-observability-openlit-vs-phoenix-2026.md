@@ -257,6 +257,19 @@ two privacy surfaces, and more local services before the repo has a stable metri
 contract. Combine later only by routing the same OTel events to multiple backends
 for a short comparison window.
 
+## Implementation Note: Metadata Insights
+
+Phoenix remains the local collector/store, but its native token/cost dashboards
+only become meaningful when spans include real LLM token/model attributes. The
+repo now treats `ai-observe-insights` as the metadata-only research view for
+Codex/Phoenix traces: it summarizes sessions, event mix, tool categories,
+permission decisions, exit-status classes, and latest activity from local
+Phoenix SQLite state without capturing prompts, outputs, or file contents.
+
+Do not emit fake `llm.*` token/model fields just to populate Phoenix charts.
+Keep token/cost dashboards empty until provider instrumentation can supply real
+OpenInference-compatible LLM attributes inside an audited content/privacy model.
+
 ## Sources
 
 - OpenLIT self-hosting:

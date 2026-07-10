@@ -199,6 +199,14 @@ let
         return "agent"
 
 
+    def openinference_span_kind(hook_event):
+        if hook_event in {"PreToolUse", "PostToolUse", "PermissionRequest"}:
+            return "TOOL"
+        if hook_event in {"SubagentStart", "SubagentStop"}:
+            return "AGENT"
+        return "CHAIN"
+
+
     def exit_status_class(payload, tool_response):
         if safe_bool(payload.get("error")):
             return "error"
@@ -273,10 +281,12 @@ let
             "ai.setup.capture_mode": capture_mode,
             "ai.setup.config_commit": git_commit,
             "ai.setup.dirty": dirty,
+            "openinference.span.kind": openinference_span_kind(hook_event),
             "ai.agent.vendor": "openai",
             "ai.agent.client": "codex",
             "ai.agent.hook_event": hook_event,
             "ai.agent.event_role": event_role(hook_event),
+            "ai.agent.metric_hint": "metadata-only-no-token-cost",
             "ai.agent.tool_name": tool_name,
             "ai.agent.tool_category": tool_category(tool_name),
             "ai.agent.session_id": session_id,

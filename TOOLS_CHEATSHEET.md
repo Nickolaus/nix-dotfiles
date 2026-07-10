@@ -471,11 +471,13 @@ ai-observe-status              # Show selected backend, state dir, reachability,
 ai-observe-doctor              # Check backend prerequisites, port guardrails, and global env safety
 ai-observe-up                  # Start selected backend explicitly
 ai-observe-smoke               # Send one metadata-only synthetic OTLP trace
+ai-observe-insights            # Summarize metadata traces into local research metrics
 ai-observe-down                # Stop selected backend without deleting state
 
 ai-observe-phoenix-up          # Start Docker-free Phoenix package on localhost
 ai-observe-phoenix-status      # Show Phoenix pid, state, log, and UI reachability
 ai-observe-phoenix-smoke       # Send one metadata-only trace to Phoenix
+ai-observe-phoenix-insights    # Show session/tool/permission/error summaries
 ai-observe-phoenix-down        # Stop helper-managed Phoenix process
 ai-observe-claude              # Run Claude Code with local metadata-only OTel tracing
 
@@ -503,6 +505,10 @@ ai-observe-openlit-down        # Stop OpenLIT compose project without deleting s
 - `ai-observe-smoke` uses a Nix-packaged OpenTelemetry Python exporter and
   includes repo-owned signal availability for workflow receipts, Headroom, RTK,
   and hot benchmark scripts.
+- `ai-observe-insights` reads local Phoenix SQLite state and reports
+  research-oriented metadata summaries. Phoenix built-in token/cost dashboards
+  stay empty until real LLM token/model attributes are emitted; helpers do not
+  fabricate those metrics.
 - Helpers do not set global provider base URLs, `PHOENIX_COLLECTOR_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`.
 - Codex gets a managed metadata-only hook through `/etc/codex/requirements.toml`
   and `/etc/codex/hooks/ai-observe-metadata.py`. It records lifecycle/tool event
