@@ -128,8 +128,10 @@ are also now a stable reference point for portable LLM trace attributes.
 Change `aiObservability` default backend from OpenLIT Docker to Phoenix native:
 
 - `aiObservability.backend = "phoenix"`.
-- `aiObservability.phoenixPackage` points at a Nix package/overlay output that
-  provides the `phoenix` binary; do not fetch `arize-phoenix` at helper runtime.
+- `aiObservability.phoenixPackage` defaults to this repo's
+  `packages.<system>.arize-phoenix` package, which is built from the
+  repo-owned `packages/arize-phoenix/uv.lock` with uv2nix; do not fetch
+  `arize-phoenix` at helper runtime.
 - `aiObservability.phoenixPort = 6006`, or another repo-specific free loopback
   port if needed.
 - `aiObservability.phoenixGrpcPort = 4317`.

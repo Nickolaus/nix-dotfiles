@@ -487,10 +487,9 @@ ai-observe-openlit-down        # Stop OpenLIT compose project without deleting s
 ```
 
 - Default backend is Phoenix because it can run locally without Docker/OrbStack.
-- Phoenix server is not fetched at runtime. Because `arize-phoenix` is not
-  currently in nixpkgs, set `aiObservability.phoenixPackage` to a Nix package
-  from an overlay or repo package before using `ai-observe-phoenix-up`;
-  `ai-observe-doctor` reports this as missing until configured.
+- Phoenix server is not fetched at runtime. This repo provides
+  `packages.<system>.arize-phoenix` from `packages/arize-phoenix/uv.lock` via
+  uv2nix, and `aiObservability.phoenixPackage` defaults to that package.
 - Phoenix UI/OTLP HTTP binds to `http://127.0.0.1:6006`; Phoenix OTLP gRPC binds to `127.0.0.1:4317`; state lives outside the repo under `~/.local/state/ai-observability/phoenix`.
 - OpenLIT remains available as explicit optional backend/lab; runtime source is pinned to OpenLIT release `openlit-1.23.0`.
 - OpenLIT UI binds to `http://127.0.0.1:3010`; OTLP HTTP binds to `http://127.0.0.1:4318`.

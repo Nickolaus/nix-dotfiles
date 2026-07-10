@@ -35,6 +35,11 @@
 
     serena.url = "github:oraios/serena/v1.5.3";
 
+    # Reuse Serena's pinned pyproject toolchain for repo-owned Python app envs.
+    pyproject-nix.follows = "serena/pyproject-nix";
+    uv2nix.follows = "serena/uv2nix";
+    pyproject-build-systems.follows = "serena/pyproject-build-systems";
+
     codebase-memory-mcp.url = "github:DeusData/codebase-memory-mcp/v0.8.1";
 
     # Disko for declarative disk management
@@ -57,9 +62,19 @@
     , sops-nix
     , disko
     , impermanence
+    , pyproject-nix
+    , uv2nix
+    , pyproject-build-systems
     , ...
     }:
     let
+      inherit (nixpkgs) lib;
+      flakeSystems = [
+        "aarch64-darwin"
+        "aarch64-linux"
+        "x86_64-linux"
+      ];
+      forAllSystems = lib.genAttrs flakeSystems;
       extraArgs = {
         inherit sops-nix disko impermanence;
         flake = self;
@@ -136,12 +151,25 @@
       # Custom installer ISOs with SSH pre-enabled
       # Build with: nix build .#packages.aarch64-linux.farnsworth-installer
       # Or: nix build .#packages.x86_64-linux.farnsworth-installer
-      packages = {
-        # ARM (aarch64) installer - for Apple Silicon and ARM laptops
-        aarch64-linux.farnsworth-installer = mkInstaller "aarch64-linux";
-
-        # x86_64 installer - for Intel/AMD systems
-        x86_64-linux.farnsworth-installer = mkInstaller "x86_64-linux";
-      };
+      packages = forAllSystems
+        (system:
+          let
+            pkgs = import nixpkgs {
+              inherit system;
+              config.allowUnfreePredicate = pkg:
+                lib.getName pkg == "arize-phoenix";
+            };
+          in
+          {
+            arize-phoenix = pkgs.callPackage ./packages/arize-phoenix {
+              inherit pyproject-nix uv2nix pyproject-build-systems;
+            };
+          } // lib.optionalAttrs (system == "aarch64-linux") {
+            # ARM (aarch64) installer - for Apple Silicon and ARM laptops
+            farnsworth-installer = mkInstaller "aarch64-linux";
+          } // lib.optionalAttrs (system == "x86_64-linux") {
+            # x86_64 installer - for Intel/AMD systems
+            farnsworth-installer = mkInstaller "x86_64-linux";
+          });
     };
 }

@@ -509,8 +509,20 @@
         "mattpocock-skills": "mattpocock-skills",
         "nix-darwin": "nix-darwin",
         "nixpkgs": "nixpkgs_7",
+        "pyproject-build-systems": [
+          "serena",
+          "pyproject-build-systems"
+        ],
+        "pyproject-nix": [
+          "serena",
+          "pyproject-nix"
+        ],
         "serena": "serena",
-        "sops-nix": "sops-nix"
+        "sops-nix": "sops-nix",
+        "uv2nix": [
+          "serena",
+          "uv2nix"
+        ]
       }
     },
     "serena": {

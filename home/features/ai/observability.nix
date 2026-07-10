@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, flake ? null, ... }:
 
 let
   inherit (lib)
@@ -14,6 +14,8 @@ let
     ;
 
   cfg = config.aiObservability;
+  system = pkgs.stdenv.hostPlatform.system;
+  flakePackages = if flake == null then { } else flake.packages.${system} or { };
 
   bash = "${pkgs.bash}/bin/bash";
   curl = "${pkgs.curl}/bin/curl";
@@ -400,12 +402,11 @@ in
 
     phoenixPackage = mkOption {
       type = types.nullOr types.package;
-      default = null;
+      default = flakePackages.arize-phoenix or null;
       description = ''
-        Nix package that provides the Phoenix server binary. nixpkgs does not
-        currently package Arize Phoenix, so keep this null until supplied by a
-        repo overlay or package input. Helpers never fetch Phoenix from PyPI at
-        runtime.
+        Nix package that provides the Phoenix server binary. Defaults to this
+        repo's uv2nix-built arize-phoenix package when available. Helpers never
+        fetch Phoenix from PyPI at runtime.
       '';
     };
 

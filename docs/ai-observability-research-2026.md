@@ -204,7 +204,8 @@ The helper surface is implemented in `home/features/ai/observability.nix`.
   `ai-observe-phoenix-up` and starts a declaratively supplied Phoenix package
   with `PHOENIX_HOST=127.0.0.1`, `PHOENIX_PORT=6006`, and
   `PHOENIX_GRPC_PORT=4317`. The helper refuses to fetch `arize-phoenix` with
-  `uvx`; set `aiObservability.phoenixPackage` from a Nix overlay/package first.
+  `uvx`; it defaults to this repo's uv2nix-built
+  `packages.<system>.arize-phoenix` package.
 - Phoenix state, pid, and logs live outside the repo under
   `${config.xdg.stateHome}/ai-observability/phoenix`; the helper also sets an
   explicit SQLite URL in that directory.
