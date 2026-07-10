@@ -128,6 +128,8 @@ are also now a stable reference point for portable LLM trace attributes.
 Change `aiObservability` default backend from OpenLIT Docker to Phoenix native:
 
 - `aiObservability.backend = "phoenix"`.
+- `aiObservability.phoenixPackage` points at a Nix package/overlay output that
+  provides the `phoenix` binary; do not fetch `arize-phoenix` at helper runtime.
 - `aiObservability.phoenixPort = 6006`, or another repo-specific free loopback
   port if needed.
 - `aiObservability.phoenixGrpcPort = 4317`.
@@ -141,7 +143,6 @@ Recommended scoped environment for Phoenix commands:
 ```sh
 PHOENIX_WORKING_DIR="$XDG_STATE_HOME/ai-observability/phoenix"
 PHOENIX_TELEMETRY_ENABLED=false
-PHOENIX_ALLOW_EXTERNAL_RESOURCES=false
 OPENINFERENCE_HIDE_INPUTS=true
 OPENINFERENCE_HIDE_OUTPUTS=true
 OPENINFERENCE_HIDE_INPUT_MESSAGES=true

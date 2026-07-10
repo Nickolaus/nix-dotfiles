@@ -201,15 +201,20 @@ The helper surface is implemented in `home/features/ai/observability.nix`.
 
 - Default backend is Phoenix, not OpenLIT, so normal local observability does
   not require Docker/OrbStack. `ai-observe-up` dispatches to
-  `ai-observe-phoenix-up` and starts Phoenix via `uvx --from arize-phoenix`
+  `ai-observe-phoenix-up` and starts a declaratively supplied Phoenix package
   with `PHOENIX_HOST=127.0.0.1`, `PHOENIX_PORT=6006`, and
-  `PHOENIX_GRPC_PORT=4317`.
+  `PHOENIX_GRPC_PORT=4317`. The helper refuses to fetch `arize-phoenix` with
+  `uvx`; set `aiObservability.phoenixPackage` from a Nix overlay/package first.
 - Phoenix state, pid, and logs live outside the repo under
   `${config.xdg.stateHome}/ai-observability/phoenix`; the helper also sets an
   explicit SQLite URL in that directory.
 - OpenLIT remains available behind explicit commands
   `ai-observe-openlit-up/status/smoke/down`; it still fetches release tag
   `openlit-1.23.0` into XDG state and starts Docker Compose only when invoked.
+  `ai-observe-openlit-hook-audit` prints the disposable-config/uninstall/privacy
+  checklist without installing hooks.
 - Smoke telemetry remains metadata-only and uses the `ai.setup.*` contract from
-  this document with `ai.setup.backend` set to the active backend.
+  this document with `ai.setup.backend` set to the active backend. It also marks
+  whether repo-owned signals are locally available: workflow receipts,
+  `headroom-status`, `rtk gain`, and `scripts/hot-benchmark.sh`.
 - Coding-agent hooks remain audit-only and are not installed by either backend.

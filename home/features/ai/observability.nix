@@ -7,6 +7,7 @@ let
     mkEnableOption
     mkIf
     mkOption
+    optional
     removePrefix
     types
     unique
@@ -25,13 +26,19 @@ let
   python = "${pkgs.python3}/bin/python3";
   rm = "${pkgs.coreutils}/bin/rm";
   sleep = "${pkgs.coreutils}/bin/sleep";
-  uv = "${pkgs.uv}/bin/uv";
-  uvx = "${pkgs.uv}/bin/uvx";
+  otelSmokePython = pkgs.python3.withPackages (pythonPackages: [
+    pythonPackages.opentelemetry-sdk
+    pythonPackages.opentelemetry-exporter-otlp-proto-http
+  ]);
+  otelSmokePythonBin = "${otelSmokePython}/bin/python3";
 
   phoenixUrl = "http://127.0.0.1:${toString cfg.phoenixPort}";
   phoenixLogFile = "${cfg.phoenixStateDir}/phoenix.log";
   phoenixPidFile = "${cfg.phoenixStateDir}/phoenix.pid";
   phoenixSqlDatabaseUrl = "sqlite:///${cfg.phoenixStateDir}/phoenix.db";
+  phoenixPackageConfigured = cfg.phoenixPackage != null;
+  phoenixPackageLabel = if phoenixPackageConfigured then cfg.phoenixPackage.name else "not configured";
+  phoenixCommand = if phoenixPackageConfigured then "${cfg.phoenixPackage}/bin/${cfg.phoenixBinaryName}" else "";
 
   openlitUiUrl = "http://127.0.0.1:${toString cfg.openlitUiPort}";
   openlitOtlpHttpUrl = "http://127.0.0.1:${toString cfg.openlitOtlpHttpPort}";
@@ -43,22 +50,26 @@ let
   openlitImage = "ghcr.io/openlit/openlit:${openlitImageTag}";
 
   reservedPorts = [ 8787 8788 11434 11435 11436 ];
-  managedPorts = [
+  phoenixManagedPorts = unique [
     cfg.phoenixPort
     cfg.phoenixGrpcPort
+  ];
+  openlitManagedPorts = unique [
     cfg.openlitUiPort
     cfg.openlitOtlpHttpPort
     cfg.openlitOtlpGrpcPort
   ];
-  uniqueManagedPorts = unique managedPorts;
   reservedPortsShell = concatMapStringsSep " " toString reservedPorts;
-  managedPortsShell = concatMapStringsSep " " toString uniqueManagedPorts;
+  phoenixManagedPortsShell = concatMapStringsSep " " toString phoenixManagedPorts;
+  openlitManagedPortsShell = concatMapStringsSep " " toString openlitManagedPorts;
 
   commonShell = ''
     backend=${escapeShellArg cfg.backend}
     capture_mode=${escapeShellArg cfg.captureMode}
 
-    phoenix_package=${escapeShellArg cfg.phoenixPackage}
+    phoenix_package=${escapeShellArg phoenixPackageLabel}
+    phoenix_package_configured=${if phoenixPackageConfigured then "true" else "false"}
+    phoenix_command=${escapeShellArg phoenixCommand}
     phoenix_state_dir=${escapeShellArg cfg.phoenixStateDir}
     phoenix_port=${toString cfg.phoenixPort}
     phoenix_grpc_port=${toString cfg.phoenixGrpcPort}
@@ -79,6 +90,19 @@ let
     openlit_ui_url=${escapeShellArg openlitUiUrl}
     openlit_otlp_http_url=${escapeShellArg openlitOtlpHttpUrl}
     openlit_image=${escapeShellArg openlitImage}
+
+    dispatch_backend_command() {
+      local command_name="$1"
+      shift
+      case "$backend" in
+        phoenix)
+          exec "$script_dir/ai-observe-phoenix-$command_name" "$@"
+          ;;
+        openlit)
+          exec "$script_dir/ai-observe-openlit-$command_name" "$@"
+          ;;
+      esac
+    }
 
     openlit_compose_cmd() {
       ${docker} compose --project-name "$openlit_project_name" --project-directory "$openlit_source_dir" -f "$openlit_compose_file" "$@"
@@ -150,6 +174,17 @@ let
       fi
     }
 
+    print_openlit_hook_audit_checklist() {
+      echo "OpenLIT hook audit checklist:"
+      echo "  1. Inspect exact files touched by OpenLIT installer for one vendor only."
+      echo "  2. Run installer only with disposable Codex/Claude/Cursor config paths."
+      echo "  3. Force OPENLIT_CODING_CONTENT_CAPTURE=metadata_only or minimal."
+      echo "  4. Confirm uninstall restores or removes every installer mutation."
+      echo "  5. Confirm provider credentials and private content never leave localhost."
+      echo "  6. Confirm redaction/capture behavior before any sampled/full content mode."
+      echo "  7. Document rollback commands before enabling hooks outside the lab."
+    }
+
     gather_repo_context() {
       git_root="$(${git} -c core.fsmonitor=false rev-parse --show-toplevel 2>/dev/null || true)"
       if [ -n "$git_root" ]; then
@@ -177,6 +212,30 @@ let
       else
         rtk_enabled=false
       fi
+
+      if command -v ai-receipt-status >/dev/null 2>&1; then
+        receipts_enabled=true
+      else
+        receipts_enabled=false
+      fi
+
+      if command -v headroom-status >/dev/null 2>&1; then
+        headroom_status_available=true
+      else
+        headroom_status_available=false
+      fi
+
+      if command -v rtk >/dev/null 2>&1; then
+        rtk_gain_available=true
+      else
+        rtk_gain_available=false
+      fi
+
+      if [ -n "$git_root" ] && [ -x "$git_root/scripts/hot-benchmark.sh" ]; then
+        hot_benchmark_available=true
+      else
+        hot_benchmark_available=false
+      fi
     }
 
     send_smoke_trace() {
@@ -191,10 +250,7 @@ let
 
       gather_repo_context
 
-      ${uv} run --quiet \
-        --with opentelemetry-sdk \
-        --with opentelemetry-exporter-otlp-proto-http \
-        python - \
+      ${otelSmokePythonBin} - \
         "$target_url/v1/traces" \
         "$backend_name" \
         "$config_commit" \
@@ -203,7 +259,11 @@ let
         "$headroom_enabled" \
         "$headroom_proxy" \
         "$rtk_enabled" \
-        "$capture_mode" <<'PY'
+        "$capture_mode" \
+        "$receipts_enabled" \
+        "$headroom_status_available" \
+        "$rtk_gain_available" \
+        "$hot_benchmark_available" <<'PY'
     import sys
 
     from opentelemetry import trace
@@ -222,6 +282,10 @@ let
         headroom_proxy,
         rtk_enabled,
         capture_mode,
+        receipts_enabled,
+        headroom_status_available,
+        rtk_gain_available,
+        hot_benchmark_available,
     ) = sys.argv[1:]
 
     def as_bool(value: str) -> bool:
@@ -250,6 +314,10 @@ let
         span.set_attribute("ai.setup.backend", backend_name)
         span.set_attribute("ai.setup.workflow_kind", "benchmark")
         span.set_attribute("ai.setup.capture_mode", capture_mode)
+        span.set_attribute("ai.signal.workflow_receipts.available", as_bool(receipts_enabled))
+        span.set_attribute("ai.signal.headroom_status.available", as_bool(headroom_status_available))
+        span.set_attribute("ai.signal.rtk_gain.available", as_bool(rtk_gain_available))
+        span.set_attribute("ai.signal.hot_benchmark.available", as_bool(hot_benchmark_available))
 
     provider.shutdown()
     PY
@@ -331,9 +399,20 @@ in
     };
 
     phoenixPackage = mkOption {
+      type = types.nullOr types.package;
+      default = null;
+      description = ''
+        Nix package that provides the Phoenix server binary. nixpkgs does not
+        currently package Arize Phoenix, so keep this null until supplied by a
+        repo overlay or package input. Helpers never fetch Phoenix from PyPI at
+        runtime.
+      '';
+    };
+
+    phoenixBinaryName = mkOption {
       type = types.str;
-      default = "arize-phoenix";
-      description = "PyPI package used by uvx for the local Phoenix server.";
+      default = "phoenix";
+      description = "Binary name inside aiObservability.phoenixPackage used to run the Phoenix server.";
     };
 
     phoenixPort = mkOption {
@@ -386,20 +465,13 @@ in
   };
 
   config = mkIf cfg.enable {
-    home.packages = [
+    home.packages = (optional phoenixPackageConfigured cfg.phoenixPackage) ++ [
       (pkgs.writeShellScriptBin "ai-observe-status" ''
         set -euo pipefail
         ${commonShell}
         script_dir="$(${pkgs.coreutils}/bin/dirname "$0")"
 
-        case "$backend" in
-          phoenix)
-            exec "$script_dir/ai-observe-phoenix-status" "$@"
-            ;;
-          openlit)
-            exec "$script_dir/ai-observe-openlit-status" "$@"
-            ;;
-        esac
+        dispatch_backend_command status "$@"
       '')
 
       (pkgs.writeShellScriptBin "ai-observe-doctor" ''
@@ -418,9 +490,14 @@ in
         echo "Backend: $backend"
         echo
 
-        required_bins="${curl} ${git} ${uv}"
+        required_bins="${curl} ${git} ${otelSmokePythonBin}"
         if [ "$backend" = "phoenix" ]; then
-          required_bins="$required_bins ${uvx}"
+          if [ "$phoenix_package_configured" = true ]; then
+            required_bins="$required_bins $phoenix_command"
+          else
+            echo "missing Phoenix package: set aiObservability.phoenixPackage to a Nix package that provides '${cfg.phoenixBinaryName}'"
+            failed=true
+          fi
         else
           required_bins="$required_bins ${docker}"
         fi
@@ -436,7 +513,16 @@ in
 
         echo
         echo "Port guardrails:"
-        for port in ${managedPortsShell}; do
+        case "$backend" in
+          phoenix)
+            managed_ports="${phoenixManagedPortsShell}"
+            ;;
+          openlit)
+            managed_ports="${openlitManagedPortsShell}"
+            ;;
+        esac
+
+        for port in $managed_ports; do
           case " ${reservedPortsShell} " in
             *" $port "*)
               echo "fail    configured port $port conflicts with reserved Headroom/Ollama ports"
@@ -480,14 +566,7 @@ in
         ${commonShell}
         script_dir="$(${pkgs.coreutils}/bin/dirname "$0")"
 
-        case "$backend" in
-          phoenix)
-            exec "$script_dir/ai-observe-phoenix-up" "$@"
-            ;;
-          openlit)
-            exec "$script_dir/ai-observe-openlit-up" "$@"
-            ;;
-        esac
+        dispatch_backend_command up "$@"
       '')
 
       (pkgs.writeShellScriptBin "ai-observe-down" ''
@@ -495,14 +574,7 @@ in
         ${commonShell}
         script_dir="$(${pkgs.coreutils}/bin/dirname "$0")"
 
-        case "$backend" in
-          phoenix)
-            exec "$script_dir/ai-observe-phoenix-down" "$@"
-            ;;
-          openlit)
-            exec "$script_dir/ai-observe-openlit-down" "$@"
-            ;;
-        esac
+        dispatch_backend_command down "$@"
       '')
 
       (pkgs.writeShellScriptBin "ai-observe-smoke" ''
@@ -510,14 +582,7 @@ in
         ${commonShell}
         script_dir="$(${pkgs.coreutils}/bin/dirname "$0")"
 
-        case "$backend" in
-          phoenix)
-            exec "$script_dir/ai-observe-phoenix-smoke" "$@"
-            ;;
-          openlit)
-            exec "$script_dir/ai-observe-openlit-smoke" "$@"
-            ;;
-        esac
+        dispatch_backend_command smoke "$@"
       '')
 
       (pkgs.writeShellScriptBin "ai-observe-phoenix-status" ''
@@ -533,10 +598,12 @@ in
         echo "Log file:        $phoenix_log_file"
         echo
 
-        if [ -x ${escapeShellArg uvx} ]; then
-          echo "uvx:             ok (${pkgs.uv})"
+        if [ "$phoenix_package_configured" = true ] && [ -x "$phoenix_command" ]; then
+          echo "Phoenix binary:  ok ($phoenix_command)"
+        elif [ "$phoenix_package_configured" = true ]; then
+          echo "Phoenix binary:  missing ($phoenix_command)"
         else
-          echo "uvx:             missing"
+          echo "Phoenix binary:  not configured; set aiObservability.phoenixPackage"
         fi
 
         if pid_running "$phoenix_pid_file"; then
@@ -562,11 +629,17 @@ in
 
         if [ "''${1:-}" = "--help" ] || [ "''${1:-}" = "-h" ]; then
           echo "Usage: ai-observe-phoenix-up"
-          echo "Starts local Phoenix via uvx in the background on $phoenix_url."
+          echo "Starts the declaratively packaged Phoenix server in the background on $phoenix_url."
           exit 0
         fi
 
         ${mkdir} -p "$phoenix_state_dir"
+
+        if [ "$phoenix_package_configured" != true ] || [ ! -x "$phoenix_command" ]; then
+          echo "Phoenix server package is not declaratively configured." >&2
+          echo "Set aiObservability.phoenixPackage to a Nix package that provides '${cfg.phoenixBinaryName}'." >&2
+          exit 1
+        fi
 
         if pid_running "$phoenix_pid_file"; then
           echo "Phoenix already running at $phoenix_url (pid $(cat "$phoenix_pid_file"))"
@@ -589,8 +662,7 @@ in
           sql_database_url="$2"
           port="$3"
           grpc_port="$4"
-          uvx_bin="$5"
-          package="$6"
+          phoenix_bin="$5"
 
           cd "$state_dir"
           export PHOENIX_WORKING_DIR="$state_dir"
@@ -599,21 +671,19 @@ in
           export PHOENIX_PORT="$port"
           export PHOENIX_GRPC_PORT="$grpc_port"
           export PHOENIX_TELEMETRY_ENABLED=false
-          export PHOENIX_ALLOW_EXTERNAL_RESOURCES=false
           export OPENINFERENCE_HIDE_INPUTS=true
           export OPENINFERENCE_HIDE_OUTPUTS=true
           export OPENINFERENCE_HIDE_INPUT_MESSAGES=true
           export OPENINFERENCE_HIDE_OUTPUT_MESSAGES=true
           export OPENINFERENCE_HIDE_LLM_PROMPTS=true
           export OPENINFERENCE_HIDE_LLM_TOOLS=true
-          exec "$uvx_bin" --from "$package" phoenix serve
+          exec "$phoenix_bin" serve
         ' ai-observe-phoenix \
           "$phoenix_state_dir" \
           "$phoenix_sql_database_url" \
           "$phoenix_port" \
           "$phoenix_grpc_port" \
-          ${uvx} \
-          "$phoenix_package" \
+          "$phoenix_command" \
           >> "$phoenix_log_file" 2>&1 &
         echo "$!" > "$phoenix_pid_file"
 
@@ -713,6 +783,15 @@ in
         echo
         echo "Coding-agent hooks:"
         print_hook_status
+      '')
+
+      (pkgs.writeShellScriptBin "ai-observe-openlit-hook-audit" ''
+        set -euo pipefail
+        ${commonShell}
+
+        print_openlit_hook_audit_checklist
+        echo
+        echo "This command does not install hooks or mutate agent configs."
       '')
 
       (pkgs.writeShellScriptBin "ai-observe-openlit-up" ''

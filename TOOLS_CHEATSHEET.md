@@ -474,7 +474,7 @@ ai-observe-up                  # Start selected backend explicitly
 ai-observe-smoke               # Send one metadata-only synthetic OTLP trace
 ai-observe-down                # Stop selected backend without deleting state
 
-ai-observe-phoenix-up          # Start Docker-free Phoenix via uvx on localhost
+ai-observe-phoenix-up          # Start Docker-free Phoenix package on localhost
 ai-observe-phoenix-status      # Show Phoenix pid, state, log, and UI reachability
 ai-observe-phoenix-smoke       # Send one metadata-only trace to Phoenix
 ai-observe-phoenix-down        # Stop helper-managed Phoenix process
@@ -482,13 +482,21 @@ ai-observe-phoenix-down        # Stop helper-managed Phoenix process
 ai-observe-openlit-up          # Fetch pinned OpenLIT release and start Docker Compose explicitly
 ai-observe-openlit-status      # Show OpenLIT release, compose status, and reachability
 ai-observe-openlit-smoke       # Send one metadata-only trace to OpenLIT OTLP HTTP
+ai-observe-openlit-hook-audit  # Print hook-lab checklist; no mutations
 ai-observe-openlit-down        # Stop OpenLIT compose project without deleting state
 ```
 
-- Default backend is Phoenix because it runs locally without Docker/OrbStack.
+- Default backend is Phoenix because it can run locally without Docker/OrbStack.
+- Phoenix server is not fetched at runtime. Because `arize-phoenix` is not
+  currently in nixpkgs, set `aiObservability.phoenixPackage` to a Nix package
+  from an overlay or repo package before using `ai-observe-phoenix-up`;
+  `ai-observe-doctor` reports this as missing until configured.
 - Phoenix UI/OTLP HTTP binds to `http://127.0.0.1:6006`; Phoenix OTLP gRPC binds to `127.0.0.1:4317`; state lives outside the repo under `~/.local/state/ai-observability/phoenix`.
 - OpenLIT remains available as explicit optional backend/lab; runtime source is pinned to OpenLIT release `openlit-1.23.0`.
 - OpenLIT UI binds to `http://127.0.0.1:3010`; OTLP HTTP binds to `http://127.0.0.1:4318`.
+- `ai-observe-smoke` uses a Nix-packaged OpenTelemetry Python exporter and
+  includes repo-owned signal availability for workflow receipts, Headroom, RTK,
+  and hot benchmark scripts.
 - Helpers do not set global provider base URLs, `PHOENIX_COLLECTOR_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`.
 - Coding-agent hooks for Codex, Claude Code, and Cursor are not installed by these helpers; audit OpenLIT's hook installer first.
 - Capture mode is metadata-only: no prompts, outputs, secrets, cookies, private ticket text, or file contents.
