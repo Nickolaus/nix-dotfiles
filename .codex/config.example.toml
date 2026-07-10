@@ -1,3 +1,6 @@
+# Example project-local Codex MCP config.
+# Keep .codex/config.toml private to each clone; do not commit personal MCP setup.
+
 [mcp_servers.nixos]
 command = "uvx"
 args = ["mcp-nixos"]

@@ -99,11 +99,12 @@ in
       cache_rel=".codex/cache/codebase-memory"
       mkdir -p .codex "$cache_rel" .git/info
 
-      keep_private_file() {
+      require_private_file() {
         rel="$1"
         if $git_cmd ls-files --error-unmatch "$rel" >/dev/null 2>&1; then
-          $git_cmd update-index --skip-worktree "$rel"
-          echo "  $rel tracked by repo -- marked --skip-worktree for local-only edits"
+          echo "$rel is tracked by this repo; refusing to hide personal MCP edits with --skip-worktree." >&2
+          echo "Tracked project config must be a team decision. For personal setup, untrack and ignore $rel first." >&2
+          exit 1
         else
           if ! grep -qxF "$rel" .git/info/exclude 2>/dev/null; then
             echo "$rel" >> .git/info/exclude
@@ -124,12 +125,12 @@ in
       }
 
       echo "==> Adding repo-scoped codebase-memory MCP to $root"
+      require_private_file "$config_rel"
       ${tomlkitPython}/bin/python3 ${codebaseMemoryOnboardCodexScript} \
         "$config_rel" "/run/current-system/sw/bin/codebase-memory-mcp" "$cache_rel"
 
       echo
       echo "==> Keeping personal setup out of commits"
-      keep_private_file "$config_rel"
       keep_private_path "$cache_rel"
 
       echo

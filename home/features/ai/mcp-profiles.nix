@@ -294,9 +294,9 @@ in
       #     absent (write it, then list it in .git/info/exclude -- a per-clone
       #     ignore list that lives inside .git/ itself, never touches the
       #     shared .gitignore, invisible to `git status`/diffs/PRs) or already
-      #     tracked/shared (mark it `--skip-worktree` instead, so git ignores
-      #     your local edit to that one file without altering its history or
-      #     your teammates' copies).
+      #     tracked/shared. Tracked config is team-owned: refuse private
+      #     mutation instead of hiding it with `--skip-worktree`, because
+      #     checkout/rebase may still need to update that path.
       (pkgs.writeShellScriptBin "mcp-profile-onboard" ''
         set -euo pipefail
 
@@ -368,6 +368,7 @@ in
         echo "==> Onboarding '$profile' ($binary) into $root -- kept private to this clone,"
         echo "    never committed, never touches the shared .gitignore"
         echo
+        failed=0
 
         if [ "$skip_claude" -eq 1 ]; then
           echo "-- Claude Code --"
@@ -402,9 +403,10 @@ in
         keep_private() {
           rel="$1"
           if git ls-files --error-unmatch "$rel" >/dev/null 2>&1; then
-            git update-index --skip-worktree "$rel"
-            echo "   $rel is tracked by the team -- marked --skip-worktree: your local edit never"
-            echo "   shows in 'git status'/diffs/PRs (undo: git update-index --no-skip-worktree $rel)"
+            echo "   $rel is tracked by the team -- refusing private mutation." >&2
+            echo "   Commit MCP changes there only when the team should share them." >&2
+            echo "   For personal setup, untrack and ignore $rel first; do not use --skip-worktree." >&2
+            return 1
           else
             mkdir -p .git/info
             if ! grep -qxF "$rel" .git/info/exclude 2>/dev/null; then
@@ -416,29 +418,43 @@ in
         }
 
         echo "-- Cursor --"
-        mkdir -p .cursor
-        [ -f .cursor/mcp.json ] || echo '{}' > .cursor/mcp.json
-        tmp="$(mktemp)"
-        ${pkgs.jq}/bin/jq --arg key "$entry_name" --arg cmd "$binary" \
-          '.mcpServers[$key] = {"command": $cmd}' .cursor/mcp.json > "$tmp" && mv "$tmp" .cursor/mcp.json
-        keep_private ".cursor/mcp.json"
+        if keep_private ".cursor/mcp.json"; then
+          mkdir -p .cursor
+          [ -f .cursor/mcp.json ] || echo '{}' > .cursor/mcp.json
+          tmp="$(mktemp)"
+          ${pkgs.jq}/bin/jq --arg key "$entry_name" --arg cmd "$binary" \
+            '.mcpServers[$key] = {"command": $cmd}' .cursor/mcp.json > "$tmp" && mv "$tmp" .cursor/mcp.json
+        else
+          failed=1
+        fi
         echo
 
         echo "-- Codex --"
-        mkdir -p .codex
-        ${onboardPython}/bin/python3 ${onboardCodexScript} .codex/config.toml "$entry_name" "$binary" "$codex_direct_json"
-        keep_private ".codex/config.toml"
-        if [ "$codex_direct_json" != '{}' ]; then
-          echo "   Codex uses direct HTTP MCP entries for this profile so native OAuth works."
-          echo "   Run 'codex mcp login atlassian' from this repo, then start a new Codex session."
+        if keep_private ".codex/config.toml"; then
+          mkdir -p .codex
+          ${onboardPython}/bin/python3 ${onboardCodexScript} .codex/config.toml "$entry_name" "$binary" "$codex_direct_json"
+          if [ "$codex_direct_json" != '{}' ]; then
+            echo "   Codex uses direct HTTP MCP entries for this profile so native OAuth works."
+            echo "   Run 'codex mcp login atlassian' from this repo, then start a new Codex session."
+          fi
+        else
+          failed=1
         fi
         echo
 
         echo "-- Vibe --"
-        mkdir -p .vibe
-        ${onboardPython}/bin/python3 ${onboardVibeScript} .vibe/config.toml "$entry_name" "$binary"
-        keep_private ".vibe/config.toml"
+        if keep_private ".vibe/config.toml"; then
+          mkdir -p .vibe
+          ${onboardPython}/bin/python3 ${onboardVibeScript} .vibe/config.toml "$entry_name" "$binary"
+        else
+          failed=1
+        fi
         echo
+
+        if [ "$failed" -ne 0 ]; then
+          echo "Done with skipped tracked client configs. Resolve those as team-owned config or untrack them before personal onboarding." >&2
+          exit 1
+        fi
 
         echo "Done. 'git status' in $root should show nothing new from this."
       '')
