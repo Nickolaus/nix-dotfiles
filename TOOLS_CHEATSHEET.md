@@ -466,6 +466,22 @@ chonkie-update # Manual uv tool upgrade
 - Codex and Claude subscription auth remain untouched. Chonkie provider-backed features use provider API SDKs/keys, not ChatGPT or Claude Code subscription entitlements.
 - `chonkie-serve` defaults to localhost and refuses Headroom proxy ports.
 
+#### OpenLIT Local AI Observability
+```bash
+ai-observe-status              # Show OpenLIT release, state dir, ports, reachability, hook status
+ai-observe-doctor              # Check Docker/git/curl/jq, port guardrails, and global env safety
+ai-observe-up                  # Fetch pinned OpenLIT release and start Docker Compose explicitly
+ai-observe-smoke               # Send one metadata-only synthetic OTLP trace
+ai-observe-down                # Stop the OpenLIT compose project without deleting state
+```
+
+- Runtime source is pinned to OpenLIT release `openlit-1.23.0`.
+- UI binds to `http://127.0.0.1:3010`; OTLP HTTP binds to `http://127.0.0.1:4318`.
+- State lives outside the repo under `~/.local/state/ai-observability/openlit`.
+- Helpers do not set global provider base URLs or `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- Coding-agent hooks for Codex, Claude Code, and Cursor are not installed by these helpers; audit OpenLIT's hook installer first.
+- Capture mode is metadata-only: no prompts, outputs, secrets, cookies, private ticket text, or file contents.
+
 #### Headroom (Context Compression)
 ```bash
 headroom-status                 # Health for every registered proxy, default-routing status, wrapper usage hints

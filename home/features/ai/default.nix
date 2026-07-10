@@ -9,6 +9,7 @@
     ./graphify.nix
     ./headroom.nix
     ./mcp-profiles.nix
+    ./observability.nix
     ./ollama.nix
     ./rtk.nix
     ./serena.nix
