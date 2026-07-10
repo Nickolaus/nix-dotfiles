@@ -368,6 +368,7 @@ llm-smoke coding    # Goes through the session-aware coding proxy
   - Claude Code: `.mcp.json`
 - MCP transport schema:
   - `type = "http"` uses `url` and optional `headers`
+  - `type = "sse"` uses `url` and optional `headers`
   - `type = "stdio"` uses `command`, optional `args`, and optional `env`
   - `targetOverrides.<codex|claude|cursor|vibe>` customizes one logical server per client
   - `targets = [ ]` opts a server out of native per-client registration entirely -- reachable only via an `aiAgents.mcpProfiles` profile (see below)
@@ -378,6 +379,7 @@ llm-smoke coding    # Goes through the session-aware coding proxy
 mcp-profile-status         # Declared profiles, member servers, and which servers are profile-only
 mcp-profile-nix-dotfiles   # Aggregated stdio endpoint: default baseline + serena, for this repo
 mcp-profile-web            # default baseline + chrome-devtools/puppeteer, for browser automation
+mcp-profile-web-crawl      # default baseline + crawl4ai, explicit site crawling/extraction
 mcp-profile-atlassian      # default baseline + atlassian
 mcp-profile-openai-api     # default baseline + openaiDeveloperDocs
 mcp-profile-scratchpad     # default baseline + memory
@@ -388,7 +390,8 @@ mcp-profile-offboard-codex-many <profile> <root-dir>   # Remove repo-local Codex
 ```
 
 - `context7`, `fetch`, `sequential-thinking`, `time`, `github`, and `headroom` are the universal baseline (`defaultProfileServers` in `hosts/shared/ai-agents.nix`) and stay natively registered for all 4 clients. `codebase-memory` is declared but intentionally `targets = [ ]`; repos should register it only with scoped `CBM_CACHE_DIR` in project-native MCP config to avoid global cross-repo graph bleed.
-- `serena`, `chrome-devtools`, `puppeteer`, `atlassian`, `openaiDeveloperDocs`, and `memory` are `targets = [ ]` -- not natively loaded anywhere -- and reachable only through the profile above that carries them.
+- `serena`, `chrome-devtools`, `puppeteer`, `crawl4ai`, `atlassian`, `openaiDeveloperDocs`, and `memory` are `targets = [ ]` -- not natively loaded anywhere -- and reachable only through the profile above that carries them.
+- `crawl4ai` is profile-only and local tooling is disabled by default. Set `crawl4ai.enable = true`, export `CRAWL4AI_API_TOKEN`, run `crawl4ai-server`, then use `mcp-profile-web-crawl` for crawler-grade site extraction.
 - Every non-`default` profile is `defaultProfileServers ++ [ ... ]` in Nix, not a hand-relisted set, so the baseline can't drift between profiles.
 - Each `mcp-profile-<name>` binary is a FastMCP proxy (`home/features/ai/mcp-profiles.nix`, `uv run` since FastMCP isn't in nixpkgs) spawned fresh per invocation and exited after -- never a persistent or shared process, so unrelated repos/sessions never multiplex onto the same Serena workspace, browser session, or other stateful backend.
 - Opt a repo in with one committed line in its own project-native MCP config, e.g. `.cursor/mcp.json: { "command": "mcp-profile-nix-dotfiles" }` (see this repo's own `.cursor/mcp.json`) -- appropriate when the whole team should get that server.
