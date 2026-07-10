@@ -950,6 +950,12 @@ in
       '')
     ];
 
+    home.activation.ensureAiObservabilityPhoenixStateDir =
+      mkIf (isDarwin && cfg.backend == "phoenix" && cfg.autoStart && phoenixPackageConfigured)
+        (lib.hm.dag.entryBefore [ "setupLaunchAgents" ] ''
+          ${mkdir} -p ${escapeShellArg cfg.phoenixStateDir}
+        '');
+
     launchd.agents = mkIf (isDarwin && cfg.backend == "phoenix" && cfg.autoStart && phoenixPackageConfigured) {
       ${phoenixLaunchdName} = {
         enable = true;

@@ -164,6 +164,7 @@ let
         git_root = git_value(["rev-parse", "--show-toplevel"], cwd)
         git_commit = git_value(["rev-parse", "HEAD"], git_root or cwd) or "unknown"
         dirty = bool(git_value(["status", "--short", "--untracked-files=all"], git_root or cwd))
+        has_tool_output = payload.get("tool_response") is not None or payload.get("tool_output") is not None
 
         attributes = {
             "ai.setup.agent": "codex",
@@ -180,7 +181,7 @@ let
             "ai.agent.cwd_hash": hash_value(cwd),
             "ai.agent.git_root_hash": hash_value(git_root),
             "ai.agent.has_tool_input": isinstance(payload.get("tool_input"), dict),
-            "ai.agent.has_tool_output": payload.get("tool_output") is not None,
+            "ai.agent.has_tool_output": has_tool_output,
             "ai.agent.permission_requested": hook_event == "PermissionRequest",
             "ai.agent.success": not safe_bool(payload.get("error")),
         }
