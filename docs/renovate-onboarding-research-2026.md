@@ -100,7 +100,7 @@ Do not set `skipArtifactsUpdate=true` for this repo's Nix updates: Renovate docs
 
 Lock file maintenance should be explicit. Renovate lock file maintenance PRs are never grouped with other dependency updates. Source: <https://docs.renovatebot.com/configuration-options/#groupname> and <https://docs.renovatebot.com/modules/manager/nix/#lock-file-maintenance>
 
-Set `statusCheckWhen.artifactError="always"` if branch protection should require Renovate artifact success; Renovate docs say `artifactError` defaults to failed-only but can be changed to always for required checks. Source: <https://docs.renovatebot.com/configuration-options/#statuscheckwhen>
+Do not configure artifact-error status checks with `statusCheckWhen`: strict validation with `renovate-config-validator --strict` rejected `statusCheckWhen` as an invalid current option for this repository config.
 
 ### Schedules, stability days, labels, and dashboard
 
@@ -120,13 +120,11 @@ Renovate can read GitHub Vulnerability Alerts and customize fix PRs only on GitH
 
 Vulnerability alert PRs ignore normal scheduling and PR/branch/concurrency/hourly limits and "skip the line". Source: <https://docs.renovatebot.com/configuration-options/#vulnerabilityalerts>
 
-`vulnerabilityAlerts.vulnerabilityFixStrategy` accepts `lowest` or `highest`; default is `lowest`, while `highest` uses the normal latest-upgrade strategy. Source: <https://docs.renovatebot.com/configuration-options/#vulnerabilityalertsvulnerabilityfixstrategy>
-
-Recommendation: enable GitHub dependency graph and Dependabot alerts in repo settings, configure `vulnerabilityAlerts` labels, keep `automerge=false`, and consider `vulnerabilityFixStrategy="highest"` if this repo prefers current versions over minimal fixed versions.
+Strict validation with `renovate-config-validator --strict` rejected `vulnerabilityAlerts.vulnerabilityFixStrategy` as an invalid current option for this repository config, so the implementation keeps only supported vulnerability-alert labels and explicit `automerge=false`.
 
 ## Recommended Config Shape
 
-This is not implemented yet. Use as the implementation target for `renovate.json`:
+Use the implemented root `renovate.json` shape:
 
 ```json
 {
@@ -147,7 +145,6 @@ This is not implemented yet. Use as the implementation target for `renovate.json
   "branchConcurrentLimit": 0,
   "separateMajorMinor": true,
   "separateMultipleMajor": true,
-  "rebaseWhen": "conflicted",
   "enabledManagers": ["nix", "pep621"],
   "nix": {
     "enabled": true
@@ -156,13 +153,9 @@ This is not implemented yet. Use as the implementation target for `renovate.json
     "enabled": true,
     "schedule": ["before 4am on monday"]
   },
-  "statusCheckWhen": {
-    "artifactError": "always"
-  },
   "vulnerabilityAlerts": {
     "labels": ["dependencies", "security"],
-    "automerge": false,
-    "vulnerabilityFixStrategy": "highest"
+    "automerge": false
   },
   "packageRules": [
     {
@@ -187,7 +180,7 @@ This is not implemented yet. Use as the implementation target for `renovate.json
 }
 ```
 
-Implementation should validate whether `rebaseWhen="conflicted"` matches the user's desired CI behavior. Renovate docs say `rebaseWhen=conflicted` rebases only when branches conflict, while `rebaseWhen=auto` may pick `behind-base-branch` if branch protection requires up-to-date PRs. Source: <https://docs.renovatebot.com/configuration-options/#rebasewhen>
+`rebaseWhen` is intentionally omitted. This repo currently has no `.github/workflows` and no branch-protection source in the repo, so hardcoding `rebaseWhen="conflicted"` would encode unverified CI policy. Renovate docs say `rebaseWhen=auto` can account for branch protection requiring up-to-date PRs. Source: <https://docs.renovatebot.com/configuration-options/#rebasewhen>
 
 ## Implementation Requirements
 

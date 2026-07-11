@@ -16,7 +16,6 @@
   "branchConcurrentLimit": 0,
   "separateMajorMinor": true,
   "separateMultipleMajor": true,
-  "rebaseWhen": "conflicted",
   "enabledManagers": ["nix", "pep621"],
   "nix": {
     "enabled": true
@@ -25,13 +24,9 @@
     "enabled": true,
     "schedule": ["before 4am on monday"]
   },
-  "statusCheckWhen": {
-    "artifactError": "always"
-  },
   "vulnerabilityAlerts": {
     "labels": ["dependencies", "security"],
-    "automerge": false,
-    "vulnerabilityFixStrategy": "highest"
+    "automerge": false
   },
   "packageRules": [
     {
