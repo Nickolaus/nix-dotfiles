@@ -1,0 +1,56 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "description": "Renovate config for Nix flake dotfiles and repo-owned Python env locks.",
+  "timezone": "Europe/Berlin",
+  "labels": ["dependencies"],
+  "dependencyDashboard": true,
+  "configMigration": true,
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
+  "automerge": false,
+  "prCreation": "immediate",
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 0,
+  "branchConcurrentLimit": 0,
+  "separateMajorMinor": true,
+  "separateMultipleMajor": true,
+  "rebaseWhen": "conflicted",
+  "enabledManagers": ["nix", "pep621"],
+  "nix": {
+    "enabled": true
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 4am on monday"]
+  },
+  "statusCheckWhen": {
+    "artifactError": "always"
+  },
+  "vulnerabilityAlerts": {
+    "labels": ["dependencies", "security"],
+    "automerge": false,
+    "vulnerabilityFixStrategy": "highest"
+  },
+  "packageRules": [
+    {
+      "description": "Label Nix flake input updates and avoid fresh ref churn.",
+      "matchManagers": ["nix"],
+      "addLabels": ["nix"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Prioritize nixpkgs because it drives most system package changes.",
+      "matchManagers": ["nix"],
+      "matchDepNames": ["nixpkgs"],
+      "addLabels": ["nixpkgs"],
+      "prPriority": 10
+    },
+    {
+      "description": "Label repo-owned Python project dependency updates.",
+      "matchManagers": ["pep621"],
+      "addLabels": ["python"]
+    }
+  ]
+}
