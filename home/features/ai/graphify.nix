@@ -48,11 +48,25 @@ let
   # directly (see vibe.nix) -- so it covers Vibe too even though upstream has no
   # dedicated Vibe platform.
   globalPlatforms = [ "claude" "codex" "agents" ];
+  upstreamGlobalPlatforms = [ "codex" "agents" ];
   userSkillPath = {
     claude = ".claude/skills/graphify/SKILL.md";
     codex = ".codex/skills/graphify/SKILL.md";
     agents = ".agents/skills/graphify/SKILL.md";
   };
+  syncClaudeGraphifySkill = ''
+    sync_claude_graphify_skill() {
+      local source_dir="$HOME/.agents/skills/graphify"
+      local target_dir="$HOME/.claude/skills/graphify"
+
+      if [ ! -f "$source_dir/SKILL.md" ]; then
+        return 1
+      fi
+
+      ${pkgs.coreutils}/bin/mkdir -p "$target_dir"
+      ${pkgs.coreutils}/bin/cp -R "$source_dir/." "$target_dir/"
+    }
+  '';
   # All platforms this machine onboards for a *project*-scope, shipped-with-the-repo
   # install (unlike global scope, cursor's project-relative rule file is exactly the
   # right shape here).
@@ -148,13 +162,11 @@ in
   # module never touched), every switch unconditionally re-derives the skill files from
   # the actually-installed package. There is nothing to keep in sync by hand.
   #
-  # Caveat specific to "claude": its global-scope install *also* tries to inject a
+  # Caveat specific to "claude": upstream's global-scope install also tries to inject a
   # section into ~/.claude/CLAUDE.md and register a hook in ~/.claude/settings.json --
-  # both of which are Nix-managed (read-only) symlinks here (caveman.nix,
-  # codebase-memory.nix, agent-configs.nix), so that half of the command fails every
-  # switch. That's expected and harmless: the actually-useful SKILL.md install happens
-  # first and always succeeds, the failure is swallowed by the `|| echo warning` below,
-  # and its stdout/stderr is already suppressed.
+  # both of which are Nix-managed here. Install the neutral Agent-Skills copy first,
+  # then mirror those files into Claude's skill directory without touching Claude's
+  # managed instruction or hook files.
   home.activation.ensureGraphifyInstalled = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     ${uv} tool install ${lib.escapeShellArg graphifyFrom} >/dev/null 2>&1 \
       || echo "Warning: failed to install graphify (uv tool install ${graphifyFrom})" >&2
@@ -170,7 +182,10 @@ in
       ${lib.concatMapStringsSep "\n      " (p: ''
         "$graphifyBin" ${mkArgsShell [ ] p} >/dev/null 2>&1 \
           || echo "Warning: 'graphify ${mkArgsShell [ ] p}' failed" >&2
-      '') globalPlatforms}
+      '') upstreamGlobalPlatforms}
+      ${syncClaudeGraphifySkill}
+      sync_claude_graphify_skill \
+        || echo "Warning: failed to mirror Graphify agent skill into Claude skill directory" >&2
     fi
   '';
 
@@ -226,7 +241,10 @@ in
       ${lib.concatMapStringsSep "\n" (p: ''
         echo "  graphify ${mkArgsShell [ ] p}"
         graphify ${mkArgsShell [ ] p} || echo "  warning: '${p}' install failed" >&2
-      '') globalPlatforms}
+      '') upstreamGlobalPlatforms}
+      ${syncClaudeGraphifySkill}
+      echo "  sync ~/.agents/skills/graphify -> ~/.claude/skills/graphify"
+      sync_claude_graphify_skill || echo "  warning: claude skill mirror failed" >&2
     '')
 
     # Lazy per-repo automation: create the project graph when missing and update it
