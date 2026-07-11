@@ -20,7 +20,10 @@ let
     inherit name;
     value = {
       source = mattpocockSkillsSrc + "/skills/${category}/${name}";
-      targets = [ "codex" ];
+      # These upstream skills are prose workflows, not bundled tool
+      # integrations. Keep them available everywhere; each client adapts
+      # tool/subagent mentions to its own supported capabilities.
+      targets = [ "codex" "claude" "cursor" "vibe" ];
       trust = "pinned-flake";
       owner = "github:mattpocock/skills";
       inherit implicit;
@@ -350,6 +353,8 @@ in
               name = skill;
               value = {
                 source = cavemanSrc + "/skills/${skill}";
+                # Claude gets default caveman behavior from managed
+                # ~/.claude/CLAUDE.md plus optional hooks in caveman.nix.
                 targets = [ "codex" "cursor" "vibe" ];
                 trust = "pinned-flake";
                 owner = "caveman";
@@ -385,6 +390,8 @@ in
 
           graphify-auto = {
             text = graphifyAutoSkill;
+            # Cursor Graphify integration is rule-file based and managed by
+            # graphify.nix/project onboarding, not this user skill catalog.
             targets = [ "codex" "claude" "vibe" ];
             trust = "local-authored";
             owner = "graphify";
@@ -393,6 +400,8 @@ in
 
           codebase-memory-auto = {
             source = codebaseMemoryAutoSrc;
+            # This skill repairs .codex/config.toml and is intentionally
+            # Codex-scoped; shared instructions still mention CBM fallback.
             targets = [ "codex" ];
             trust = "local-authored";
             owner = "nix-dotfiles";
@@ -400,6 +409,8 @@ in
           };
 
           graphify = {
+            # Runtime-owned entry mirrors Graphify's supported global skill
+            # install surfaces; Cursor uses project-local rule files instead.
             targets = [ "codex" "claude" "vibe" ];
             trust = "external-experimental";
             owner = "graphify";

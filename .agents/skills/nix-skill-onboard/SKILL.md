@@ -40,7 +40,13 @@ This skill is itself project-local. Keep its source of truth under `.agents/skil
 
 4. Choose explicit targets.
 
-   Use only existing target names: `codex`, `claude`, `cursor`, `vibe`. Prefer the smallest correct target set over universal fan-out.
+   Use only existing target names: `codex`, `claude`, `cursor`, `vibe`. Prefer consistent full fan-out for target-neutral skills:
+
+   ```nix
+   targets = [ "codex" "claude" "cursor" "vibe" ];
+   ```
+
+   Narrow the target set only when a skill cannot be followed or safely adapted without agent-specific files, hooks, tools, auth behavior, or runtime semantics. A prose workflow that mentions tools or subagents can still be target-neutral when each client has an equivalent way to execute or degrade the workflow. When narrowing, record the reason near the catalog entry or in the owning feature module so future audits can distinguish intentional exceptions from drift.
 
    Known target paths:
 
@@ -57,7 +63,7 @@ This skill is itself project-local. Keep its source of truth under `.agents/skil
    ```nix
    my-skill = {
      source = aiSources.skills.some-source + "/skills/my-skill";
-     targets = [ "codex" "claude" ];
+     targets = [ "codex" "claude" "cursor" "vibe" ];
      trust = "pinned-flake";
      owner = "github:owner/repo";
      implicit = true;
@@ -76,24 +82,26 @@ This skill is itself project-local. Keep its source of truth under `.agents/skil
 
        Instructions.
      '';
-     targets = [ "codex" ];
+     targets = [ "codex" "claude" "cursor" "vibe" ];
      trust = "local-authored";
      owner = "nix-dotfiles";
      implicit = true;
    };
    ```
 
-   Runtime-owned or experimental skill:
+   Runtime-owned or experimental skill whose runtime is available on every target:
 
    ```nix
    my-runtime-skill = {
-     targets = [ "codex" ];
+     targets = [ "codex" "claude" "cursor" "vibe" ];
      trust = "external-experimental";
      owner = "tool-name";
      implicit = false;
      managed = false;
    };
    ```
+
+   If the runtime-owned capability is only installed or discoverable in some clients, narrow `targets` to those clients and document why.
 
 6. Pin external GitHub sources through Nix.
 

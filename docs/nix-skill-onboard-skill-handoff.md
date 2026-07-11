@@ -235,8 +235,19 @@ The skill body should instruct the agent to follow this workflow.
    [ "codex" "claude" "cursor" "vibe" ]
    ```
 
-   Prefer explicit target selection over universal fan-out. Mention known target
-   behavior:
+   Prefer consistent full fan-out for target-neutral skills:
+
+   ```nix
+   targets = [ "codex" "claude" "cursor" "vibe" ];
+   ```
+
+   Narrow the target set only when a skill cannot be followed or safely adapted
+   without agent-specific files, hooks, tools, auth behavior, or runtime
+   semantics. A prose workflow that mentions tools or subagents can still be
+   target-neutral when each client has an equivalent way to execute or degrade
+   the workflow. When narrowing, record the reason near the catalog entry or in
+   the owning feature module so future audits can distinguish intentional
+   exceptions from drift. Mention known target behavior:
 
    - Codex/Vibe use `.agents/skills`.
    - Claude uses `.claude/skills`.
@@ -269,24 +280,27 @@ The skill body should instruct the agent to follow this workflow.
 
        Instructions.
      '';
-     targets = [ "codex" ];
+     targets = [ "codex" "claude" "cursor" "vibe" ];
      trust = "local-authored";
      owner = "nix-dotfiles";
      implicit = true;
    };
    ```
 
-   For runtime-owned skill:
+   For runtime-owned skill whose runtime is available on every target:
 
    ```nix
    my-runtime-skill = {
-     targets = [ "codex" ];
+     targets = [ "codex" "claude" "cursor" "vibe" ];
      trust = "external-experimental";
      owner = "tool-name";
      implicit = false;
      managed = false;
    };
    ```
+
+   If the runtime-owned capability is only installed or discoverable in some
+   clients, narrow `targets` to those clients and document why.
 
 6. If adding GitHub source.
 
