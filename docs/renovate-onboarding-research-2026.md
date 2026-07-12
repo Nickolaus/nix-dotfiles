@@ -180,7 +180,7 @@ Use the implemented root `renovate.json` shape:
 }
 ```
 
-`rebaseWhen` is intentionally omitted. This repo currently has no `.github/workflows` and no branch-protection source in the repo, so hardcoding `rebaseWhen="conflicted"` would encode unverified CI policy. Renovate docs say `rebaseWhen=auto` can account for branch protection requiring up-to-date PRs. Source: <https://docs.renovatebot.com/configuration-options/#rebasewhen>
+`rebaseWhen` is intentionally omitted. This repo has no in-repo CI workflow or branch-protection-as-code source, so hardcoding `rebaseWhen="conflicted"` would encode unverified policy. Renovate's default `rebaseWhen="auto"` uses `behind-base-branch` when automerge is configured or when the repository requires PRs to be up to date; otherwise it uses `conflicted`. Source: <https://docs.renovatebot.com/configuration-options/#rebasewhen>
 
 ## Implementation Requirements
 
