@@ -16,7 +16,7 @@
     sops
     age
     _1password-cli
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
     # 🛠️ SYSTEM UTILITIES & CLI TOOLS
     # ═══════════════════════════════════════════════════════════════════════════
@@ -36,7 +36,7 @@
     pigz
     wget
     sshpass
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
     # 🌐 NETWORK & MONITORING TOOLS
     # ═══════════════════════════════════════════════════════════════════════════
@@ -45,7 +45,7 @@
     doggo                    # Modern dig replacement for DNS queries
     tailscale                # VPN mesh network CLI client
   ] ++ [
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
     # ☁️ CLOUD & INFRASTRUCTURE TOOLS
     # ═══════════════════════════════════════════════════════════════════════════
@@ -60,14 +60,14 @@
     awscli2
     ssm-session-manager-plugin
     terraform_1
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
     # 🐳 CONTAINER & DOCKER TOOLS
     # ═══════════════════════════════════════════════════════════════════════════
     docker-client
     docker-buildx
     dive
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
     # 💻 DEVELOPMENT LANGUAGES & RUNTIMES
     # ═══════════════════════════════════════════════════════════════════════════
@@ -78,7 +78,7 @@
     bun
     asdf-vm
     gnumake
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
     # 🔧 DEVELOPMENT TOOLS & VERSION CONTROL
     # ═══════════════════════════════════════════════════════════════════════════
@@ -86,7 +86,6 @@
     gh-dash                  # GitHub dashboard in terminal
     act
     just
-    watchexec
     hyperfine
     tldr
     procs
@@ -95,7 +94,6 @@
     slides                   # Terminal-based presentations
     tokei
     mkcert
-    commitizen               # Interactive commit message builder
     opencommit              # AI-powered commit message generator
     npm-check-updates       # Find newer versions of package dependencies
     (ast-grep.overrideAttrs (old: { doCheck = false; }))  # Structural code search and rewriting (tests broken on macOS)
@@ -108,7 +106,7 @@
     shellcheck
     shfmt
     yamllint
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
     # 🏢 ENTERPRISE & IDENTITY TOOLS
     # ═══════════════════════════════════════════════════════════════════════════
@@ -135,12 +133,12 @@
     # 🎨 MULTIMEDIA & CONTENT
     # ═══════════════════════════════════════════════════════════════════════════
     # Add multimedia tools here
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
     # 📱 MOBILE DEVELOPMENT
     # ═══════════════════════════════════════════════════════════════════════════
     # Add mobile dev tools here
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
     # 🌍 WEB DEVELOPMENT
     # ═══════════════════════════════════════════════════════════════════════════

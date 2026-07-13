@@ -725,19 +725,6 @@ just dev             # Run dev server
 #     npm test
 ```
 
-### Watchexec - File Watcher
-```bash
-# Watch for changes and run command
-watchexec -e .js npm test                    # Run tests when JS files change
-watchexec -e .ts -e .tsx npm run build      # Build when TS files change
-watchexec -w src npm run dev                 # Watch src directory
-watchexec -i node_modules npm test          # Ignore node_modules
-
-# Advanced options
-watchexec -r npm run dev                     # Restart long-running processes
-watchexec -d 1000 npm test                   # Debounce for 1 second
-```
-
 ### Hyperfine - Benchmarking
 ```bash
 # Compare command performance
@@ -1322,9 +1309,6 @@ rg pattern --replace replacement
 ### Combining Tools for Powerful Workflows
 
 ```bash
-# Monitor project while developing
-watchexec -e .js -e .css 'npm run build && echo "Build complete!"'
-
 # Analyze project structure and size
 echo "=== Project Overview ===" && \
 tree -I 'node_modules|.git' -L 3 && \
@@ -1352,10 +1336,9 @@ ngrok http 3000                   # Expose to internet if needed
 
 1. **Tmux + Tools**: Use tmux panes to run multiple monitoring tools simultaneously
 2. **Aliases**: Create aliases for frequently used commands in your shell config
-3. **Just + Watchexec**: Combine for automatic task running during development
-4. **Hyperfine**: Use for A/B testing different implementations
-5. **Mise**: Prefer over nvm/rbenv for consistent cross-language version management
-6. **Glow**: Perfect for reading project READMEs without leaving terminal
+3. **Hyperfine**: Use for A/B testing different implementations
+4. **Mise**: Prefer over nvm/rbenv for consistent cross-language version management
+5. **Glow**: Perfect for reading project READMEs without leaving terminal
 
 ---
 

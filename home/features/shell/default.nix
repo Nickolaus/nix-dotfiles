@@ -10,11 +10,9 @@
     duf
     dust
     just
-    watchexec
     hyperfine
     tree
     tldr
-    commitizen
     opencommit
     (ast-grep.overrideAttrs (old: { doCheck = false; }))
   ];
@@ -39,7 +37,7 @@
       "di" = "docker images";
       "dcup" = "docker-compose up -d";
       "dcdown" = "docker-compose down";
-      
+
       # ☸️ Kubernetes  
       "kc" = "kubectl";
       "kgp" = "kubectl get pods";
@@ -47,26 +45,26 @@
       "kgd" = "kubectl get deployments";
       "kdp" = "kubectl describe pod";
       "kl" = "kubectl logs";
-      
+
       # 📁 File operations
       "la" = "eza -la --icons";
       "lt" = "eza --tree --icons";
       "lz" = "eza -la --icons | head -20";
-      
+
       # 🔍 Search & Find
       "rg" = "rg --color=always";
       "fd" = "fd --color=always";
       "bat" = "bat --style=numbers,changes";
-      
+
       # 📦 Package Management
       "nr" = "nix-rebuild";
       "ns" = "nix search nixpkgs";
       "nsh" = "nix-shell";
       "nb" = "nix build";
-      
+
       # ☁️ AWS Profile Management
       "awsw" = "aws-whoami";
-      
+
       # 🚀 Development
       "vim" = "nvim";
       "v" = "nvim";
@@ -74,13 +72,13 @@
       "t" = "tmux";
       "ta" = "tmux attach";
       "tn" = "tmux new-session";
-      
+
       # 🌐 Network & System
       "ping" = "ping -c 4";
       "ports" = "netstat -tuln";
       "myip" = "curl -s ifconfig.me";
       "speed" = "speedtest-cli";
-      
+
       # 📊 System monitoring
       "btm" = "btm --color always";
       "htop" = "btm";
@@ -103,9 +101,10 @@
         '(^( ?\w+){2}).*' \
         '(^( ?\w+){1}).*'
       
-      # Configure sponge to keep git commit commands in history even when pre-commit hooks fail
-      # This allows commit messages to remain accessible for retry after fixing hook failures
-      set -U sponge_regex_patterns '^git\s+commit.*'
+      # Sponge should remove commands that did not launch, not valid commands that returned
+      # a useful nonzero status. Keep regex filtering disabled here; this shadows the old
+      # repo-owned universal '^git\s+commit.*' pattern without deleting user state.
+      set -g sponge_regex_patterns
       
       # 📂 Dynamic multi-dot navigation: automatically handle any number of dots
       # Override Fish's command-not-found handler to catch dot patterns
@@ -164,28 +163,28 @@
     plugins = [
       # 🔍 Enhanced fuzzy finding and file navigation
       { name = "fzf"; src = pkgs.fishPlugins.fzf-fish.src; }
-      
+
       # 🧠 Auto-completion and productivity
-      { name = "autopair"; src = pkgs.fishPlugins.autopair.src; }        # Auto-close parentheses, quotes, etc.
-      { name = "sponge"; src = pkgs.fishPlugins.sponge.src; }            # Remove failed commands from history
-      
+      { name = "autopair"; src = pkgs.fishPlugins.autopair.src; } # Auto-close parentheses, quotes, etc.
+      { name = "sponge"; src = pkgs.fishPlugins.sponge.src; } # Filter invalid commands from history
+
       # 🎨 Better command output and experience  
       { name = "colored-man-pages"; src = pkgs.fishPlugins.colored-man-pages.src; } # Colorized man pages
-      
+
       # 🔧 Git workflow enhancement
-      { name = "forgit"; src = pkgs.fishPlugins.forgit.src; }            # Interactive git commands using fzf
-      { name = "plugin-git"; src = pkgs.fishPlugins.plugin-git.src; }    # Git aliases and functions
-      
+      { name = "forgit"; src = pkgs.fishPlugins.forgit.src; } # Interactive git commands using fzf
+      { name = "plugin-git"; src = pkgs.fishPlugins.plugin-git.src; } # Git aliases and functions
+
       # 🚀 Shell environment and compatibility
-      { name = "bass"; src = pkgs.fishPlugins.bass.src; }                # Run bash utilities in fish shell
-      { name = "foreign-env"; src = pkgs.fishPlugins.foreign-env.src; }  # Source bash scripts in fish
-      
+      { name = "bass"; src = pkgs.fishPlugins.bass.src; } # Run bash utilities in fish shell
+      { name = "foreign-env"; src = pkgs.fishPlugins.foreign-env.src; } # Source bash scripts in fish
+
       # 💡 Smart command suggestions
-      { name = "pisces"; src = pkgs.fishPlugins.pisces.src; }            # Auto-matching quotes, brackets, etc.
-      
+      { name = "pisces"; src = pkgs.fishPlugins.pisces.src; } # Auto-matching quotes, brackets, etc.
+
       # 🧠 Learning and productivity aids
-      { 
-        name = "fish-abbreviation-tips"; 
+      {
+        name = "fish-abbreviation-tips";
         src = pkgs.fetchFromGitHub {
           owner = "Gazorby";
           repo = "fish-abbreviation-tips";
@@ -196,6 +195,87 @@
     ];
 
     functions = {
+      # Keep nonzero results from real commands, but drop commands that never
+      # resolved to an executable. Return 0 means Sponge removes the history item.
+      sponge_filter_failed = ''
+        set -l command_string $argv[1]
+        set -l exit_code $argv[2]
+        set -l previously_in_history $argv[3]
+
+        if test "$previously_in_history" = true; and test "$sponge_allow_previously_successful" = true
+            return 1
+        end
+
+        if contains -- "$exit_code" $sponge_successful_exit_codes
+            return 1
+        end
+
+        set -l trimmed (string trim -- "$command_string")
+        if test -z "$trimmed"
+            return 1
+        end
+
+        if not commandline --input "$trimmed" --is-valid
+            return 0
+        end
+
+        # Compound commands can fail for many valid reasons; keep them. Syntax
+        # errors were removed above.
+        if string match --quiet --regex '(^|[[:space:]])(and|or)[[:space:]]|[;&|()]' -- "$trimmed"
+            return 1
+        end
+
+        set -l tokens (commandline --input "$trimmed" --current-process --tokens-expanded)
+        set -l token_count (count $tokens)
+        set -l idx 1
+
+        while test $idx -le $token_count
+            set -l word $tokens[$idx]
+            if string match --quiet --regex '^[A-Za-z_][A-Za-z0-9_]*=.*$' -- "$word"
+                set idx (math $idx + 1)
+            else
+                break
+            end
+        end
+
+        if test $idx -gt $token_count
+            return 1
+        end
+
+        set -l executable $tokens[$idx]
+
+        if test "$executable" = sudo
+            set idx (math $idx + 1)
+
+            while test $idx -le $token_count
+                set -l word $tokens[$idx]
+                switch "$word"
+                    case '--'
+                        set idx (math $idx + 1)
+                        break
+                    case '-u' '-g' '-h' '-p' '-C' '-T' '--user' '--group' '--host' '--prompt' '--close-from' '--command-timeout'
+                        set idx (math $idx + 2)
+                    case '-*'
+                        set idx (math $idx + 1)
+                    case '*'
+                        break
+                end
+            end
+
+            if test $idx -gt $token_count
+                return 1
+            end
+
+            set executable $tokens[$idx]
+        end
+
+        if type --query -- "$executable"
+            return 1
+        end
+
+        return 0
+      '';
+
       c = ''
         set DIR (zoxide query -l | fzf)
         z $DIR
@@ -256,7 +336,7 @@
             echo "📊 Account ID: $account_id"
         end
       '';
-      
+
       # 🔍 Find unmerged remote branches by author
       gunmerged = ''
         # Default to current git user if no argument provided
@@ -318,9 +398,9 @@
     "k" = "kubectl";
     "ll" = "eza --icons --group --group-directories-first -l";
     # New CLI tool shortcuts
-    "tree" = "broot --height 20";               # Interactive directory navigator
-    "json" = "jless";                           # Interactive JSON viewer
-    "cut" = "choose";                           # Human-friendly cut replacement
-    "dig" = "dog";                              # Modern DNS lookup (doggo)
+    "tree" = "broot --height 20"; # Interactive directory navigator
+    "json" = "jless"; # Interactive JSON viewer
+    "cut" = "choose"; # Human-friendly cut replacement
+    "dig" = "dog"; # Modern DNS lookup (doggo)
   };
 }
