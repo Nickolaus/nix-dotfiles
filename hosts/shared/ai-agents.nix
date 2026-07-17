@@ -369,7 +369,10 @@ in
         headroom = {
           type = "stdio";
           command = "${pkgs.uv}/bin/uvx";
-          args = [ "--from" "headroom-ai[mcp]" "headroom" "mcp" "serve" ];
+          # The MCP command imports proxy modules at CLI registration time.
+          # Keep proxy extras present too, or fastapi can be missing before
+          # the MCP initialize handshake even starts.
+          args = [ "--from" "headroom-ai[mcp,proxy]" "headroom" "mcp" "serve" ];
         };
         # Heaviest tool surface + slowest startup (LSP indexing) of any server
         # here -- only valuable during active code-navigation sessions, not

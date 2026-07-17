@@ -465,68 +465,32 @@ chonkie-update # Manual uv tool upgrade
 - Codex and Claude subscription auth remain untouched. Chonkie provider-backed features use provider API SDKs/keys, not ChatGPT or Claude Code subscription entitlements.
 - `chonkie-serve` defaults to localhost and refuses Headroom proxy ports.
 
-#### Local AI Observability
+#### AI Usage Reporting
 ```bash
-ai-observe-status              # Show selected backend, state dir, reachability, hook status
-ai-observe-doctor              # Check backend prerequisites, port guardrails, and global env safety
-ai-observe-up                  # Start selected backend explicitly
-ai-observe-smoke               # Send one metadata-only synthetic OTLP trace
-ai-observe-insights            # Summarize metadata traces into local research metrics
-ai-observe-down                # Stop selected backend without deleting state
-
-ai-observe-phoenix-up          # Start Docker-free Phoenix package on localhost
-ai-observe-phoenix-status      # Show Phoenix pid, state, log, and UI reachability
-ai-observe-phoenix-smoke       # Send one metadata-only trace to Phoenix
-ai-observe-phoenix-insights    # Show session/tool/permission/error summaries
-ai-observe-phoenix-down        # Stop helper-managed Phoenix process
-ai-observe-claude              # Run Claude Code with local metadata-only OTel tracing
-
-ai-observe-openlit-up          # Fetch pinned OpenLIT release and start Docker Compose explicitly
-ai-observe-openlit-status      # Show OpenLIT release, compose status, and reachability
-ai-observe-openlit-smoke       # Send one metadata-only trace to OpenLIT OTLP HTTP
-ai-observe-openlit-hook-audit  # Print hook-lab checklist; no mutations
-ai-observe-openlit-down        # Stop OpenLIT compose project without deleting state
+ai-usage                       # Daily ccusage report for all detected sources
+ai-usage codex daily           # Codex usage/cost report by day
+ai-usage codex weekly          # Codex usage/cost report by week
+ai-usage claude monthly        # Claude Code usage/cost report by month
+ai-usage-codex                 # Shortcut: Codex daily report
+ai-usage-claude                # Shortcut: Claude Code daily report
+ai-usage-opencode              # Shortcut: OpenCode daily report
+codeburn                       # Interactive local AI spend dashboard
+codeburn overview              # Copy-pasteable usage summary
+codeburn compare               # Compare observed model/tool efficiency
+codeburn yield                 # Relate spend to nearby git commits
+ai-receipt-status              # Local workflow receipt status
+ai-receipt-log --kind qa --status pass --summary "..." --evidence "..."  # Log local JSONL receipt
 ```
 
-- Default backend is Phoenix because it can run locally without Docker/OrbStack.
-- Phoenix server is not fetched at runtime. This repo provides
-  `packages.<system>.arize-phoenix` from `packages/arize-phoenix/uv.lock` via
-  uv2nix, and `aiObservability.phoenixPackage` defaults to that package.
-- Phoenix UI/OTLP HTTP binds to `http://127.0.0.1:6006`; Phoenix OTLP gRPC binds to `127.0.0.1:4317`; state lives outside the repo under `~/.local/state/ai-observability/phoenix`.
-- `aiObservability.autoStart = true` installs a macOS user LaunchAgent
-  (`org.nix-community.home.ai-observability-phoenix`) with `RunAtLoad` and
-  `KeepAlive`, so UI and OTLP ingest are available after login. `ai-observe-up`
-  and `ai-observe-down` are launchd-aware.
-- The Phoenix server process execs through an `env -i` allowlist containing
-  only `HOME`, `PATH`, `PHOENIX_*`, and `OPENINFERENCE_*`; provider credentials
-  and MCP tokens are not forwarded into the Phoenix process environment.
-- OpenLIT remains available as explicit optional backend/lab; runtime source is pinned to OpenLIT release `openlit-1.23.0`.
-- OpenLIT UI binds to `http://127.0.0.1:3010`; OTLP HTTP binds to `http://127.0.0.1:4318`.
-- `ai-observe-smoke` uses a Nix-packaged OpenTelemetry Python exporter and
-  includes repo-owned signal availability for workflow receipts, Headroom, RTK,
-  and hot benchmark scripts.
-- `ai-observe-insights` reads local Phoenix SQLite state and reports
-  research-oriented metadata summaries. Phoenix built-in token/cost dashboards
-  stay empty until real LLM token/model attributes are emitted; helpers do not
-  fabricate those metrics.
-- Helpers do not set global provider base URLs, `PHOENIX_COLLECTOR_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`.
-- Codex gets a managed metadata-only hook through `/etc/codex/requirements.toml`
-  and `/etc/codex/hooks/ai-observe-metadata.py`. It records lifecycle/tool event
-  names, repo commit/dirty state, hashed working-directory identifiers, payload
-  shape hashes/key counts, size classes, and exit-status classes. Hook events
-  share a Phoenix trace per Codex session so UI timelines are inspectable; it
-  never records prompts, shell commands, file contents, tool args, or outputs.
-- `ai-receipt-log` emits metadata-only workflow outcome spans to Phoenix when
-  reachable. It records kind/status/commit/dirty and summary/evidence shape
-  only, not summary or evidence text.
-- Claude Code subscription auth stays intact. Use `ai-observe-claude` when you
-  want official Claude Code OTel traces sent to Phoenix with content gates set
-  off (`OTEL_LOG_USER_PROMPTS=0`, `OTEL_LOG_TOOL_DETAILS=0`,
-  `OTEL_LOG_TOOL_CONTENT=0`, `OTEL_LOG_RAW_API_BODIES=0`). Plain `claude`
-  remains untouched.
-- OpenLIT/Cursor coding-agent hooks are still audit-only; use
-  `ai-observe-openlit-hook-audit` before any content-capable vendor hook test.
-- Capture mode is metadata-only: no prompts, outputs, secrets, cookies, private ticket text, or file contents.
+- `ccusage` is installed from its pinned upstream flake input.
+- `codeburn` is installed as a declared Homebrew formula on Darwin because no
+  nixpkgs package is available.
+- Reports read local coding-agent usage files; no server, LaunchAgent, ports,
+  hooks, OTLP exporter, or Docker/OrbStack dependency is installed.
+- Treat CodeBurn's mutating features as explicit review-first actions:
+  `codeburn optimize --apply`, `codeburn guard install`, and `codeburn menubar`.
+- `ai-receipt-*` stays as local repo-scoped JSONL workflow state and does not
+  export spans.
 
 #### Headroom (Context Compression)
 ```bash

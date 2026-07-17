@@ -17,8 +17,6 @@ Local scan:
 - Dependency surfaces found by `rg --files --hidden`:
   - `flake.nix`
   - `flake.lock`
-  - `packages/arize-phoenix/pyproject.toml`
-  - `packages/arize-phoenix/uv.lock`
 - No `.github/workflows`, `Dockerfile`, `package.json`, `Cargo.toml`, or `go.mod` were found in the repo scan.
 - Recent commit history uses Conventional Commit style such as `fix(agents): ...`, `docs(agents): ...`, and `feat: ...`; Renovate semantic commits should be explicitly enabled to match this pattern.
 

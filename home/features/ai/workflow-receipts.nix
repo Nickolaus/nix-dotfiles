@@ -25,11 +25,6 @@ let
 
   kindsPattern = builtins.concatStringsSep "|" kinds;
   statusesPattern = builtins.concatStringsSep "|" statuses;
-  receiptOtelPython = pkgs.python3.withPackages (pythonPackages: [
-    pythonPackages.opentelemetry-sdk
-    pythonPackages.opentelemetry-exporter-otlp-proto-http
-  ]);
-  receiptOtelPythonBin = "${receiptOtelPython}/bin/python3";
 
   receiptHelpers = ''
     state_dir=${lib.escapeShellArg cfg.stateDir}
@@ -158,101 +153,6 @@ let
         summary: $summary,
         evidence: $evidence
       }' >> "$receipt_file"
-
-    if [ "''${AI_RECEIPT_OTLP_DISABLE:-0}" != "1" ]; then
-      if [ -n "$($git_cmd -C "$root" status --short --untracked-files=all 2>/dev/null)" ]; then
-        dirty=true
-      else
-        dirty=false
-      fi
-
-      evidence_present=false
-      if [ -n "$evidence" ]; then
-        evidence_present=true
-      fi
-
-      ${receiptOtelPythonBin} - \
-        "''${AI_RECEIPT_OTLP_TRACES_ENDPOINT:-http://127.0.0.1:6006/v1/traces}" \
-        "$repo" \
-        "$branch" \
-        "$commit" \
-        "$dirty" \
-        "$kind" \
-        "$status" \
-        "''${#summary}" \
-        "$evidence_present" <<'PY' || true
-    import hashlib
-    import logging
-    import sys
-
-    from opentelemetry import trace
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-
-    (
-        endpoint,
-        repo,
-        branch,
-        commit,
-        dirty,
-        kind,
-        status,
-        summary_len,
-        evidence_present,
-    ) = sys.argv[1:]
-
-    def as_bool(value: str) -> bool:
-        return value.lower() == "true"
-
-    def size_class(value: str) -> str:
-        try:
-            size = int(value)
-        except ValueError:
-            return "unknown"
-        if size == 0:
-            return "empty"
-        if size <= 80:
-            return "short"
-        if size <= 240:
-            return "medium"
-        return "long"
-
-    def hash_value(value: str) -> str:
-        return hashlib.sha256(value.encode("utf-8", "replace")).hexdigest()[:16]
-
-    try:
-        logging.disable(logging.CRITICAL)
-        provider = TracerProvider(
-            resource=Resource.create(
-                {
-                    "service.name": "nix-dotfiles-workflow-receipts",
-                    "service.version": "1",
-                }
-            )
-        )
-        provider.add_span_processor(SimpleSpanProcessor(OTLPSpanExporter(endpoint=endpoint, timeout=1)))
-        trace.set_tracer_provider(provider)
-        tracer = trace.get_tracer("nix-dotfiles.ai-observability.receipts", "1")
-
-        with tracer.start_as_current_span("ai.workflow.receipt") as span:
-            span.set_attribute("ai.setup.agent", "workflow-receipts")
-            span.set_attribute("ai.setup.backend", "phoenix")
-            span.set_attribute("ai.setup.capture_mode", "metadata-only")
-            span.set_attribute("ai.setup.config_commit", commit)
-            span.set_attribute("ai.setup.dirty", as_bool(dirty))
-            span.set_attribute("ai.workflow.kind", kind)
-            span.set_attribute("ai.workflow.status", status)
-            span.set_attribute("ai.workflow.repo", repo)
-            span.set_attribute("ai.workflow.branch_hash", hash_value(branch))
-            span.set_attribute("ai.workflow.summary_size_class", size_class(summary_len))
-            span.set_attribute("ai.workflow.evidence_present", as_bool(evidence_present))
-        provider.shutdown()
-    except Exception:
-        pass
-    PY
-    fi
 
     echo "logged $kind/$status receipt: $receipt_file"
   '';

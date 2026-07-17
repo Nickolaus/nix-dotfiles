@@ -43,6 +43,7 @@
       "mysql-client" # MySQL client for interacting with MySQL databases
       "television" # Terminal-based TV streaming application
       "angular-cli" # Angular CLI for creating and building Angular projects (not available in nixpkgs)
+      "codeburn" # Local AI coding token/cost dashboard; Homebrew formula exists, no nixpkgs package
     ];
 
     # GUI applications and system integrations

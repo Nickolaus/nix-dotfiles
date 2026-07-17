@@ -35,10 +35,7 @@
 
     serena.url = "github:oraios/serena/v1.5.3";
 
-    # Reuse Serena's pinned pyproject toolchain for repo-owned Python app envs.
-    pyproject-nix.follows = "serena/pyproject-nix";
-    uv2nix.follows = "serena/uv2nix";
-    pyproject-build-systems.follows = "serena/pyproject-build-systems";
+    ccusage.url = "github:ccusage/ccusage";
 
     codebase-memory-mcp.url = "github:DeusData/codebase-memory-mcp/v0.8.1";
 
@@ -62,9 +59,6 @@
     , sops-nix
     , disko
     , impermanence
-    , pyproject-nix
-    , uv2nix
-    , pyproject-build-systems
     , ...
     }:
     let
@@ -153,23 +147,13 @@
       # Or: nix build .#packages.x86_64-linux.farnsworth-installer
       packages = forAllSystems
         (system:
-          let
-            pkgs = import nixpkgs {
-              inherit system;
-              config.allowUnfreePredicate = pkg:
-                lib.getName pkg == "arize-phoenix";
-            };
-          in
-          {
-            arize-phoenix = pkgs.callPackage ./packages/arize-phoenix {
-              inherit pyproject-nix uv2nix pyproject-build-systems;
-            };
-          } // lib.optionalAttrs (system == "aarch64-linux") {
+          (lib.optionalAttrs (system == "aarch64-linux") {
             # ARM (aarch64) installer - for Apple Silicon and ARM laptops
             farnsworth-installer = mkInstaller "aarch64-linux";
-          } // lib.optionalAttrs (system == "x86_64-linux") {
+          })
+          // (lib.optionalAttrs (system == "x86_64-linux") {
             # x86_64 installer - for Intel/AMD systems
             farnsworth-installer = mkInstaller "x86_64-linux";
-          });
+          }));
     };
 }
