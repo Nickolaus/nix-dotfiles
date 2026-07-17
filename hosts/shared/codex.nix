@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  inherit (lib) filterAttrs mkIf mkMerge optional optionalAttrs;
+  inherit (lib) escapeShellArg filterAttrs mkIf mkMerge optional optionalAttrs optionalString;
 
   aiAgentsLib = import ./ai-agents-lib.nix { inherit lib pkgs; };
   tomlFormat = pkgs.formats.toml { };
@@ -12,6 +12,9 @@ let
     cfg.observability.enable
     && cfg.codex.observability.enable
     && cfg.observability.captureMode == "metadata-only";
+  codexHeadroomProxy = cfg.headroom.proxies.shared;
+  codexHeadroomLabel = "org.nix-community.home.headroom-proxy-shared";
+  codexHeadroomProxyFrom = "headroom-ai[proxy]";
   codexObservePython = pkgs.python3.withPackages (pythonPackages: [
     pythonPackages.opentelemetry-sdk
     pythonPackages.opentelemetry-exporter-otlp-proto-http
@@ -104,13 +107,82 @@ let
     raise SystemExit(main())
   '';
 
+  codexHeadroomEnsureHook = pkgs.writeShellScript "codex-headroom-ensure" ''
+    set -eu
+
+    url=${escapeShellArg codexHeadroomProxy.url}
+    label=${escapeShellArg codexHeadroomLabel}
+    plist="$HOME/Library/LaunchAgents/$label.plist"
+    domain="gui/$(${pkgs.coreutils}/bin/id -u)"
+
+    healthy() {
+      ${pkgs.curl}/bin/curl -fsS "$url/health" >/dev/null 2>&1
+    }
+
+    if healthy; then
+      exit 0
+    fi
+
+    if [ -f "$plist" ]; then
+      /bin/launchctl bootstrap "$domain" "$plist" >/dev/null 2>&1 || true
+      /bin/launchctl kickstart -k "$domain/$label" >/dev/null 2>&1 || true
+    fi
+
+    i=0
+    while [ "$i" -lt 10 ]; do
+      if healthy; then
+        exit 0
+      fi
+      i=$((i + 1))
+      ${pkgs.coreutils}/bin/sleep 0.5
+    done
+
+    runtime_dir="/private/tmp/$(${pkgs.coreutils}/bin/id -un)/headroom"
+    log_dir="$runtime_dir/logs"
+    ${pkgs.coreutils}/bin/mkdir -p "$log_dir" "$runtime_dir/uv-cache" "$runtime_dir/cache" "$runtime_dir/state" "$runtime_dir/data"
+    (
+      export HOME="$HOME"
+      export UV_CACHE_DIR="$runtime_dir/uv-cache"
+      export XDG_CACHE_HOME="$runtime_dir/cache"
+      export XDG_STATE_HOME="$runtime_dir/state"
+      export XDG_DATA_HOME="$runtime_dir/data"
+      ${optionalString (codexHeadroomProxy.anthropicTargetUrl != null) ''
+        export ANTHROPIC_TARGET_API_URL=${escapeShellArg codexHeadroomProxy.anthropicTargetUrl}
+      ''}
+      ${optionalString (codexHeadroomProxy.openaiTargetUrl != null) ''
+        export OPENAI_TARGET_API_URL=${escapeShellArg codexHeadroomProxy.openaiTargetUrl}
+      ''}
+      headroom_bin="$HOME/.local/bin/headroom"
+      if [ -x "$headroom_bin" ]; then
+        exec "$headroom_bin" proxy --host 127.0.0.1 --port ${toString codexHeadroomProxy.port}
+      fi
+      exec ${pkgs.uv}/bin/uvx --from ${escapeShellArg codexHeadroomProxyFrom} headroom proxy \
+        --host 127.0.0.1 --port ${toString codexHeadroomProxy.port}
+    ) >>"$log_dir/headroom-proxy-shared.log" 2>>"$log_dir/headroom-proxy-shared.error.log" &
+
+    i=0
+    while [ "$i" -lt 30 ]; do
+      if healthy; then
+        exit 0
+      fi
+      i=$((i + 1))
+      ${pkgs.coreutils}/bin/sleep 0.5
+    done
+
+    echo "Warning: Codex is hard-routed through Headroom, but $url is not healthy." >&2
+    echo "Run 'headroom-status' or 'headroom-resume shared' in a shell." >&2
+    exit 0
+  '';
+
   codexObserveHook = pkgs.writeText "codex-ai-observe-metadata.py" ''
     import hashlib
     import json
     import logging
     import os
+    import socket
     import subprocess
     import sys
+    import urllib.parse
 
     from opentelemetry import trace
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -233,6 +305,18 @@ let
         return "none"
 
 
+    def endpoint_available(endpoint_base):
+        parsed = urllib.parse.urlparse(endpoint_base)
+        if parsed.hostname not in {"127.0.0.1", "localhost"}:
+            return False
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        try:
+            with socket.create_connection((parsed.hostname, port), timeout=0.15):
+                return True
+        except Exception:
+            return False
+
+
     def git_value(args, cwd):
         try:
             result = subprocess.run(
@@ -253,6 +337,8 @@ let
     def main() -> int:
         endpoint_base, backend, capture_mode, hook_event = sys.argv[1:5]
         if capture_mode != "metadata-only":
+            return 0
+        if not endpoint_available(endpoint_base):
             return 0
 
         try:
@@ -289,8 +375,10 @@ let
             "ai.agent.metric_hint": "metadata-only-no-token-cost",
             "ai.agent.tool_name": tool_name,
             "ai.agent.tool_category": tool_category(tool_name),
-            "ai.agent.session_id": session_id,
-            "ai.agent.turn_id": turn_id,
+            "ai.agent.has_session_id": session_id != "unknown",
+            "ai.agent.has_turn_id": turn_id != "unknown",
+            "ai.agent.session_id_hash": hash_value(session_id),
+            "ai.agent.turn_id_hash": hash_value(turn_id),
             "ai.agent.trace_scope": "session",
             "ai.agent.trace_group_hash": hash_value(trace_group),
             "ai.agent.cwd_hash": hash_value(cwd),
@@ -362,6 +450,17 @@ let
     ];
   };
 
+  codexHeadroomEnsureHookEntry = {
+    hooks = [
+      {
+        type = "command";
+        command = "${managedHooksDir}/headroom-ensure";
+        timeout = 20;
+        statusMessage = "Ensuring Codex Headroom proxy is running";
+      }
+    ];
+  };
+
   managedConfigSettings = {
     # Redirects the built-in "openai" provider (default `codex`, ChatGPT sign-in *or* an
     # API key -- either stays intact) through the always-on Headroom compression proxy
@@ -398,7 +497,9 @@ let
       existingRequirementHooks
       // {
         managed_dir = managedHooksDir;
-        SessionStart = (existingRequirementHooks.SessionStart or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "SessionStart");
+        SessionStart = (existingRequirementHooks.SessionStart or [ ]) ++ [
+          codexHeadroomEnsureHookEntry
+        ] ++ optional codexObservabilityEnabled (codexObserveHookEntry "SessionStart");
         UserPromptSubmit = (existingRequirementHooks.UserPromptSubmit or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "UserPromptSubmit");
         Stop = (existingRequirementHooks.Stop or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "Stop");
         SubagentStart = (existingRequirementHooks.SubagentStart or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "SubagentStart");
@@ -430,6 +531,7 @@ in
     (mkIf cfg.codex.requirements.enable {
       environment.etc."codex/hooks/rtk-pretool.py".source = rtkCodexPretoolHook;
       environment.etc."codex/hooks/ai-observe-metadata.py".source = codexObserveHook;
+      environment.etc."codex/hooks/headroom-ensure".source = codexHeadroomEnsureHook;
       environment.etc."codex/requirements.toml".source =
         tomlFormat.generate "codex-requirements.toml" codexRequirementsSettings;
     })

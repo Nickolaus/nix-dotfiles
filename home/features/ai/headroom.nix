@@ -1,6 +1,6 @@
 { config, lib, osConfig ? { }, pkgs, ... }:
 let
-  inherit (lib) mkIf optionalAttrs;
+  inherit (lib) escapeShellArg mkIf optionalAttrs;
 
   aiAgentsLib = import ../../../hosts/shared/ai-agents-lib.nix { inherit lib pkgs; };
 
@@ -17,6 +17,7 @@ let
   proxyNames = builtins.attrNames proxies;
 
   stateDir = "${config.home.homeDirectory}/.local/state/headroom";
+  uvRuntimeDir = "/private/tmp/${config.home.username}/headroom-install";
   launchdPath = "/etc/profiles/per-user/${config.home.username}/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
   uvx = "${pkgs.uv}/bin/uvx";
@@ -94,9 +95,27 @@ in
 {
   home.file.".local/state/headroom/.keep".text = "";
 
+  home.activation.ensureHeadroomInstalled = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    export UV_CACHE_DIR=${escapeShellArg "${uvRuntimeDir}/uv-cache"}
+    mkdir -p "$UV_CACHE_DIR"
+
+    headroom_bin="$(${pkgs.uv}/bin/uv tool dir --bin 2>/dev/null)/headroom"
+    [ -x "$headroom_bin" ] \
+      || ${pkgs.uv}/bin/uv tool install ${escapeShellArg headroomProxyFrom} >/dev/null 2>&1 \
+      || echo "Warning: failed to install headroom (${headroomProxyFrom})" >&2
+  '';
+
   home.packages = [
     (pkgs.writeShellScriptBin "headroom-status" ''
       set -euo pipefail
+
+      headroom_bin="$(${pkgs.uv}/bin/uv tool dir --bin 2>/dev/null)/headroom"
+      if [ -x "$headroom_bin" ]; then
+        echo "Headroom CLI: ok      $headroom_bin"
+      else
+        echo "Headroom CLI: missing $headroom_bin"
+      fi
+      echo
 
       check_proxy() {
         local name="$1" url="$2"
