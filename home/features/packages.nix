@@ -122,7 +122,7 @@
     cursor-cli               # Cursor CLI agent for AI-powered code editing
     codex                    # OpenAI's coding agent
     opencode                 # Multi-provider agentic coding CLI (opencode.ai)
-    mistral-vibe             # Mistral's terminal coding agent (vibe, vibe-acp)
+    (mistral-vibe.overrideAttrs (old: { doCheck = false; doInstallCheck = false; }))  # Mistral's terminal coding agent (vibe, vibe-acp) -- upstream 2.19.0 test suite runs in installCheckPhase (doInstallCheck) and has flaky Textual UI failures in sandboxed build
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 📊 DATA & ANALYTICS
