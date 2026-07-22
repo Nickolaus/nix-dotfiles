@@ -302,7 +302,18 @@ in
         chrome-devtools = {
           type = "stdio";
           command = "${pkgs.nodejs}/bin/npx";
-          args = [ "-y" "chrome-devtools-mcp@latest" ];
+          # --chromeArg flags disable GPU-accelerated rendering. Without them,
+          # Chrome's GPU process crashes macOS's MTLCompilerService (Metal
+          # shader compiler XPC service aborts with SIGABRT/llvm fatal error),
+          # which kills the renderer mid-load and leaves every page at
+          # about:blank with zero console/network activity. Confirmed via a
+          # direct chrome-headless-shell repro on 2026-07-22.
+          args = [
+            "-y"
+            "chrome-devtools-mcp@latest"
+            "--chromeArg=--disable-gpu"
+            "--chromeArg=--disable-software-rasterizer"
+          ];
           targets = [ ];
         };
         puppeteer = {
