@@ -62,11 +62,22 @@ let
   # One shared script for every profile: reads the pre-resolved, build-time
   # manifest named by argv[1], resolves inheritEnv/bearerTokenEnvVar from its
   # own environment at run time, and proxies the composed server set over
-  # stdio via FastMCP's create_proxy -- fastmcp isn't in nixpkgs (same
-  # situation as headroom-ai/mcp-server-fetch/mcp-server-time), so `uv run`
-  # resolves it from the PEP 723 header below rather than a Nix-packaged
-  # interpreter (contrast home/features/ai/vibe.nix's tomlkit script, which
-  # uses pkgs.python3.withPackages precisely because tomlkit *is* packaged).
+  # stdio via FastMCP -- fastmcp isn't in nixpkgs (same situation as
+  # headroom-ai/mcp-server-fetch/mcp-server-time), so `uv run` resolves it
+  # from the PEP 723 header below rather than a Nix-packaged interpreter
+  # (contrast home/features/ai/vibe.nix's tomlkit script, which uses
+  # pkgs.python3.withPackages precisely because tomlkit *is* packaged).
+  #
+  # Uses StatefulProxyClient/new_stateful instead of the create_proxy()
+  # convenience wrapper: create_proxy's default factory for a dict/MCPConfig
+  # target opens a brand-new backend connection per tool call (by design, to
+  # stop state leaking between unrelated requests), which respawns a fresh
+  # backend process on every call -- fatal for any stateful backend server
+  # (e.g. a browser automation server: each tool call would get a new,
+  # blank browser instead of the one a prior call navigated). new_stateful
+  # instead caches one backend client per incoming client session and reuses
+  # it for every tool call in that session, tearing it down only when the
+  # session ends.
   gatewayScript = pkgs.writeText "mcp-profile-gateway.py" ''
     # /// script
     # dependencies = ["fastmcp"]
@@ -75,7 +86,7 @@ let
     import os
     import sys
 
-    from fastmcp.server import create_proxy
+    from fastmcp.server.providers.proxy import FastMCPProxy, StatefulProxyClient
 
     manifest_path, profile_name = sys.argv[1], sys.argv[2]
 
@@ -98,7 +109,8 @@ let
             headers["Authorization"] = "Bearer " + os.environ.get(bearer_var, "")
             entry["headers"] = headers
 
-    create_proxy(config, name=profile_name).run()
+    client = StatefulProxyClient(config)
+    FastMCPProxy(client_factory=client.new_stateful, name=profile_name).run()
   '';
 
   # Spawned fresh per client invocation, exits when the client session ends --
