@@ -43,13 +43,7 @@ let
 
   mxKeysMapping = [
     (pair hid.capsLock hid.capsLock)
-    # Left side only: Option <-> Command swapped (Ctrl already correct).
-    (pair hid.leftOption hid.leftCommand)
-    (pair hid.leftCommand hid.leftOption)
-    # Right side keeps prior Ctrl <-> Command swap; unreported/unchanged.
-    (pair hid.rightControl hid.rightCommand)
-    (pair hid.rightCommand hid.rightControl)
-  ];
+  ] ++ externalPcKeyboardMapping;
 in
 {
   imports = [
@@ -73,8 +67,7 @@ in
           ${modifierArgs externalPcKeyboardMapping}
 
         # Office Logitech MX Keys (046D:B35B -> 1133:45915):
-        # Caps Lock stays Caps Lock. Left side: Option <-> Command swapped (Ctrl unchanged).
-        # Right side: Ctrl <-> Command swapped (unchanged from before).
+        # Caps Lock stays Caps Lock. Ctrl -> Command, Command -> Control (Alt/Option unchanged).
         run /usr/bin/defaults -currentHost write -g com.apple.keyboard.modifiermapping.1133-45915-0 -array \
           ${modifierArgs mxKeysMapping}
 
