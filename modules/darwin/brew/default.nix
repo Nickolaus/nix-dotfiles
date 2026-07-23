@@ -74,6 +74,8 @@
       "discord" # Voice and text chat
       "zed" # Fast native code editor; Homebrew cask tracks current macOS app releases
       "warp" # Agent-enabled terminal trial; Homebrew cask tracks current macOS app releases
+      "ghostty" # GPU-accelerated terminal emulator; nixpkgs ghostty has no darwin platform support
+      "t3-code" # Minimal GUI control plane for AI coding agents (t3.codes)
     ];
   };
 }
