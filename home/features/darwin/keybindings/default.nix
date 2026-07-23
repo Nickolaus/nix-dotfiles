@@ -43,7 +43,7 @@ let
 
   mxKeysMapping = [
     (pair hid.capsLock hid.capsLock)
-  ] ++ externalPcKeyboardMapping;
+  ] ++ builtInCycleMapping;
 in
 {
   imports = [
@@ -67,7 +67,10 @@ in
           ${modifierArgs externalPcKeyboardMapping}
 
         # Office Logitech MX Keys (046D:B35B -> 1133:45915):
-        # Caps Lock stays Caps Lock. Ctrl -> Command, Command -> Control (Alt/Option unchanged).
+        # Raw HID is already native Mac-ordered (Ctrl/Option/Command match labels),
+        # unlike the PC-scrambled Cherry keyboard, so it needs the same 3-cycle as
+        # the built-in layout, not the Cherry's Ctrl<->Command swap.
+        # Caps Lock stays Caps Lock. Command -> Option, Option -> Control, Control -> Command.
         run /usr/bin/defaults -currentHost write -g com.apple.keyboard.modifiermapping.1133-45915-0 -array \
           ${modifierArgs mxKeysMapping}
 
