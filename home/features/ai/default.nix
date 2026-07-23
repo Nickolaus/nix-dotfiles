@@ -7,6 +7,7 @@
     ./ccusage.nix
     ./codebase-memory.nix
     ./crawl4ai.nix
+    ./cursor-agent.nix
     ./graphify.nix
     ./headroom.nix
     ./mcp-profiles.nix
