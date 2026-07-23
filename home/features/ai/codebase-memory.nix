@@ -5,66 +5,50 @@ let
   codebaseMemoryMcpSource = aiSources.mcps.codebase-memory;
   codebaseMemoryMcpPackage = codebaseMemoryMcpSource.packages.${system}.default;
   cbmBin = "${codebaseMemoryMcpPackage}/bin/codebase-memory-mcp";
-  aiAgentsLib = import ../../../hosts/shared/ai-agents-lib.nix { inherit lib pkgs; };
-  tomlkitPython = aiAgentsLib.tomlkitPython;
 
-  codebaseMemoryOnboardCodexScript = pkgs.writeText "codebase-memory-onboard-codex.py" ''
-    import sys
-
-    import tomlkit
-
-    config_path, command, cache_dir = sys.argv[1], sys.argv[2], sys.argv[3]
-
-    try:
-        with open(config_path) as f:
-            doc = tomlkit.parse(f.read())
-    except FileNotFoundError:
-        doc = tomlkit.document()
-
-    servers = doc.get("mcp_servers")
-    if servers is None:
-        servers = tomlkit.table()
-        doc["mcp_servers"] = servers
-
-    table = tomlkit.table()
-    table["command"] = command
-    env = tomlkit.table()
-    env["CBM_CACHE_DIR"] = cache_dir
-    table["env"] = env
-    servers["codebase-memory"] = table
-
-    with open(config_path, "w") as f:
-        f.write(tomlkit.dumps(doc))
+  # Mirrors the slug+hash scheme `codebaseMemoryScopedWrapper` in
+  # hosts/shared/ai-agents.nix uses to pick a repo's live cache dir, so these
+  # status tools inspect exactly the same path the actual MCP process used.
+  # Kept as a literal duplicate (not a shared function) because the wrapper
+  # must stay self-contained with pinned absolute tool paths for GUI-launched
+  # clients that don't reliably inherit PATH -- these status tools run
+  # user-invoked from an interactive shell, which always has git/coreutils on
+  # PATH, so bare names are fine here. Inlined text, not a shell function --
+  # expects `git_root` already set at the call site and defines `cache_dir`.
+  cbmCacheDirForRoot = ''
+    slug="$(basename "$git_root" | tr -c 'A-Za-z0-9_-' '-')"
+    hash="$(printf '%s' "$git_root" | sha256sum | cut -c1-12)"
+    cache_dir="''${XDG_CACHE_HOME:-$HOME/.cache}/codebase-memory-mcp/repos/$slug-$hash"
   '';
 
   # Contributed to the *global* instructions files that caveman.nix also writes
   # (.codex/AGENTS.md, .claude/CLAUDE.md, .vibe/AGENTS.md). Both modules
   # independently set `home.file.<path>.text`, which Home Manager merges via
   # `types.lines` (string concatenation) -- no shared registry needed, each
-  # feature just owns its own section. Content focuses on using codebase-memory
-  # only through a repo-scoped cache, because upstream's default cache is
-  # intentionally cross-repo.
+  # feature just owns its own section.
   codebaseMemoryInstructions = ''
 
     ## Codebase Memory (repo-scoped structural graph)
 
-    Use codebase-memory only when its MCP is visible for the current repo with
-    repo-scoped `CBM_CACHE_DIR` (usually `.codex/cache/codebase-memory`). Never
-    use the upstream/global cache or another `list_projects` entry as context.
+    codebase-memory MCP is natively registered for Codex, Claude Code, and
+    Vibe -- no per-repo setup needed. It resolves its own cache per git repo
+    automatically (`hosts/shared/ai-agents.nix`, `codebaseMemoryScopedWrapper`)
+    and refuses to start outside a git repo rather than fall back to a shared
+    cache, so tools never mix graphs across repos.
 
-    On structural code tasks, first `list_projects`; choose only the project
-    whose `root_path` equals the current Git root. If it is missing, empty, or
-    has `nodes=0`, call `index_repository(repo_path=<absolute git root>,
-    mode="fast")`, then re-check before using graph tools.
+    On structural code tasks, first `list_projects`; the current repo is the
+    only project entry that should exist for this session. If it is missing,
+    empty, or has `nodes=0`, call `index_repository(repo_path=<absolute git
+    root>, mode="fast")`, then re-check before using graph tools.
 
     Orient with `get_architecture` or `get_graph_schema`. For callers, dead
     code, impact, or "what breaks if I change X", use `trace_path`,
     `search_graph`, `query_graph`, and `detect_changes` instead of broad grep.
     Use `get_code_snippet` only after `search_graph` identifies the symbol.
 
-    If MCP is not visible, run `codex-ai-status`. For clone-local Codex setup,
-    run `codebase-memory-onboard <repo>` and restart Codex; keep personal MCP
-    config out of commits.
+    If MCP tools are not visible, check tool discovery (`codex mcp list` or
+    the client's own tool list) and restart the session -- MCP servers load at
+    session start. Run `codex-ai-status` for a full diagnostic.
   '';
 in
 {
@@ -74,78 +58,6 @@ in
 
   home.packages = [
     codebaseMemoryMcpPackage
-
-    (pkgs.writeShellScriptBin "codebase-memory-onboard" ''
-      set -euo pipefail
-
-      case "''${1:-}" in
-        --help|-h)
-          echo "Usage: codebase-memory-onboard [repo-dir]" >&2
-          echo "Adds repo-scoped Codex MCP config with local-only git hiding." >&2
-          exit 0
-          ;;
-      esac
-
-      repo_dir="''${1:-.}"
-      cd "$repo_dir"
-      git_cmd="git -c core.fsmonitor=false"
-      root="$($git_cmd rev-parse --show-toplevel 2>/dev/null)" || {
-        echo "$(pwd) is not inside a git repo -- refusing to create repo-local config." >&2
-        exit 1
-      }
-      cd "$root"
-
-      config_rel=".codex/config.toml"
-      cache_rel=".codex/cache/codebase-memory"
-      mkdir -p .codex "$cache_rel" .git/info
-
-      require_private_file() {
-        rel="$1"
-        if $git_cmd ls-files --error-unmatch "$rel" >/dev/null 2>&1; then
-          echo "$rel is tracked by this repo; refusing to hide personal MCP edits with --skip-worktree." >&2
-          echo "Tracked project config must be a team decision. For personal setup, untrack and ignore $rel first." >&2
-          exit 1
-        else
-          if ! grep -qxF "$rel" .git/info/exclude 2>/dev/null; then
-            echo "$rel" >> .git/info/exclude
-          fi
-          echo "  $rel added to .git/info/exclude"
-        fi
-      }
-
-      keep_private_path() {
-        rel="$1"
-        if ! grep -qxF "$rel" .git/info/exclude 2>/dev/null; then
-          echo "$rel" >> .git/info/exclude
-        fi
-        if ! grep -qxF "$rel/" .git/info/exclude 2>/dev/null; then
-          echo "$rel/" >> .git/info/exclude
-        fi
-        echo "  $rel excluded via .git/info/exclude"
-      }
-
-      echo "==> Adding repo-scoped codebase-memory MCP to $root"
-      require_private_file "$config_rel"
-      ${tomlkitPython}/bin/python3 ${codebaseMemoryOnboardCodexScript} \
-        "$config_rel" "/run/current-system/sw/bin/codebase-memory-mcp" "$cache_rel"
-
-      echo
-      echo "==> Keeping personal setup out of commits"
-      keep_private_path "$cache_rel"
-
-      echo
-      echo "==> Enabling scoped auto-index"
-      CBM_CACHE_DIR="$cache_rel" ${cbmBin} config set auto_index true >/dev/null
-
-      echo
-      echo "==> Scoped cache status"
-      CBM_CACHE_DIR="$cache_rel" ${cbmBin} config list 2>/dev/null | sed 's/^/  /'
-      CBM_CACHE_DIR="$cache_rel" ${cbmBin} cli list_projects 2>/dev/null | sed 's/^/  /'
-
-      echo
-      echo "Done. Start a new Codex session in this repo so MCP tools are loaded."
-      echo "Git should not show personal setup; verify with: git status --short -- $config_rel $cache_rel"
-    '')
 
     (pkgs.writeShellScriptBin "codebase-memory-status" ''
       set -euo pipefail
@@ -168,56 +80,33 @@ in
       fi
 
       echo
-      echo "Global cache config (upstream default, intentionally cross-repo):"
+      echo "Global cache config (upstream default, intentionally cross-repo,"
+      echo "not used by the natively-registered MCP server -- see below):"
       "$package_path" config list 2>/dev/null | sed 's/^/  /'
+
       echo
       echo "Update model:"
       echo "  binary: Nix-managed from flake input codebase-memory-mcp; do not run upstream self-update"
-      echo "  repo graph: repo-scoped auto_index/watch, or force via MCP index_repository if needed"
+      echo "  repo graph: auto_index runs on MCP session start, or force via MCP index_repository"
 
       echo
-      echo "Global cache dir: ''${CBM_CACHE_DIR:-$HOME/.cache/codebase-memory-mcp}"
-      echo "Global indexed projects:"
-      "$package_path" cli list_projects 2>/dev/null | sed 's/^/  /'
-
-      echo
-      if git_root="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -f "$git_root/.codex/config.toml" ]; then
-        scoped_cache="$(
-          awk -F= '
-            /^[[:space:]]*CBM_CACHE_DIR[[:space:]]*=/ {
-              gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
-              gsub(/^"|"$/, "", $2)
-              print $2
-              exit
-            }
-          ' "$git_root/.codex/config.toml"
-        )"
-
-        if [ -n "$scoped_cache" ]; then
-          echo "Repo-scoped cache config ($git_root):"
-          (cd "$git_root" && CBM_CACHE_DIR="$scoped_cache" "$package_path" config list 2>/dev/null) | sed 's/^/  /'
-
+      if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+        ${cbmCacheDirForRoot}
+        echo "Repo-scoped cache for $git_root:"
+        echo "  $cache_dir"
+        if [ -d "$cache_dir" ]; then
+          CBM_CACHE_DIR="$cache_dir" "$package_path" config list 2>/dev/null | sed 's/^/  /'
           echo
-          echo "Repo-scoped CLI cache view (active MCP list_projects/index_status is authoritative):"
-          (cd "$git_root" && CBM_CACHE_DIR="$scoped_cache" "$package_path" cli list_projects 2>/dev/null) | sed 's/^/  /'
+          echo "  CLI cache view below is diagnostic only and can lag/diverge from the live MCP process."
+          echo "  Inside Codex/Claude/Vibe, MCP list_projects/index_status is authoritative."
+          CBM_CACHE_DIR="$cache_dir" "$package_path" cli list_projects 2>/dev/null | sed 's/^/  /'
         else
-          echo "Repo .codex/config.toml exists but has no CBM_CACHE_DIR."
+          echo "  not created yet -- the MCP server creates it on first session start in this repo"
         fi
       else
-        echo "No repo-scoped Codex codebase-memory config found from current directory."
+        echo "Not inside a git repo -- the natively-registered codebase-memory MCP refuses to"
+        echo "start here rather than fall back to the shared global cache above."
       fi
-
-      echo
-      echo "Expected repo-scoped Codex setup:"
-      echo "  codebase-memory-onboard <repo>"
-      echo "or manually:"
-      echo '  command = "/run/current-system/sw/bin/codebase-memory-mcp"'
-      echo '  CBM_CACHE_DIR = ".codex/cache/codebase-memory"'
-      echo '  CBM_CACHE_DIR=.codex/cache/codebase-memory codebase-memory-mcp config set auto_index true'
-      echo
-      echo "Global instructions (scoped graph usage and boundary rules) are merged into"
-      echo "the same .codex/AGENTS.md, .claude/CLAUDE.md, and .vibe/AGENTS.md that caveman-status"
-      echo "reports on -- applies across every repo, not just this one."
     '')
 
     (pkgs.writeShellScriptBin "codex-ai-status" ''
@@ -226,7 +115,9 @@ in
       echo "Codex AI setup status"
       echo
 
+      in_git_repo=0
       if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+        in_git_repo=1
         echo "Git root: $git_root"
       else
         git_root="$(pwd)"
@@ -273,32 +164,25 @@ in
       fi
 
       echo
-      echo "Codebase-memory cache:"
-      if [ -f "$git_root/.codex/config.toml" ]; then
-        scoped_cache="$(
-          awk -F= '
-            /^[[:space:]]*CBM_CACHE_DIR[[:space:]]*=/ {
-              gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
-              gsub(/^"|"$/, "", $2)
-              print $2
-              exit
-            }
-          ' "$git_root/.codex/config.toml"
-        )"
-
-        if [ -n "$scoped_cache" ]; then
-          echo "  scoped dir: $scoped_cache"
-          (cd "$git_root" && CBM_CACHE_DIR="$scoped_cache" ${cbmBin} config list 2>/dev/null) | sed 's/^/  /'
+      echo "Codebase-memory (natively registered, no per-repo onboarding needed):"
+      if printf '%s\n' "$codex_mcp_output" | grep -qi 'codebase-memory'; then
+        echo "  visible in codex mcp list"
+      else
+        echo "  not visible in codex mcp list -- restart the Codex session (MCP servers load at startup)"
+      fi
+      if [ "$in_git_repo" = "1" ]; then
+        ${cbmCacheDirForRoot}
+        echo "  scoped cache dir: $cache_dir"
+        if [ -d "$cache_dir" ]; then
+          CBM_CACHE_DIR="$cache_dir" ${cbmBin} config list 2>/dev/null | sed 's/^/  /'
           echo "  CLI cache view below is diagnostic only and can lag/diverge from the live MCP process."
           echo "  Inside Codex, MCP list_projects/index_status is authoritative."
-          (cd "$git_root" && CBM_CACHE_DIR="$scoped_cache" ${cbmBin} cli list_projects 2>/dev/null) | sed 's/^/  /'
+          CBM_CACHE_DIR="$cache_dir" ${cbmBin} cli list_projects 2>/dev/null | sed 's/^/  /'
         else
-          echo "  no CBM_CACHE_DIR found in project config"
-          echo "  run: codebase-memory-onboard $git_root"
+          echo "  not created yet -- created on first MCP session start in this repo"
         fi
       else
-        echo "  no project config"
-        echo "  run: codebase-memory-onboard $git_root"
+        echo "  not in a git repo -- codebase-memory refuses to start here"
       fi
 
       echo

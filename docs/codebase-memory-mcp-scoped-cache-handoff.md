@@ -1,5 +1,19 @@
 # codebase-memory-mcp scoped-cache handoff
 
+## Status
+
+This repo runs a local mitigation today: `codebaseMemoryScopedWrapper`
+(`hosts/shared/ai-agents.nix`) is a shell wrapper registered as the MCP
+server's `command`. It resolves `git rev-parse --show-toplevel` from its own
+cwd at spawn time and sets `CBM_CACHE_DIR` to a per-repo slot under
+`~/.cache/codebase-memory-mcp/repos/<slug>-<hash>/`, refusing to start outside
+a git repo. This gets the per-repo isolation this document asks for without
+any repo-tracked file, but it is a wrapper working around a gap in upstream,
+not the native feature. The ask below (`CBM_CACHE_SCOPE`, `CBM_AUTO_INDEX`,
+MCP `instructions`) still stands as the real fix: it would let every consumer
+of `codebase-memory-mcp` get this behavior via plain env config, with no
+wrapper script anywhere.
+
 ## Goal
 
 Create a commit-ready upstream PR for

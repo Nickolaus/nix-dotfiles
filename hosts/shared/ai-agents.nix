@@ -26,6 +26,44 @@ let
     "headroom"
   ];
 
+  # codebase-memory-mcp's own cache is one shared global DB by default
+  # (upstream intentionally cross-repo, see
+  # docs/codebase-memory-mcp-scoped-cache-handoff.md). This wrapper stands in
+  # for the proposed upstream `CBM_CACHE_SCOPE=git-root` env var: it resolves
+  # the git root of its own working directory (inherited from whichever
+  # client -- Codex/Claude/Vibe -- spawned it, i.e. the project the session
+  # was started in) and points CBM_CACHE_DIR at a per-repo slot under
+  # ~/.cache/codebase-memory-mcp/repos/, so every repo gets an isolated cache
+  # automatically. Deliberately fails closed (refuses to start) outside a git
+  # repo instead of silently falling back to the shared global cache -- same
+  # fail-closed contract the upstream ask specifies. This lets the server be
+  # natively registered once, globally, like any other MCP server here: no
+  # per-repo onboarding, no writing into a repo's own (possibly tracked and
+  # shippable) .codex/config.toml, no tracked/untracked file ever touched
+  # inside a repo -- the exact rebase/branch-switch corruption documented in
+  # docs/codex-mcp-config-rebase-research-2026.md is structurally impossible
+  # here because nothing is ever written inside the repo's working tree.
+  codebaseMemoryScopedWrapper = pkgs.writeShellScript "codebase-memory-mcp-scoped" ''
+    set -euo pipefail
+
+    cbm_bin="/run/current-system/sw/bin/codebase-memory-mcp"
+
+    root="$(${pkgs.git}/bin/git rev-parse --show-toplevel 2>/dev/null)" || {
+      echo "codebase-memory-mcp: $PWD is not inside a git repo; refusing to fall back to the shared global cache." >&2
+      exit 1
+    }
+
+    slug="$(${pkgs.coreutils}/bin/basename "$root" | ${pkgs.coreutils}/bin/tr -c 'A-Za-z0-9_-' '-')"
+    hash="$(printf '%s' "$root" | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.coreutils}/bin/cut -c1-12)"
+    cache_dir="''${XDG_CACHE_HOME:-$HOME/.cache}/codebase-memory-mcp/repos/$slug-$hash"
+    ${pkgs.coreutils}/bin/mkdir -p "$cache_dir"
+
+    export CBM_CACHE_DIR="$cache_dir"
+    "$cbm_bin" config set auto_index true >/dev/null 2>&1 || true
+
+    exec "$cbm_bin" "$@"
+  '';
+
   mcpServerTargetOverrideType = types.submodule ({ ... }: {
     options = {
       type = mkOption {
@@ -368,14 +406,14 @@ in
         };
         codebase-memory = {
           type = "stdio";
-          command = "/run/current-system/sw/bin/codebase-memory-mcp";
-          # codebase-memory-mcp persists all project DBs under one cache root
-          # by default and intentionally supports cross-repo graph queries.
-          # Keep it out of native/global MCP registration and profiles unless a
-          # repo supplies a project-local MCP entry with a scoped CBM_CACHE_DIR.
-          # That preserves upstream auto_index while preventing unrelated repo
-          # names/graphs from entering every session.
-          targets = [ ];
+          # codebaseMemoryScopedWrapper (above) resolves a per-repo CBM_CACHE_DIR
+          # from the git root of the spawning session's cwd, so this is safe to
+          # register natively -- no cross-repo cache bleed, no per-repo
+          # onboarding, no file ever written inside a repo. Cursor has no
+          # documented per-project stdio MCP config path in this repo's other
+          # native entries, so it's left out here too, same as elsewhere.
+          command = "${codebaseMemoryScopedWrapper}";
+          targets = [ "codex" "claude" "vibe" ];
         };
         headroom = {
           type = "stdio";
