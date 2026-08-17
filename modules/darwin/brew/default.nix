@@ -70,6 +70,7 @@
       "shottr" # Lightweight screenshot tool with URL scheme API support
       "corelocationcli" # CLI tool for accessing Core Location services (requires location permissions)
       "libreoffice" # Free office suite (not available in nixpkgs for Darwin)
+      "calibre" # E-book library/metadata management (calibre marked broken in nixpkgs)
       "phpstorm" # PHP IDE
       "discord" # Voice and text chat
       "zed" # Fast native code editor; Homebrew cask tracks current macOS app releases
