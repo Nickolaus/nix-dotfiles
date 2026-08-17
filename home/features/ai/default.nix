@@ -1,5 +1,6 @@
 { ... }: {
   imports = [
+    ./adhd.nix
     ./agent-catalog.nix
     ./agent-configs.nix
     ./caveman.nix

@@ -15,6 +15,7 @@ let
   cavemanSrc = aiSources.skills.caveman;
   gstackSrc = aiSources.skills.gstack;
   mattpocockSkillsSrc = aiSources.skills.mattpocock-skills;
+  iHaveAdhdSrc = aiSources.skills.i-have-adhd;
 
   mattpocockSkill = { category, name, implicit }: {
     inherit name;
@@ -424,6 +425,20 @@ in
             owner = "github:chonkie-inc/skills";
             implicit = false;
             managed = false;
+          };
+
+          i-have-adhd = {
+            source = iHaveAdhdSrc + "/skills/i-have-adhd";
+            # Upstream sets `disable-model-invocation: true` -- Claude Code and
+            # Codex both honor that flag directly off SKILL.md regardless of
+            # this catalog's implicit setting, so implicit=false here just
+            # keeps our bookkeeping honest. The always-on behavior the user
+            # wants comes from home/features/ai/adhd.nix injecting the same
+            # SKILL.md verbatim into CLAUDE.md/AGENTS.md, not from this flag.
+            targets = [ "codex" "claude" "cursor" "vibe" ];
+            trust = "pinned-flake";
+            owner = "github:ayghri/i-have-adhd";
+            implicit = false;
           };
         };
       description = "Declarative reusable AI-agent skills.";

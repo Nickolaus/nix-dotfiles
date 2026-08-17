@@ -33,6 +33,12 @@
       flake = false;
     };
 
+    # No upstream tags/releases as of pinning; pinned by commit instead.
+    i-have-adhd = {
+      url = "github:ayghri/i-have-adhd/2ed064090711586e0c97a2fbbf15465fe8f1808b";
+      flake = false;
+    };
+
     serena.url = "github:oraios/serena/v1.5.3";
 
     ccusage.url = "github:ccusage/ccusage";

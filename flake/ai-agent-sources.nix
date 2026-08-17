@@ -10,6 +10,7 @@
     caveman = flake.inputs.caveman;
     gstack = flake.inputs.gstack;
     mattpocock-skills = flake.inputs.mattpocock-skills;
+    i-have-adhd = flake.inputs.i-have-adhd;
   };
 
   mcps = {
