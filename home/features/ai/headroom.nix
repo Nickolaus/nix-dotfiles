@@ -24,7 +24,11 @@ let
   # [proxy] pulls in everything the always-on compression proxy needs (fastapi/uvicorn,
   # ONNX Kompress model, MCP server, code-graph watcher). Pinned via `--from` so every
   # invocation resolves the same extras set regardless of caller.
-  headroomProxyFrom = "headroom-ai[proxy]";
+  headroomProxyFrom = aiAgentsLib.mkUvxPackageSpec {
+    package = "headroom-ai";
+    version = aiAgentsLib.mcpPackageVersions.pypi.headroom;
+    extras = [ "proxy" ];
+  };
 
   labelFor = name: "org.nix-community.home.headroom-proxy-${name}";
   logFileFor = name: "${stateDir}/headroom-proxy-${name}.log";

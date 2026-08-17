@@ -14,7 +14,11 @@ let
     && cfg.observability.captureMode == "metadata-only";
   codexHeadroomProxy = cfg.headroom.proxies.shared;
   codexHeadroomLabel = "org.nix-community.home.headroom-proxy-shared";
-  codexHeadroomProxyFrom = "headroom-ai[proxy]";
+  codexHeadroomProxyFrom = aiAgentsLib.mkUvxPackageSpec {
+    package = "headroom-ai";
+    version = aiAgentsLib.mcpPackageVersions.pypi.headroom;
+    extras = [ "proxy" ];
+  };
   codexObservePython = pkgs.python3.withPackages (pythonPackages: [
     pythonPackages.opentelemetry-sdk
     pythonPackages.opentelemetry-exporter-otlp-proto-http

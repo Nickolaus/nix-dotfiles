@@ -3,7 +3,7 @@
 
 [mcp_servers.nixos]
 command = "uvx"
-args = ["mcp-nixos"]
+args = ["--from", "mcp-nixos==3.0.1", "mcp-nixos"]
 
 [mcp_servers.codebase-memory]
 command = "/run/current-system/sw/bin/codebase-memory-mcp"

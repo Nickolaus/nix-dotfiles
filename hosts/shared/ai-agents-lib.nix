@@ -1,8 +1,28 @@
 { lib, pkgs }:
 let
-  inherit (lib) escapeShellArg;
+  inherit (lib) concatMap concatStringsSep escapeShellArg optionalString;
 in
 rec {
+  # Package-manager launched MCP/runtime packages must be pinned in one place,
+  # not left to `@latest` or floating `uvx` resolution. These are runtime
+  # package versions, not Nix package versions: bump them intentionally after
+  # validating startup for every consumer rendered from this file.
+  mcpPackageVersions = {
+    npm = {
+      context7 = "4.0.2";
+      chromeDevtools = "1.7.0";
+      puppeteer = "0.7.2";
+      memory = "2026.7.4";
+      sequentialThinking = "2026.7.4";
+    };
+    pypi = {
+      fetch = "2026.7.10";
+      headroom = "0.32.0";
+      nixos = "3.0.1";
+      time = "2026.7.10";
+    };
+  };
+
   # Shared by every script that reads/edits TOML via tomlkit (Vibe's config.toml merge,
   # the MCP-profile onboarding scripts) -- one derivation instead of each caller declaring
   # its own identical `pkgs.python3.withPackages (ps: [ ps.tomlkit ])`.
@@ -145,6 +165,43 @@ rec {
           "${isolatedStdioLauncher name server}"
         else
           server.command;
+    };
+
+  mkNpxCommand =
+    { package
+    , version
+    , args ? [ ]
+    }:
+    {
+      command = "${pkgs.nodejs}/bin/npx";
+      args = [ "-y" "${package}@${version}" ] ++ args;
+    };
+
+  mkUvxPackageSpec =
+    { package
+    , version
+    , extras ? [ ]
+    }:
+    "${package}${optionalString (extras != [ ]) "[${concatStringsSep "," extras}]"}==${version}";
+
+  mkUvxCommand =
+    { package
+    , version
+    , executable ? package
+    , extras ? [ ]
+    , withPackages ? [ ]
+    , args ? [ ]
+    }:
+    let
+      packageSpec = mkUvxPackageSpec { inherit package version extras; };
+    in
+    {
+      command = "${pkgs.uv}/bin/uvx";
+      args =
+        [ "--from" packageSpec ]
+        ++ concatMap (dependency: [ "--with" dependency ]) withPackages
+        ++ [ executable ]
+        ++ args;
     };
 
   skillTargetDir = target: {

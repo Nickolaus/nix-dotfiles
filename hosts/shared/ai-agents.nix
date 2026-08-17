@@ -7,6 +7,8 @@ let
     types
     ;
 
+  aiAgentsLib = import ./ai-agents-lib.nix { inherit lib pkgs; };
+
   clientType = types.enum [ "codex" "claude" "cursor" "vibe" ];
   transportType = types.enum [ "http" "sse" "stdio" ];
 
@@ -25,6 +27,18 @@ let
     "github"
     "headroom"
   ];
+
+  mcpPackageVersions = aiAgentsLib.mcpPackageVersions;
+
+  mkNpxMcpServer = args:
+    {
+      type = "stdio";
+    } // aiAgentsLib.mkNpxCommand args;
+
+  mkUvxMcpServer = args:
+    {
+      type = "stdio";
+    } // aiAgentsLib.mkUvxCommand args;
 
   # codebase-memory-mcp's own cache is one shared global DB by default
   # (upstream intentionally cross-repo, see
@@ -324,10 +338,13 @@ in
           url = "https://developers.openai.com/mcp";
           targets = [ ];
         };
-        context7 = {
-          type = "stdio";
-          command = "${pkgs.nodejs}/bin/npx";
-          args = [ "-y" "@upstash/context7-mcp" ];
+        context7 = mkNpxMcpServer
+          {
+            # Optional auth via CONTEXT7_API_KEY is still inherited below; the
+            # executable itself is pinned so startup does not drift by session.
+            package = "@upstash/context7-mcp";
+            version = mcpPackageVersions.npm.context7;
+          } // {
           inheritEnv = [ "CONTEXT7_API_KEY" ];
         };
         github = {
@@ -337,27 +354,28 @@ in
         };
         # Browser automation -- not natively registered, reachable together via
         # aiAgents.mcpProfiles.web.
-        chrome-devtools = {
-          type = "stdio";
-          command = "${pkgs.nodejs}/bin/npx";
-          # --chromeArg flags disable GPU-accelerated rendering. Without them,
-          # Chrome's GPU process crashes macOS's MTLCompilerService (Metal
-          # shader compiler XPC service aborts with SIGABRT/llvm fatal error),
-          # which kills the renderer mid-load and leaves every page at
-          # about:blank with zero console/network activity. Confirmed via a
-          # direct chrome-headless-shell repro on 2026-07-22.
-          args = [
-            "-y"
-            "chrome-devtools-mcp@latest"
-            "--chromeArg=--disable-gpu"
-            "--chromeArg=--disable-software-rasterizer"
-          ];
+        chrome-devtools = mkNpxMcpServer
+          {
+            # --chromeArg flags disable GPU-accelerated rendering. Without them,
+            # Chrome's GPU process crashes macOS's MTLCompilerService (Metal
+            # shader compiler XPC service aborts with SIGABRT/llvm fatal error),
+            # which kills the renderer mid-load and leaves every page at
+            # about:blank with zero console/network activity. Confirmed via a
+            # direct chrome-headless-shell repro on 2026-07-22.
+            package = "chrome-devtools-mcp";
+            version = mcpPackageVersions.npm.chromeDevtools;
+            args = [
+              "--chromeArg=--disable-gpu"
+              "--chromeArg=--disable-software-rasterizer"
+            ];
+          } // {
           targets = [ ];
         };
-        puppeteer = {
-          type = "stdio";
-          command = "${pkgs.nodejs}/bin/npx";
-          args = [ "-y" "puppeteer-mcp-server@latest" ];
+        puppeteer = mkNpxMcpServer
+          {
+            package = "puppeteer-mcp-server";
+            version = mcpPackageVersions.npm.puppeteer;
+          } // {
           isolateWorkingDirectory = true;
           targets = [ ];
         };
@@ -370,10 +388,12 @@ in
           bearerTokenEnvVar = config.aiAgents.crawl4ai.apiTokenEnvVar;
           targets = [ ];
         };
-        fetch = {
-          type = "stdio";
-          command = "${pkgs.uv}/bin/uvx";
-          args = [ "mcp-server-fetch" ];
+        fetch = mkUvxMcpServer {
+          package = "mcp-server-fetch";
+          version = mcpPackageVersions.pypi.fetch;
+          # mcp-server-fetch 2026.7.10 still imports `McpError`; mcp 2.0.0
+          # renamed that symbol to `MCPError`, crashing before initialize.
+          withPackages = [ "mcp<2" ];
         };
         # @modelcontextprotocol/server-memory defaults to storing memory.jsonl
         # next to its own installed package, not per-repo -- it's already a
@@ -381,21 +401,23 @@ in
         # of targets here. That surprising global-by-default behavior is why
         # it stays an explicit opt-in (aiAgents.mcpProfiles.scratchpad) rather
         # than natively loaded everywhere.
-        memory = {
-          type = "stdio";
-          command = "${pkgs.nodejs}/bin/npx";
-          args = [ "-y" "@modelcontextprotocol/server-memory" ];
+        memory = mkNpxMcpServer
+          {
+            package = "@modelcontextprotocol/server-memory";
+            version = mcpPackageVersions.npm.memory;
+          } // {
           targets = [ ];
         };
-        sequential-thinking = {
-          type = "stdio";
-          command = "${pkgs.nodejs}/bin/npx";
-          args = [ "-y" "@modelcontextprotocol/server-sequential-thinking" ];
+        sequential-thinking = mkNpxMcpServer {
+          package = "@modelcontextprotocol/server-sequential-thinking";
+          version = mcpPackageVersions.npm.sequentialThinking;
         };
-        time = {
-          type = "stdio";
-          command = "${pkgs.uv}/bin/uvx";
-          args = [ "mcp-server-time" ];
+        time = mkUvxMcpServer {
+          package = "mcp-server-time";
+          version = mcpPackageVersions.pypi.time;
+          # mcp-server-time 2026.7.10 has the same pre-handshake mcp 2.x
+          # import incompatibility as fetch.
+          withPackages = [ "mcp<2" ];
         };
         # Single-purpose (Jira/Confluence) -- not natively registered,
         # reachable via aiAgents.mcpProfiles.atlassian.
@@ -415,13 +437,15 @@ in
           command = "${codebaseMemoryScopedWrapper}";
           targets = [ "codex" "claude" "vibe" ];
         };
-        headroom = {
-          type = "stdio";
-          command = "${pkgs.uv}/bin/uvx";
+        headroom = mkUvxMcpServer {
           # The MCP command imports proxy modules at CLI registration time.
           # Keep proxy extras present too, or fastapi can be missing before
           # the MCP initialize handshake even starts.
-          args = [ "--from" "headroom-ai[mcp,proxy]" "headroom" "mcp" "serve" ];
+          package = "headroom-ai";
+          version = mcpPackageVersions.pypi.headroom;
+          executable = "headroom";
+          extras = [ "mcp" "proxy" ];
+          args = [ "mcp" "serve" ];
         };
         # Heaviest tool surface + slowest startup (LSP indexing) of any server
         # here -- only valuable during active code-navigation sessions, not
