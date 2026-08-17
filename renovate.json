@@ -16,7 +16,17 @@
   "branchConcurrentLimit": 0,
   "separateMajorMinor": true,
   "separateMultipleMajor": true,
-  "enabledManagers": ["nix", "pep621"],
+  "enabledManagers": ["nix", "pep621", "custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update package-manager MCP runtime pins in ai-agents-lib.nix.",
+      "fileMatch": ["^hosts/shared/ai-agents-lib\\.nix$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?\\s+\\w+ = \"(?<currentValue>[^\"]+)\";"
+      ]
+    }
+  ],
   "nix": {
     "enabled": true
   },

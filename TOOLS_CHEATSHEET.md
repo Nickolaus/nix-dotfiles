@@ -721,6 +721,7 @@ hyperfine --runs 10 'your-command'
 sudo determinate-nixd status         # 1. Check daemon health
 sudo determinate-nixd upgrade        # 2. Upgrade Determinate Nix
 nix flake update                     # 3. Update configuration inputs
+./scripts/update-mcp-runtime-versions.py --write --sync-private-codex  # 3a. Update npm/PyPI MCP runtime pins
 sudo darwin-rebuild switch --flake ~/.config/nix-dotfiles --show-trace  # 4. Apply changes
 sudo determinate-nixd status         # 5. Verify system health
 ```
@@ -779,6 +780,7 @@ determinate-nixd bug "Issue title" "Description"  # File bug report
 **Script Features:**
 - ✅ Automated health checks (before/after)
 - ✅ Proper Determinate Systems upgrade sequence
+- ✅ npm/PyPI MCP runtime pins refreshed before config validation
 - ✅ Homebrew defaults to declared package convergence with `--no-upgrade`
 - ✅ Explicit `--upgrade-brew` path for mutable declared-only Homebrew upgrades
 - ✅ Explicit `--prune-brew` path for destructive Homebrew cleanup

@@ -134,6 +134,14 @@ update_configuration() {
         exit 1
     fi
 
+    log_info "Updating package-manager MCP runtime version pins..."
+    if ./scripts/update-mcp-runtime-versions.py --write --sync-private-codex; then
+        log_success "MCP runtime version pins updated successfully"
+    else
+        log_error "Failed to update MCP runtime version pins"
+        exit 1
+    fi
+
     log_info "Validating updated configuration..."
     if ./scripts/check-config.sh; then
         log_success "Updated configuration is valid"
@@ -620,7 +628,7 @@ usage() {
         echo "This script performs a comprehensive system update:"
         echo "1. Check system health and evaluate declared host configurations"
         echo "2. Update Determinate Systems Nix"
-        echo "3. Update flake inputs and re-evaluate declared host configurations"
+        echo "3. Update flake inputs, MCP runtime pins, and re-evaluate declared host configurations"
         echo "4. Converge declared Homebrew packages on macOS without upgrading by default"
         echo "5. Apply configuration changes"
         echo "6. Verify system health"
@@ -635,7 +643,7 @@ dry_run() {
         echo "DRY RUN: Would perform the following steps:"
         echo "1. Check Determinate Systems daemon status and evaluate declared host configurations"
         echo "2. Upgrade Determinate Nix to latest version"
-        echo "3. Update flake inputs (nix flake update) and re-evaluate declared host configurations"
+        echo "3. Update flake inputs and MCP runtime pins, then re-evaluate declared host configurations"
         echo "4. Run Homebrew metadata update and brew bundle --no-upgrade for declared packages on macOS"
         if [[ "$UPGRADE_BREW" == true ]]; then
             echo "4a. Explicitly upgrade outdated declared Homebrew packages sequentially"

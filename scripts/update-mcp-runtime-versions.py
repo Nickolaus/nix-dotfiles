@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""Check or update package-manager MCP runtime version pins."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+VERSIONS_FILE = REPO_ROOT / "hosts/shared/ai-agents-lib.nix"
+CODEX_EXAMPLE_FILE = REPO_ROOT / ".codex/config.example.toml"
+CODEX_PRIVATE_FILE = REPO_ROOT / ".codex/config.toml"
+
+PIN_RE = re.compile(
+    r"(?P<comment>[ \t]*# renovate: datasource=(?P<datasource>\S+) "
+    r"depName=(?P<depName>\S+)(?: versioning=(?P<versioning>\S+))?)\n"
+    r"(?P<prefix>[ \t]*(?P<key>\w+) = \")(?P<currentValue>[^\"]+)(?P<suffix>\";)"
+)
+
+
+def fetch_json(url: str) -> dict:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "nix-dotfiles-mcp-runtime-version-check",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.load(response)
+
+
+def latest_npm(dep_name: str) -> str:
+    package_path = urllib.parse.quote(dep_name, safe="@")
+    payload = fetch_json(f"https://registry.npmjs.org/{package_path}")
+    return payload["dist-tags"]["latest"]
+
+
+def latest_pypi(dep_name: str) -> str:
+    package_path = urllib.parse.quote(dep_name, safe="")
+    payload = fetch_json(f"https://pypi.org/pypi/{package_path}/json")
+    return payload["info"]["version"]
+
+
+def latest_for(datasource: str, dep_name: str) -> str:
+    if datasource == "npm":
+        return latest_npm(dep_name)
+    if datasource == "pypi":
+        return latest_pypi(dep_name)
+    raise ValueError(f"unsupported datasource: {datasource}")
+
+
+def rewrite_versions_file(write: bool) -> tuple[bool, dict[str, str]]:
+    text = VERSIONS_FILE.read_text()
+    changed = False
+    pinned_by_key: dict[str, str] = {}
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal changed
+        datasource = match.group("datasource")
+        dep_name = match.group("depName")
+        current = match.group("currentValue")
+        key = match.group("key")
+        latest = latest_for(datasource, dep_name)
+        pinned_by_key[key] = latest
+
+        if current == latest:
+            print(f"ok: {dep_name} {current}")
+            return match.group(0)
+
+        changed = True
+        print(f"update: {dep_name} {current} -> {latest}")
+        return (
+            f"{match.group('comment')}\n"
+            f"{match.group('prefix')}{latest}{match.group('suffix')}"
+        )
+
+    new_text = PIN_RE.sub(replace, text)
+
+    if write and changed:
+        VERSIONS_FILE.write_text(new_text)
+
+    return changed, pinned_by_key
+
+
+def sync_codex_nixos_config(path: Path, nixos_version: str, write: bool) -> bool:
+    if not path.exists():
+        return False
+
+    text = path.read_text()
+    new_text = re.sub(
+        r'args = \[(?:"--from", "mcp-nixos==[^"]+", "mcp-nixos"|"mcp-nixos")\]',
+        f'args = ["--from", "mcp-nixos=={nixos_version}", "mcp-nixos"]',
+        text,
+        count=1,
+    )
+
+    changed = new_text != text
+    if changed:
+        print(f"sync: {path.relative_to(REPO_ROOT)} mcp-nixos -> {nixos_version}")
+        if write:
+            path.write_text(new_text)
+    return changed
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Check or update npm/PyPI MCP runtime version pins."
+    )
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="rewrite pinned versions instead of only reporting drift",
+    )
+    parser.add_argument(
+        "--sync-private-codex",
+        action="store_true",
+        help="also sync ignored .codex/config.toml mcp-nixos entry when present",
+    )
+    args = parser.parse_args()
+
+    changed, pinned_by_key = rewrite_versions_file(args.write)
+    nixos_version = pinned_by_key.get("nixos")
+    if nixos_version:
+        changed = (
+            sync_codex_nixos_config(CODEX_EXAMPLE_FILE, nixos_version, args.write)
+            or changed
+        )
+        if args.sync_private_codex:
+            changed = (
+                sync_codex_nixos_config(CODEX_PRIVATE_FILE, nixos_version, args.write)
+                or changed
+            )
+
+    if changed and not args.write:
+        print("error: MCP runtime pins are stale; rerun with --write", file=sys.stderr)
+        return 1
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

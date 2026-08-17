@@ -270,6 +270,12 @@ declared packages with `brew bundle --no-upgrade`. Existing Homebrew versions
 are only upgraded when `--upgrade-brew` is passed, and undeclared packages are
 only removed when `--prune-brew` is passed.
 
+The same update workflow also refreshes package-manager MCP runtime pins
+declared in `hosts/shared/ai-agents-lib.nix` (npm/PyPI MCP servers launched
+through `npx`/`uvx`) before re-validating the configuration. Plain
+`darwin-rebuild switch` / `nixos-rebuild switch` applies the pinned versions;
+it does not contact registries or discover newer MCP releases.
+
 #### Manual Update Workflow
 
 **Step 1: Check System Health**
@@ -294,6 +300,9 @@ sudo determinate-nixd status
 ```bash
 # Update flake inputs to latest versions
 nix flake update
+
+# Update npm/PyPI MCP runtime pins
+./scripts/update-mcp-runtime-versions.py --write --sync-private-codex
 
 # Validate updated configuration
 nix flake check
