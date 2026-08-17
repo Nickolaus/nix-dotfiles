@@ -425,6 +425,7 @@ in
         resolved="$(readlink -f "$target")"
         workDir="$(mktemp -d)"
         cp -RL "$resolved/." "$workDir/"
+        chmod -R u+w "$workDir"
         rm -f "$target"
         mv "$workDir" "$target"
         echo "$rel" >> "$materializedTmp"
