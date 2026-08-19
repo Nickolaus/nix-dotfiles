@@ -144,7 +144,9 @@ Key files:
   - Runs `nix flake check`.
   - Evaluates catalog candidate manifest.
   - Runs applied `agent-catalog-check` only when command and manifest exist.
-  - Evaluates declared hosts and installer packages.
+  - Evaluates the current platform's host and installer by default.
+  - `--all-systems` evaluates every declared host and installer when a
+    compatible Linux machine or remote builder is available.
 
 Current applied status:
 

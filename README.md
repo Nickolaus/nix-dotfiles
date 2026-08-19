@@ -276,6 +276,10 @@ through `npx`/`uvx`) before re-validating the configuration. Plain
 `darwin-rebuild switch` / `nixos-rebuild switch` applies the pinned versions;
 it does not contact registries or discover newer MCP releases.
 
+Configuration validation checks the current platform by default. Run
+`./scripts/check-config.sh --all-systems` on Linux or with a configured remote
+builder when every Darwin and NixOS host must be evaluated.
+
 #### Manual Update Workflow
 
 **Step 1: Check System Health**

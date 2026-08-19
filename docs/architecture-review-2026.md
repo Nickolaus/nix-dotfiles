@@ -273,10 +273,9 @@ For a repo of this size, domain ownership should be single-purpose where possibl
 ### Immediate fixes
 
 1. Keep the repo-level `scripts/check-config.sh` check in normal maintenance workflows:
-   - Darwin evaluation
-   - `farnsworth` evaluation
-   - `farnsworth-x86` evaluation
-   - installer package evaluation
+   - native host and installer evaluation by default
+   - `--all-systems` on Linux or through a configured remote builder for full
+     Darwin/NixOS coverage
 
 ### Medium-term refactors
 
