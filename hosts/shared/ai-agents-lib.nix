@@ -22,13 +22,13 @@ rec {
     };
     pypi = {
       # renovate: datasource=pypi depName=mcp-server-fetch versioning=pep440
-      fetch = "2026.7.10";
+      fetch = "2026.8.18";
       # renovate: datasource=pypi depName=headroom-ai versioning=pep440
       headroom = "0.35.0";
       # renovate: datasource=pypi depName=mcp-nixos versioning=pep440
       nixos = "3.0.1";
       # renovate: datasource=pypi depName=mcp-server-time versioning=pep440
-      time = "2026.7.10";
+      time = "2026.8.18";
     };
   };
 
