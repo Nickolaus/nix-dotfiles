@@ -57,6 +57,11 @@ log_step() {
     echo -e "\n${BLUE}===${NC} $1 ${BLUE}===${NC}"
 }
 
+print_indented_error() {
+    local message=$1
+    printf '  %s\n' "${message//$'\n'/$'\n  '}" >&2
+}
+
 confirm() {
     local prompt=$1
 
@@ -85,6 +90,14 @@ check_directory() {
     fi
 }
 
+determinate_restart_hint() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
+    else
+        echo "sudo systemctl restart nix-daemon"
+    fi
+}
+
 resolve_nixos_host() {
     local host=${NIXOS_HOST:-}
 
@@ -100,7 +113,7 @@ resolve_nixos_host() {
     fi
 
     case "$host" in
-        farnsworth|farnsworth-x86)
+        farnsworth | farnsworth-x86)
             echo "$host"
             ;;
         *)
@@ -115,18 +128,19 @@ resolve_nixos_host() {
 check_system_health() {
     log_step "Step 1: Checking System Health"
 
-    if command -v determinate-nixd >/dev/null 2>&1; then
+    if command -v determinate-nixd > /dev/null 2>&1; then
         log_info "Checking Determinate Systems daemon status..."
-        daemon_status=$(sudo determinate-nixd status 2>&1 || true)
-        if echo "$daemon_status" | grep -q "invalid-token"; then
+        daemon_status=""
+        if daemon_status=$(sudo determinate-nixd status 2>&1); then
+            log_success "Determinate Systems daemon is healthy"
+        elif echo "$daemon_status" | grep -q "invalid-token"; then
             log_warning "Authentication token expired (non-critical - only affects FlakeHub access)"
             log_info "To restore FlakeHub access, run: determinate-nixd login"
-        elif ! echo "$daemon_status" | grep -q "Authentication:"; then
-            log_error "Determinate Systems daemon is not healthy"
-            log_info "Try restarting with: sudo launchctl kickstart -k system/org.nixos.nix-daemon"
-            exit 1
         else
-            log_success "Determinate Systems daemon is healthy"
+            log_error "Determinate Systems daemon is not healthy"
+            print_indented_error "$daemon_status"
+            log_info "Try restarting with: $(determinate_restart_hint)"
+            exit 1
         fi
     else
         log_warning "Determinate Systems daemon not found; skipping daemon health check"
@@ -146,13 +160,13 @@ check_system_health() {
 update_determinate() {
     log_step "Step 2: Updating Determinate Systems"
 
-    if ! command -v determinate-nixd >/dev/null 2>&1; then
+    if ! command -v determinate-nixd > /dev/null 2>&1; then
         log_info "Determinate Systems not installed; skipping Nix daemon upgrade"
         return 0
     fi
 
     log_info "Checking current Determinate Nix version..."
-    current_version=$(determinate-nixd version 2>/dev/null || echo "unknown")
+    current_version=$(determinate-nixd version 2> /dev/null || echo "unknown")
     log_info "Current version: $current_version"
 
     log_info "Upgrading Determinate Nix to latest version..."
@@ -160,20 +174,26 @@ update_determinate() {
         log_success "Determinate Systems upgraded successfully"
 
         # Check new version
-        new_version=$(determinate-nixd version 2>/dev/null || echo "unknown")
+        new_version=$(determinate-nixd version 2> /dev/null || echo "unknown")
         log_info "New version: $new_version"
 
         # Verify upgrade
         log_info "Verifying upgrade completed successfully..."
-        if sudo determinate-nixd status; then
+        daemon_status=""
+        if daemon_status=$(sudo determinate-nixd status 2>&1); then
             log_success "Determinate Systems is healthy after upgrade"
+        elif echo "$daemon_status" | grep -q "invalid-token"; then
+            log_warning "Determinate Systems is running after upgrade (FlakeHub token expired)"
+            log_info "This is non-critical. To restore FlakeHub access: determinate-nixd login"
         else
             log_error "Determinate Systems daemon issues after upgrade"
+            print_indented_error "$daemon_status"
+            log_info "Try restarting with: $(determinate_restart_hint)"
             exit 1
         fi
     else
         log_warning "Determinate Systems upgrade failed or not needed"
-        # Continue anyway as this might not be critical
+    # Continue anyway as this might not be critical
     fi
 }
 
@@ -211,7 +231,7 @@ render_homebrew_brewfile() {
     local brewfile=$1
 
     log_info "Rendering declarative Brewfile from the updated flake..."
-    if ! nix eval --raw "$REPO_ROOT#darwinConfigurations.$DARWIN_HOST.config.homebrew.brewfile" >"$brewfile"; then
+    if ! nix eval --raw "$REPO_ROOT#darwinConfigurations.$DARWIN_HOST.config.homebrew.brewfile" > "$brewfile"; then
         log_error "Failed to render Homebrew Brewfile from nix-darwin configuration"
         return 1
     fi
@@ -248,13 +268,13 @@ list_declared_outdated_homebrew() {
     track_temp_file "$declared_file"
     track_temp_file "$outdated_file"
 
-    if ! HOMEBREW_NO_AUTO_UPDATE=1 brew bundle list --file="$brewfile" "${declared_args[@]}" >"$declared_file"; then
+    if ! HOMEBREW_NO_AUTO_UPDATE=1 brew bundle list --file="$brewfile" "${declared_args[@]}" > "$declared_file"; then
         rm -f "$declared_file" "$outdated_file"
         log_error "Failed to list declared Homebrew $label"
         return 1
     fi
 
-    if brew outdated "${outdated_args[@]}" >"$outdated_file"; then
+    if brew outdated "${outdated_args[@]}" > "$outdated_file"; then
         :
     else
         local brew_status=$?
@@ -276,8 +296,8 @@ upgrade_declared_homebrew() {
     track_temp_file "$formulae_file"
     track_temp_file "$casks_file"
 
-    list_declared_outdated_homebrew "$brewfile" formula >"$formulae_file"
-    list_declared_outdated_homebrew "$brewfile" cask >"$casks_file"
+    list_declared_outdated_homebrew "$brewfile" formula > "$formulae_file"
+    list_declared_outdated_homebrew "$brewfile" cask > "$casks_file"
 
     if [[ ! -s "$formulae_file" && ! -s "$casks_file" ]]; then
         rm -f "$formulae_file" "$casks_file"
@@ -310,7 +330,7 @@ upgrade_declared_homebrew() {
             failed_name=$name
             break
         fi
-    done <"$formulae_file"
+    done < "$formulae_file"
 
     if [[ -n "$failed_name" ]]; then
         rm -f "$formulae_file" "$casks_file"
@@ -325,7 +345,7 @@ upgrade_declared_homebrew() {
             failed_name=$name
             break
         fi
-    done <"$casks_file"
+    done < "$casks_file"
 
     if [[ -n "$failed_name" ]]; then
         rm -f "$formulae_file" "$casks_file"
@@ -370,7 +390,7 @@ update_homebrew() {
 
     log_step "Step 4: Converging Homebrew declarations"
 
-    if ! command -v brew >/dev/null 2>&1; then
+    if ! command -v brew > /dev/null 2>&1; then
         log_warning "Homebrew is not installed; skipping Homebrew update"
         return 0
     fi
@@ -439,9 +459,9 @@ apply_changes() {
                 if grep -q "reloadHammerspoon" "$rebuild_log" && grep -q "Killed: 9" "$rebuild_log"; then
                     log_warning "Hammerspoon reload failed (non-critical)"
                     log_info "Manually reloading Hammerspoon..."
-                    killall Hammerspoon 2>/dev/null || true
+                    killall Hammerspoon 2> /dev/null || true
                     sleep 1
-                    open -a Hammerspoon 2>/dev/null || true
+                    open -a Hammerspoon 2> /dev/null || true
                     log_success "macOS configuration applied (with manual Hammerspoon reload)"
                 else
                     log_error "Failed to apply macOS configuration"
@@ -475,17 +495,18 @@ verify_system_health() {
     log_step "Step 6: Verifying System Health"
 
     log_info "Confirming Determinate Systems is healthy..."
-    if ! command -v determinate-nixd >/dev/null 2>&1; then
+    if ! command -v determinate-nixd > /dev/null 2>&1; then
         log_info "Determinate Systems not installed; skipping daemon verification"
     else
-        daemon_status=$(sudo determinate-nixd status 2>&1 || true)
-        if echo "$daemon_status" | grep -q "invalid-token"; then
+        daemon_status=""
+        if daemon_status=$(sudo determinate-nixd status 2>&1); then
+            log_success "Determinate Systems is healthy"
+        elif echo "$daemon_status" | grep -q "invalid-token"; then
             log_success "Determinate Systems daemon is running (FlakeHub token expired)"
             log_info "This is non-critical. To restore FlakeHub access: determinate-nixd login"
-        elif echo "$daemon_status" | grep -q "Authentication:"; then
-            log_success "Determinate Systems is healthy"
         else
             log_warning "Determinate Systems status check failed"
+            print_indented_error "$daemon_status"
             log_info "System may still be functional, but check daemon logs"
         fi
     fi
@@ -512,7 +533,7 @@ scrub_macl_from_dead_apps() {
     track_temp_file "$dead_paths_file"
 
     log_info "Scanning dead Nix store paths for macOS app access-control metadata..."
-    if ! nix-store --gc --print-dead >"$dead_paths_file"; then
+    if ! nix-store --gc --print-dead > "$dead_paths_file"; then
         rm -f "$dead_paths_file"
         log_warning "Could not list dead store paths; skipping com.apple.macl scrub"
         return 0
@@ -526,7 +547,7 @@ scrub_macl_from_dead_apps() {
         [[ -d "$dead_path" ]] || continue
 
         while IFS= read -r -d '' app_path; do
-            if xattr -p com.apple.macl "$app_path" >/dev/null 2>&1; then
+            if xattr -p com.apple.macl "$app_path" > /dev/null 2>&1; then
                 log_info "Removing com.apple.macl from dead app bundle: $app_path"
                 if sudo xattr -d com.apple.macl "$app_path"; then
                     scrubbed=$((scrubbed + 1))
@@ -541,8 +562,8 @@ scrub_macl_from_dead_apps() {
             else
                 log_warning "Could not prepare app bundle directories for GC: $app_path"
             fi
-        done < <(find "$dead_path" -type d -name "*.app" -prune -print0 2>/dev/null)
-    done <"$dead_paths_file"
+        done < <(find "$dead_path" -type d -name "*.app" -prune -print0 2> /dev/null)
+    done < "$dead_paths_file"
 
     rm -f "$dead_paths_file"
 
@@ -559,7 +580,7 @@ scrub_macl_from_dead_apps() {
 
 # Prune uv's cache only when no uv-managed process is actively using it.
 prune_uv_cache() {
-    if ! command -v uv >/dev/null 2>&1; then
+    if ! command -v uv > /dev/null 2>&1; then
         log_info "uv is not installed; skipping uv cache prune"
         return 0
     fi
@@ -601,7 +622,7 @@ cleanup_generations() {
 
     log_info "Cleaning up old generations (keeping last $retention)..."
 
-    if command -v nh >/dev/null 2>&1; then
+    if command -v nh > /dev/null 2>&1; then
         log_info "Removing old generations with nh..."
         if ! nh clean all --keep-since "$retention" --elevation-strategy auto --no-gc; then
             log_warning "nh generation cleanup failed (non-critical)"
@@ -690,53 +711,53 @@ main() {
 }
 
 usage() {
-        echo "nix-dotfiles System Update Script"
-        echo
-        echo "Usage: $0 [OPTIONS]"
-        echo
-        echo "Options:"
-        echo "  --help, -h       Show this help message"
-        echo "  --dry-run        Show what would be done without executing"
-        echo "  --cleanup        Clean generations older than 180 days, run Nix store GC, optimise the store, and prune caches"
-        echo "  --upgrade-brew   Explicitly upgrade outdated Homebrew packages declared in the generated Brewfile"
-        echo "  --prune-brew     Explicitly remove Homebrew packages not declared in the generated Brewfile"
-        echo
-        echo "Environment:"
-        echo "  NIX_DARWIN_HOST  Darwin host (default: zoidberg)"
-        echo "  NIXOS_HOST       NixOS host (default: architecture-based farnsworth host)"
-        echo
-        echo "This script performs a comprehensive system update:"
-        echo "1. Check system health and evaluate declared host configurations"
-        echo "2. Update Determinate Systems Nix"
-        echo "3. Update flake inputs, MCP runtime pins, and re-evaluate declared host configurations"
-        echo "4. Converge declared Homebrew packages on macOS without upgrading by default"
-        echo "5. Apply configuration changes"
-        echo "6. Verify system health"
-        echo
-        echo "Homebrew policy:"
-        echo "- Default: install missing declared packages with --no-upgrade"
-        echo "- --upgrade-brew: mutable, sequential, declared-only Homebrew upgrades"
-        echo "- --prune-brew: destructive cleanup of undeclared Homebrew packages after confirmation"
+    echo "nix-dotfiles System Update Script"
+    echo
+    echo "Usage: $0 [OPTIONS]"
+    echo
+    echo "Options:"
+    echo "  --help, -h       Show this help message"
+    echo "  --dry-run        Show what would be done without executing"
+    echo "  --cleanup        Clean generations older than 180 days, run Nix store GC, optimise the store, and prune caches"
+    echo "  --upgrade-brew   Explicitly upgrade outdated Homebrew packages declared in the generated Brewfile"
+    echo "  --prune-brew     Explicitly remove Homebrew packages not declared in the generated Brewfile"
+    echo
+    echo "Environment:"
+    echo "  NIX_DARWIN_HOST  Darwin host (default: zoidberg)"
+    echo "  NIXOS_HOST       NixOS host (default: architecture-based farnsworth host)"
+    echo
+    echo "This script performs a comprehensive system update:"
+    echo "1. Check system health and evaluate declared host configurations"
+    echo "2. Update Determinate Systems Nix"
+    echo "3. Update flake inputs, MCP runtime pins, and re-evaluate declared host configurations"
+    echo "4. Converge declared Homebrew packages on macOS without upgrading by default"
+    echo "5. Apply configuration changes"
+    echo "6. Verify system health"
+    echo
+    echo "Homebrew policy:"
+    echo "- Default: install missing declared packages with --no-upgrade"
+    echo "- --upgrade-brew: mutable, sequential, declared-only Homebrew upgrades"
+    echo "- --prune-brew: destructive cleanup of undeclared Homebrew packages after confirmation"
 }
 
 dry_run() {
-        echo "DRY RUN: Would perform the following steps:"
-        if [[ "$CLEANUP_ONLY" == true ]]; then
-            echo "Cleanup: Remove generations older than 180 days, run Nix store GC, optimise the store, and prune caches"
-            return 0
-        fi
-        echo "1. Check Determinate Systems daemon status and evaluate declared host configurations"
-        echo "2. Upgrade Determinate Nix to latest version"
-        echo "3. Update flake inputs and MCP runtime pins, then re-evaluate declared host configurations"
-        echo "4. Run Homebrew metadata update and brew bundle --no-upgrade for declared packages on macOS"
-        if [[ "$UPGRADE_BREW" == true ]]; then
-            echo "4a. Explicitly upgrade outdated declared Homebrew packages sequentially"
-        fi
-        if [[ "$PRUNE_BREW" == true ]]; then
-            echo "4b. Preview and optionally prune undeclared Homebrew packages"
-        fi
-        echo "5. Apply configuration changes (darwin-rebuild/nixos-rebuild)"
-        echo "6. Verify system health"
+    echo "DRY RUN: Would perform the following steps:"
+    if [[ "$CLEANUP_ONLY" == true ]]; then
+        echo "Cleanup: Remove generations older than 180 days, run Nix store GC, optimise the store, and prune caches"
+        return 0
+    fi
+    echo "1. Check Determinate Systems daemon status and evaluate declared host configurations"
+    echo "2. Upgrade Determinate Nix to latest version"
+    echo "3. Update flake inputs and MCP runtime pins, then re-evaluate declared host configurations"
+    echo "4. Run Homebrew metadata update and brew bundle --no-upgrade for declared packages on macOS"
+    if [[ "$UPGRADE_BREW" == true ]]; then
+        echo "4a. Explicitly upgrade outdated declared Homebrew packages sequentially"
+    fi
+    if [[ "$PRUNE_BREW" == true ]]; then
+        echo "4b. Preview and optionally prune undeclared Homebrew packages"
+    fi
+    echo "5. Apply configuration changes (darwin-rebuild/nixos-rebuild)"
+    echo "6. Verify system health"
 }
 
 parse_args() {
