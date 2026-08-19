@@ -63,34 +63,6 @@
         "type": "github"
       }
     },
-    "ccusage": {
-      "inputs": {
-        "agent-skills": "agent-skills",
-        "bun2nix": "bun2nix",
-        "crane": "crane",
-        "flake-parts": "flake-parts_2",
-        "git-hooks": "git-hooks",
-        "litellm": "litellm",
-        "models-dev": "models-dev",
-        "nix-filter": "nix-filter",
-        "nixpkgs": "nixpkgs",
-        "rust-overlay": "rust-overlay",
-        "treefmt-nix": "treefmt-nix_2"
-      },
-      "locked": {
-        "lastModified": 1787132414,
-        "narHash": "sha256-btOyKB4wi4jbtDdbHFTwMTct2J6kvSA5+IkO8AIUM30=",
-        "owner": "ccusage",
-        "repo": "ccusage",
-        "rev": "6c4a9ca0faa8c46fef17d7c284a2726f4371bc09",
-        "type": "github"
-      },
-      "original": {
-        "owner": "ccusage",
-        "repo": "ccusage",
-        "type": "github"
-      }
-    },
     "cl-nix-lite": {
       "inputs": {
         "flake-parts": "flake-parts_3",
@@ -784,7 +756,6 @@
     "root": {
       "inputs": {
         "caveman": "caveman",
-        "ccusage": "ccusage",
         "codebase-memory-mcp": "codebase-memory-mcp",
         "disko": "disko",
         "gstack": "gstack",

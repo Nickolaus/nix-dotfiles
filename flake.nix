@@ -41,8 +41,6 @@
 
     serena.url = "github:oraios/serena/v1.5.3";
 
-    ccusage.url = "github:ccusage/ccusage";
-
     codebase-memory-mcp.url = "github:DeusData/codebase-memory-mcp/v0.8.1";
 
     # Disko for declarative disk management

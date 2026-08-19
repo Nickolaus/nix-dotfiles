@@ -5,7 +5,6 @@
     ./agent-configs.nix
     ./caveman.nix
     ./chonkie.nix
-    ./ccusage.nix
     ./codebase-memory.nix
     ./crawl4ai.nix
     ./cursor-agent.nix

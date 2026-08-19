@@ -468,13 +468,6 @@ chonkie-update # Manual uv tool upgrade
 
 #### AI Usage Reporting
 ```bash
-ai-usage                       # Daily ccusage report for all detected sources
-ai-usage codex daily           # Codex usage/cost report by day
-ai-usage codex weekly          # Codex usage/cost report by week
-ai-usage claude monthly        # Claude Code usage/cost report by month
-ai-usage-codex                 # Shortcut: Codex daily report
-ai-usage-claude                # Shortcut: Claude Code daily report
-ai-usage-opencode              # Shortcut: OpenCode daily report
 codeburn                       # Interactive local AI spend dashboard
 codeburn overview              # Copy-pasteable usage summary
 codeburn compare               # Compare observed model/tool efficiency
@@ -483,11 +476,8 @@ ai-receipt-status              # Local workflow receipt status
 ai-receipt-log --kind qa --status pass --summary "..." --evidence "..."  # Log local JSONL receipt
 ```
 
-- `ccusage` is installed from its pinned upstream flake input.
 - `codeburn` is installed as a declared Homebrew formula on Darwin because no
   nixpkgs package is available.
-- Reports read local coding-agent usage files; no server, LaunchAgent, ports,
-  hooks, OTLP exporter, or Docker/OrbStack dependency is installed.
 - Treat CodeBurn's mutating features as explicit review-first actions:
   `codeburn optimize --apply`, `codeburn guard install`, and `codeburn menubar`.
 - `ai-receipt-*` stays as local repo-scoped JSONL workflow state and does not
