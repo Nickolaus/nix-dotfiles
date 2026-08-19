@@ -50,11 +50,11 @@ in
     ./hammerspoon
   ];
 
-  home.activation = lib.mkIf pkgs.stdenv.isDarwin {
-    copyKeyBindings = lib.hm.dag.entryAfter ["writeBoundary"] ''
-        run  cp -f ${./DefaultKeyBinding.dict} ~/Library/KeyBindings/DefaultKeyBinding.dict
+  home.activation = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
+    copyKeyBindings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      run  cp -f ${./DefaultKeyBinding.dict} ~/Library/KeyBindings/DefaultKeyBinding.dict
     '';
-    keyboardModifierMapping = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    keyboardModifierMapping = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       ${lib.optionalString remapKeys ''
         # All keyboards default (0:0):
         # 3-cycle for built-in layout: Command -> Option, Option -> Control, Control -> Command

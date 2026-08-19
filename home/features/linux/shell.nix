@@ -1,5 +1,5 @@
 { pkgs, lib, ... }:
-lib.mkIf pkgs.stdenv.isLinux {
+lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
   programs.fish = {
     # Linux-specific shell initialization
     shellInit = ''
@@ -20,4 +20,4 @@ lib.mkIf pkgs.stdenv.isLinux {
       # Example: Python user packages: $HOME/.local/lib/python*/site-packages
     '';
   };
-} 
+}

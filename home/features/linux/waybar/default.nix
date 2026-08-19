@@ -6,17 +6,17 @@
 let
   cfg = config.programs.waybar;
 in
-lib.mkIf pkgs.stdenv.isLinux {
+lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
   programs.waybar = {
     enable = lib.mkDefault true; # Toggle: set to false to disable
-    
+
     settings = {
       mainBar = {
         layer = "top";
         position = "top";
         height = 34;
         spacing = 4;
-        
+
         # Module order
         modules-left = [ "hyprland/workspaces" "hyprland/window" ];
         modules-center = [ "clock" ];
@@ -32,7 +32,7 @@ lib.mkIf pkgs.stdenv.isLinux {
           "battery"
           "tray"
         ];
-        
+
         # Module configurations
         "hyprland/workspaces" = {
           format = "{icon}";
@@ -54,12 +54,12 @@ lib.mkIf pkgs.stdenv.isLinux {
           on-click = "activate";
           sort-by-number = true;
         };
-        
+
         "hyprland/window" = {
           max-length = 50;
           separate-outputs = true;
         };
-        
+
         idle_inhibitor = {
           format = "{icon}";
           format-icons = {
@@ -67,11 +67,11 @@ lib.mkIf pkgs.stdenv.isLinux {
             deactivated = "";
           };
         };
-        
+
         tray = {
           spacing = 10;
         };
-        
+
         clock = {
           format = "{:%H:%M}";
           format-alt = "{:%A, %B %d, %Y (%R)}";
@@ -91,31 +91,31 @@ lib.mkIf pkgs.stdenv.isLinux {
             };
           };
         };
-        
+
         cpu = {
           format = " {usage}%";
           tooltip = false;
           on-click = "wezterm -e htop";
         };
-        
+
         memory = {
           format = " {}%";
           on-click = "wezterm -e htop";
         };
-        
+
         temperature = {
           critical-threshold = 80;
           format = "{icon} {temperatureC}°C";
           format-icons = [ "" "" "" ];
         };
-        
+
         backlight = {
           format = "{icon} {percent}%";
           format-icons = [ "" "" "" "" "" "" "" "" "" ];
           on-scroll-up = "${pkgs.brightnessctl}/bin/brightnessctl set 5%+";
           on-scroll-down = "${pkgs.brightnessctl}/bin/brightnessctl set 5%-";
         };
-        
+
         battery = {
           states = {
             good = 95;
@@ -128,7 +128,7 @@ lib.mkIf pkgs.stdenv.isLinux {
           format-alt = "{icon} {time}";
           format-icons = [ "" "" "" "" "" ];
         };
-        
+
         network = {
           format-wifi = " {essid} ({signalStrength}%)";
           format-ethernet = " {ipaddr}";
@@ -138,7 +138,7 @@ lib.mkIf pkgs.stdenv.isLinux {
           tooltip-format = "{ifname} via {gwaddr}";
           on-click-right = "nm-connection-editor";
         };
-        
+
         bluetooth = {
           format = " {status}";
           format-connected = " {device_alias}";
@@ -149,7 +149,7 @@ lib.mkIf pkgs.stdenv.isLinux {
           tooltip-format-enumerate-connected-battery = "{device_alias}\t{device_address}\t{device_battery_percentage}%";
           on-click = "blueman-manager";
         };
-        
+
         pulseaudio = {
           scroll-step = 5;
           format = "{icon} {volume}%";
@@ -169,7 +169,7 @@ lib.mkIf pkgs.stdenv.isLinux {
         };
       };
     };
-    
+
     style = ''
       * {
         font-family: "JetBrainsMono Nerd Font", "Font Awesome 6 Free";
@@ -327,7 +327,7 @@ lib.mkIf pkgs.stdenv.isLinux {
     networkmanagerapplet
     blueman
     pavucontrol
-    
+
     # Icon themes
     papirus-icon-theme
   ];

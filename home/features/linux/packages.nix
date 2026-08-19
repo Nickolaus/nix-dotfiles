@@ -1,6 +1,6 @@
 { pkgs, lib, ... }:
 
-lib.mkIf pkgs.stdenv.isLinux {
+lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
   home.packages = with pkgs; [
     # ═══════════════════════════════════════════════════════════════════════════
     # 📦 DEVELOPMENT TOOLS (Linux-specific)
@@ -21,8 +21,8 @@ lib.mkIf pkgs.stdenv.isLinux {
     # 💬 COMMUNICATION & COLLABORATION
     # ═══════════════════════════════════════════════════════════════════════════
   ]
-  ++ lib.optionals pkgs.stdenv.isx86_64 [ slack ]  # x86_64-only (no ARM build)
-  ++ lib.optionals (pkgs.stdenv.isx86_64 || pkgs.stdenv.hostPlatform.isAarch64) [
+  ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [ slack ]  # x86_64-only (no ARM build)
+  ++ lib.optionals (pkgs.stdenv.hostPlatform.isx86_64 || pkgs.stdenv.hostPlatform.isAarch64) [
     warp-terminal # Unfree terminal trial; not expected to be binary-cached in nixpkgs
   ]
   ++ [
@@ -39,7 +39,7 @@ lib.mkIf pkgs.stdenv.isLinux {
     jetbrains.phpstorm
     code-cursor
   ]
-  ++ lib.optionals pkgs.stdenv.isx86_64 [ hoppscotch ]  # x86_64-only (no ARM build)
+  ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [ hoppscotch ]  # x86_64-only (no ARM build)
   ++ [
     bruno # Open-source IDE for exploring and testing APIs
 
@@ -53,7 +53,7 @@ lib.mkIf pkgs.stdenv.isLinux {
     # ═══════════════════════════════════════════════════════════════════════════
     ksnip # GUI screenshot tool; Hyprland shortcuts use grim/slurp/swappy.
     android-file-transfer # GUI file transfer for Android devices over MTP
-    jmtpfs # Manual FUSE mount fallback for Android storage access
+    go-mtpfs # Manual FUSE mount fallback for Android storage access
 
     # ═══════════════════════════════════════════════════════════════════════════
     # 🎨 DESIGN & CREATIVE TOOLS
@@ -69,7 +69,7 @@ lib.mkIf pkgs.stdenv.isLinux {
     # 🎵 MULTIMEDIA & ENTERTAINMENT
     # ═══════════════════════════════════════════════════════════════════════════
   ]
-  ++ lib.optionals pkgs.stdenv.isx86_64 [ spotify ]  # x86_64-only (no ARM build)
+  ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [ spotify ]  # x86_64-only (no ARM build)
   ++ [
 
     # ═══════════════════════════════════════════════════════════════════════════

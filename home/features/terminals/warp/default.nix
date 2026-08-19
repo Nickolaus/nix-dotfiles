@@ -2,7 +2,7 @@
 
 let
   warpDataDir =
-    if pkgs.stdenv.isDarwin then ".warp"
+    if pkgs.stdenv.hostPlatform.isDarwin then ".warp"
     else ".local/share/warp-terminal";
 in
 {

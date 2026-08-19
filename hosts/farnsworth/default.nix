@@ -236,7 +236,7 @@
 
   # Laptop power management
   # Intel thermal management (x86_64 only - not available on ARM)
-  services.thermald.enable = pkgs.stdenv.isx86_64;
+  services.thermald.enable = pkgs.stdenv.hostPlatform.isx86_64;
   services.auto-cpufreq = {
     enable = true;
     settings = {

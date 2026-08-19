@@ -615,7 +615,7 @@ Add to appropriate category:
 ### Platform-Specific Customization
 - **System Level**: Add modules to `modules/darwin/` or `modules/nixos/`
 - **User Level**: Add features to `home/features/darwin/` or `home/features/linux/`
-- **Conditional Logic**: Use `lib.mkIf pkgs.stdenv.isDarwin` for conditional activation
+- **Conditional Logic**: Use `lib.mkIf pkgs.stdenv.hostPlatform.isDarwin` for conditional activation
 
 ## 🍎 macOS-Specific Setup
 
@@ -885,7 +885,7 @@ launchctl list | grep nix-daemon
 | **Build Failures** | `nix flake check` fails | Run with `--show-trace` for details |
 | **Shell Issues** | Terminal doesn't start properly | Use `/bin/bash`, then rollback |
 | **Missing Secrets** | SOPS decryption errors | Check age key location and permissions |
-| **Platform Detection** | Wrong packages installed | Verify `pkgs.stdenv.isDarwin` logic |
+| **Platform Detection** | Wrong packages installed | Verify `pkgs.stdenv.hostPlatform.isDarwin` logic |
 | **Determinate Daemon Issues** | Service not responding | Check with `sudo determinate-nixd status` |
 | **Permission Errors** | `/nix/store` access denied | Restart daemon: `sudo launchctl kickstart -k system/org.nixos.nix-daemon` |
 | **Generation Not Found** | Rollback fails | List generations first, use valid number |

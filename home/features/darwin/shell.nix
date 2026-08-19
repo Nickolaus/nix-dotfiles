@@ -1,5 +1,5 @@
- { pkgs, lib, ... }:
-lib.mkIf pkgs.stdenv.isDarwin {
+{ pkgs, lib, ... }:
+lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
   programs.fish = {
     # macOS-specific shell initialization for Homebrew integration
     # This addresses the nix-darwin path ordering issue: https://github.com/LnL7/nix-darwin/issues/122
@@ -16,4 +16,4 @@ lib.mkIf pkgs.stdenv.isDarwin {
       fish_add_path /opt/homebrew/opt/mysql-client/bin
     '';
   };
-} 
+}

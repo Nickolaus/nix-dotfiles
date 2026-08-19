@@ -80,9 +80,9 @@ nix-dotfiles/
 ### 1. Cross-Platform Support
 
 **Platform Detection:**
-Configurations adapt based on `pkgs.stdenv.isDarwin` / `pkgs.stdenv.isLinux`:
+Configurations adapt based on `pkgs.stdenv.hostPlatform.isDarwin` / `pkgs.stdenv.hostPlatform.isLinux`:
 ```nix
-lib.mkIf pkgs.stdenv.isDarwin {
+lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
   # macOS-specific config
 }
 ```
@@ -186,7 +186,7 @@ imports = [
 Even with platform-specific imports, feature modules use `lib.mkIf` for safety:
 ```nix
 # home/features/darwin/packages.nix
-lib.mkIf pkgs.stdenv.isDarwin {
+lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
   home.packages = [ /* macOS packages */ ];
 }
 ```
@@ -230,7 +230,7 @@ Desktop environment tools, Linux-specific applications:
 ### Platform-Specific Features
 1. Create in `home/features/darwin/` or `home/features/linux/`
 2. Add import to respective platform's `default.nix`
-3. Use `lib.mkIf pkgs.stdenv.isDarwin` if needed (defensive programming)
+3. Use `lib.mkIf pkgs.stdenv.hostPlatform.isDarwin` if needed (defensive programming)
 
 ### Packages
 1. **Cross-platform**: Add to `home/features/packages.nix`
