@@ -17,6 +17,10 @@
   # Shared environment variables
   home.sessionVariables = {
     EDITOR = "nvim";
+    # Claude Code: pull in CLAUDE.md/AGENTS.md from --add-dir /
+    # permissions.additionalDirectories paths, not just file access.
+    # No-op for any project that doesn't set additionalDirectories.
+    CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = "1";
   };
 
   # Note: home.username, home.homeDirectory, and home.stateVersion
