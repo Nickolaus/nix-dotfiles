@@ -10,7 +10,7 @@ rec {
   mcpPackageVersions = {
     npm = {
       # renovate: datasource=npm depName=@upstash/context7-mcp
-      context7 = "4.0.2";
+      context7 = "4.0.3";
       # renovate: datasource=npm depName=chrome-devtools-mcp
       chromeDevtools = "1.7.0";
       # renovate: datasource=npm depName=puppeteer-mcp-server
@@ -24,7 +24,7 @@ rec {
       # renovate: datasource=pypi depName=mcp-server-fetch versioning=pep440
       fetch = "2026.8.18";
       # renovate: datasource=pypi depName=headroom-ai versioning=pep440
-      headroom = "0.35.0";
+      headroom = "0.36.2";
       # renovate: datasource=pypi depName=mcp-nixos versioning=pep440
       nixos = "3.0.1";
       # renovate: datasource=pypi depName=mcp-server-time versioning=pep440

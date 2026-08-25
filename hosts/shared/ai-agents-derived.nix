@@ -31,16 +31,6 @@ let
       selectedHomeManagerConfig.localAi
     else
       null;
-  observabilityConfig =
-    if selectedHomeManagerConfig != null && selectedHomeManagerConfig ? aiObservability then
-      selectedHomeManagerConfig.aiObservability
-    else
-      null;
-  derivedPhoenixUrl =
-    if observabilityConfig != null then
-      "http://127.0.0.1:${toString observabilityConfig.phoenixPort}"
-    else
-      null;
 in
 {
   # aiAgents.localCoding.model needs resolve whenever aiAgents is enabled all --
@@ -71,15 +61,5 @@ in
       };
     })
 
-    (mkIf (derivedPhoenixUrl != null) {
-      assertions = [
-        {
-          assertion = cfg.observability.phoenixUrl == derivedPhoenixUrl;
-          message = "aiAgents.observability.phoenixUrl must match selected Home Manager aiObservability.phoenixPort (${derivedPhoenixUrl}).";
-        }
-      ];
-
-      aiAgents.observability.phoenixUrl = mkDefault derivedPhoenixUrl;
-    })
   ]);
 }

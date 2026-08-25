@@ -67,6 +67,66 @@ let
       Savings summary: `rtk gain`.
     '';
 
+  codexHooksDoctor = pkgs.writeShellScriptBin "codex-hooks-doctor" ''
+    set -u
+
+    requirements="/etc/codex/requirements.toml"
+    hooks_dir="/etc/codex/hooks"
+    failures=0
+
+    pass() { echo "PASS: $*"; }
+    warn() { echo "WARN: $*"; }
+    fail() { echo "FAIL: $*"; failures=$((failures + 1)); }
+
+    echo "Codex managed hooks doctor"
+    echo
+
+    if [ -r "$requirements" ]; then
+      pass "requirements file exists: $requirements"
+    else
+      fail "requirements file missing: $requirements"
+    fi
+
+    if [ -r "$requirements" ] && grep -q "ai-observe\|phoenix\|opentelemetry" "$requirements"; then
+      fail "obsolete Phoenix observability hook remains in requirements"
+    else
+      pass "no obsolete Phoenix observability hook configured"
+    fi
+
+    for hook in rtk-pretool.py headroom-ensure; do
+      if [ -e "$hooks_dir/$hook" ]; then
+        pass "managed hook exists: $hooks_dir/$hook"
+      else
+        fail "managed hook missing: $hooks_dir/$hook"
+      fi
+    done
+
+    if [ -r "$requirements" ] && grep -q "rtk-pretool.py" "$requirements"; then
+      payload='{"cwd":"$PWD","tool_name":"Bash","tool_input":{"command":"true"}}'
+      if printf '%s' "$payload" | ${pkgs.coreutils}/bin/timeout 10s ${pkgs.python3}/bin/python3 "$hooks_dir/rtk-pretool.py" >/dev/null 2>&1; then
+        pass "RTK PreToolUse hook completes within 10s"
+      else
+        fail "RTK PreToolUse hook failed or exceeded 10s"
+      fi
+    else
+      fail "RTK PreToolUse hook is not registered"
+    fi
+
+    if ${pkgs.curl}/bin/curl -fsS --connect-timeout 0.2 --max-time 1 http://127.0.0.1:8787/health >/dev/null 2>&1; then
+      pass "Headroom health endpoint responds"
+    else
+      warn "Headroom is not healthy; SessionStart hook will attempt startup"
+    fi
+
+    echo
+    if [ "$failures" -gt 0 ]; then
+      echo "Result: FAIL ($failures check(s))"
+      exit 1
+    fi
+
+    echo "Result: PASS"
+  '';
+
   # Captured verbatim from a real `rtk init --global --opencode --dry-run` run against
   # rtk 0.43.0 (re-capture if the pinned rtk version changes materially). Safe to embed
   # as a static file unlike the Claude/Cursor hook JSON: this plugin's own header states
@@ -171,6 +231,8 @@ in
   config = {
     home.packages = [
       pkgs.rtk
+
+      codexHooksDoctor
 
       (pkgs.writeShellScriptBin "rtk-status" ''
         set -euo pipefail

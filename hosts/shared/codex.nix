@@ -8,10 +8,6 @@ let
   cfg = config.aiAgents;
 
   managedHooksDir = "/etc/codex/hooks";
-  codexObservabilityEnabled =
-    cfg.observability.enable
-    && cfg.codex.observability.enable
-    && cfg.observability.captureMode == "metadata-only";
   codexHeadroomProxy = cfg.headroom.proxies.shared;
   codexHeadroomLabel = "org.nix-community.home.headroom-proxy-shared";
   codexHeadroomProxyFrom = aiAgentsLib.mkUvxPackageSpec {
@@ -19,10 +15,6 @@ let
     version = aiAgentsLib.mcpPackageVersions.pypi.headroom;
     extras = [ "proxy" ];
   };
-  codexObservePython = pkgs.python3.withPackages (pythonPackages: [
-    pythonPackages.opentelemetry-sdk
-    pythonPackages.opentelemetry-exporter-otlp-proto-http
-  ]);
 
   enabledMcpServers =
     filterAttrs (_: server: server.enabled && builtins.elem "codex" server.targets) cfg.mcpServers;
@@ -178,282 +170,6 @@ let
     exit 0
   '';
 
-  codexObserveHook = pkgs.writeText "codex-ai-observe-metadata.py" ''
-    import hashlib
-    import json
-    import logging
-    import os
-    import socket
-    import subprocess
-    import sys
-    import urllib.parse
-
-    from opentelemetry import trace
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-
-
-    def safe_str(value):
-        return value if isinstance(value, str) else ""
-
-
-    def safe_bool(value):
-        return isinstance(value, bool) and value
-
-
-    def hash_value(value):
-        if not value:
-            return "unknown"
-        return hashlib.sha256(value.encode("utf-8", "replace")).hexdigest()[:16]
-
-
-    def hash_int(value, bits):
-        hashed = hashlib.sha256(value.encode("utf-8", "replace")).hexdigest()
-        integer = int(hashed[: bits // 4], 16)
-        return integer or 1
-
-
-    def key_count(value):
-        return len(value) if isinstance(value, dict) else 0
-
-
-    def shape_hash(value):
-        if isinstance(value, dict):
-            shape = "\n".join(sorted(str(key) for key in value.keys()))
-        elif isinstance(value, list):
-            shape = "list"
-        elif value is None:
-            shape = "none"
-        else:
-            shape = type(value).__name__
-        return hash_value(shape)
-
-
-    def size_class(value):
-        if value is None:
-            return "none"
-        try:
-            size = len(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
-        except Exception:
-            return "unknown"
-        if size == 0:
-            return "empty"
-        if size <= 128:
-            return "tiny"
-        if size <= 1024:
-            return "small"
-        if size <= 8192:
-            return "medium"
-        return "large"
-
-
-    def tool_category(tool_name):
-        if tool_name == "Bash":
-            return "shell"
-        if tool_name == "apply_patch":
-            return "code_edit"
-        if tool_name.startswith("multi_agent") or tool_name in {"spawn_agent", "wait_agent", "close_agent"}:
-            return "subagent"
-        if tool_name in {"web.run", "fetch", "curl"}:
-            return "network"
-        if tool_name == "none":
-            return "lifecycle"
-        return "tool"
-
-
-    def event_role(hook_event):
-        if hook_event in {"SessionStart", "Stop"}:
-            return "lifecycle"
-        if hook_event in {"PreToolUse", "PostToolUse"}:
-            return "tool"
-        if hook_event == "PermissionRequest":
-            return "permission"
-        if hook_event in {"SubagentStart", "SubagentStop"}:
-            return "subagent"
-        return "agent"
-
-
-    def openinference_span_kind(hook_event):
-        if hook_event in {"PreToolUse", "PostToolUse", "PermissionRequest"}:
-            return "TOOL"
-        if hook_event in {"SubagentStart", "SubagentStop"}:
-            return "AGENT"
-        return "CHAIN"
-
-
-    def exit_status_class(payload, tool_response):
-        if safe_bool(payload.get("error")):
-            return "error"
-        if isinstance(tool_response, dict):
-            for key in ("exit_code", "exitCode", "return_code", "returncode"):
-                value = tool_response.get(key)
-                if isinstance(value, int):
-                    return "zero" if value == 0 else "nonzero"
-            success = tool_response.get("success")
-            if isinstance(success, bool):
-                return "zero" if success else "nonzero"
-        return "unknown"
-
-
-    def permission_decision_class(payload):
-        for key in ("permission_decision", "permissionDecision", "decision"):
-            value = safe_str(payload.get(key)).lower()
-            if value in {"allow", "allowed", "approve", "approved"}:
-                return "allow"
-            if value in {"deny", "denied", "reject", "rejected"}:
-                return "deny"
-            if value in {"ask", "prompt"}:
-                return "ask"
-        return "none"
-
-
-    def endpoint_available(endpoint_base):
-        parsed = urllib.parse.urlparse(endpoint_base)
-        if parsed.hostname not in {"127.0.0.1", "localhost"}:
-            return False
-        port = parsed.port or (443 if parsed.scheme == "https" else 80)
-        try:
-            with socket.create_connection((parsed.hostname, port), timeout=0.15):
-                return True
-        except Exception:
-            return False
-
-
-    def git_value(args, cwd):
-        try:
-            result = subprocess.run(
-                ["${pkgs.git}/bin/git", "-c", "core.fsmonitor=false", *args],
-                cwd=cwd or None,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=2,
-            )
-        except Exception:
-            return ""
-        if result.returncode != 0:
-            return ""
-        return result.stdout.strip()
-
-
-    def main() -> int:
-        endpoint_base, backend, capture_mode, hook_event = sys.argv[1:5]
-        if capture_mode != "metadata-only":
-            return 0
-        if not endpoint_available(endpoint_base):
-            return 0
-
-        try:
-            payload = json.load(sys.stdin)
-        except Exception:
-            payload = {}
-
-        cwd = safe_str(payload.get("cwd")) or safe_str(payload.get("working_directory")) or os.environ.get("PWD", "")
-        git_root = git_value(["rev-parse", "--show-toplevel"], cwd)
-        git_commit = git_value(["rev-parse", "HEAD"], git_root or cwd) or "unknown"
-        dirty = bool(git_value(["status", "--short", "--untracked-files=all"], git_root or cwd))
-        tool_input = payload.get("tool_input")
-        tool_response = payload.get("tool_response")
-        legacy_tool_output = payload.get("tool_output")
-        has_tool_output = tool_response is not None or legacy_tool_output is not None
-        tool_name = safe_str(payload.get("tool_name")) or "none"
-        session_id = safe_str(payload.get("session_id")) or "unknown"
-        turn_id = safe_str(payload.get("turn_id")) or "unknown"
-        trace_group = session_id if session_id != "unknown" else turn_id
-        if trace_group == "unknown":
-            trace_group = hash_value(cwd)
-
-        attributes = {
-            "ai.setup.agent": "codex",
-            "ai.setup.backend": backend,
-            "ai.setup.capture_mode": capture_mode,
-            "ai.setup.config_commit": git_commit,
-            "ai.setup.dirty": dirty,
-            "openinference.span.kind": openinference_span_kind(hook_event),
-            "ai.agent.vendor": "openai",
-            "ai.agent.client": "codex",
-            "ai.agent.hook_event": hook_event,
-            "ai.agent.event_role": event_role(hook_event),
-            "ai.agent.metric_hint": "metadata-only-no-token-cost",
-            "ai.agent.tool_name": tool_name,
-            "ai.agent.tool_category": tool_category(tool_name),
-            "ai.agent.has_session_id": session_id != "unknown",
-            "ai.agent.has_turn_id": turn_id != "unknown",
-            "ai.agent.session_id_hash": hash_value(session_id),
-            "ai.agent.turn_id_hash": hash_value(turn_id),
-            "ai.agent.trace_scope": "session",
-            "ai.agent.trace_group_hash": hash_value(trace_group),
-            "ai.agent.cwd_hash": hash_value(cwd),
-            "ai.agent.git_root_hash": hash_value(git_root),
-            "ai.agent.payload_shape_hash": shape_hash(payload),
-            "ai.agent.payload_key_count": key_count(payload),
-            "ai.agent.has_tool_input": isinstance(tool_input, dict),
-            "ai.agent.has_tool_output": has_tool_output,
-            "ai.agent.tool_input_shape_hash": shape_hash(tool_input),
-            "ai.agent.tool_input_key_count": key_count(tool_input),
-            "ai.agent.tool_input_size_class": size_class(tool_input),
-            "ai.agent.tool_response_shape_hash": shape_hash(tool_response or legacy_tool_output),
-            "ai.agent.tool_response_key_count": key_count(tool_response or legacy_tool_output),
-            "ai.agent.tool_response_size_class": size_class(tool_response or legacy_tool_output),
-            "ai.agent.exit_status_class": exit_status_class(payload, tool_response),
-            "ai.agent.permission_decision_class": permission_decision_class(payload),
-            "ai.agent.permission_requested": hook_event == "PermissionRequest",
-            "ai.agent.success": not safe_bool(payload.get("error")),
-        }
-
-        try:
-            logging.disable(logging.CRITICAL)
-            provider = TracerProvider(
-                resource=Resource.create(
-                    {
-                        "service.name": "nix-dotfiles-codex-hooks",
-                        "service.version": "1",
-                    }
-                )
-            )
-            provider.add_span_processor(
-                SimpleSpanProcessor(
-                    OTLPSpanExporter(endpoint=endpoint_base.rstrip("/") + "/v1/traces", timeout=1)
-                )
-            )
-            trace.set_tracer_provider(provider)
-            tracer = trace.get_tracer("nix-dotfiles.ai-observability.codex", "1")
-            parent = trace.NonRecordingSpan(
-                trace.SpanContext(
-                    trace_id=hash_int("codex-session:" + trace_group, 128),
-                    span_id=hash_int("codex-session-root:" + trace_group, 64),
-                    is_remote=True,
-                    trace_flags=trace.TraceFlags(trace.TraceFlags.SAMPLED),
-                    trace_state=trace.TraceState(),
-                )
-            )
-            parent_context = trace.set_span_in_context(parent)
-            with tracer.start_as_current_span("ai.agent.codex." + hook_event, context=parent_context) as span:
-                for key, value in attributes.items():
-                    span.set_attribute(key, value)
-            provider.shutdown()
-        except Exception:
-            return 0
-
-        return 0
-
-
-    raise SystemExit(main())
-  '';
-
-  codexObserveHookEntry = eventName: {
-    hooks = [
-      {
-        type = "command";
-        command = "${codexObservePython}/bin/python3 ${managedHooksDir}/ai-observe-metadata.py ${lib.escapeShellArg cfg.observability.phoenixUrl} ${lib.escapeShellArg cfg.observability.backend} ${lib.escapeShellArg cfg.observability.captureMode} ${eventName}";
-        timeout = 5;
-        statusMessage = "Recording metadata-only AI observability event";
-      }
-    ];
-  };
-
   codexHeadroomEnsureHookEntry = {
     hooks = [
       {
@@ -503,14 +219,8 @@ let
         managed_dir = managedHooksDir;
         SessionStart = (existingRequirementHooks.SessionStart or [ ]) ++ [
           codexHeadroomEnsureHookEntry
-        ] ++ optional codexObservabilityEnabled (codexObserveHookEntry "SessionStart");
-        UserPromptSubmit = (existingRequirementHooks.UserPromptSubmit or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "UserPromptSubmit");
-        Stop = (existingRequirementHooks.Stop or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "Stop");
-        SubagentStart = (existingRequirementHooks.SubagentStart or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "SubagentStart");
-        SubagentStop = (existingRequirementHooks.SubagentStop or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "SubagentStop");
-        PostToolUse = (existingRequirementHooks.PostToolUse or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "PostToolUse");
-        PermissionRequest = (existingRequirementHooks.PermissionRequest or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "PermissionRequest");
-        PreToolUse = (existingRequirementHooks.PreToolUse or [ ]) ++ optional codexObservabilityEnabled (codexObserveHookEntry "PreToolUse") ++ [
+        ];
+        PreToolUse = (existingRequirementHooks.PreToolUse or [ ]) ++ [
           {
             matcher = "^Bash$";
             hooks = [
@@ -534,7 +244,6 @@ in
     }
     (mkIf cfg.codex.requirements.enable {
       environment.etc."codex/hooks/rtk-pretool.py".source = rtkCodexPretoolHook;
-      environment.etc."codex/hooks/ai-observe-metadata.py".source = codexObserveHook;
       environment.etc."codex/hooks/headroom-ensure".source = codexHeadroomEnsureHook;
       environment.etc."codex/requirements.toml".source =
         tomlFormat.generate "codex-requirements.toml" codexRequirementsSettings;
