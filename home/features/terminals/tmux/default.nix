@@ -4,6 +4,12 @@
 
   programs.tmux = {
     enable = true;
+
+    # tmux 3.7c requires an explicit jemalloc choice on Darwin. Keep the
+    # package self-contained until nixpkgs provides a native default.
+    package = pkgs.tmux.overrideAttrs (old: {
+      configureFlags = (old.configureFlags or [ ]) ++ [ "--disable-jemalloc" ];
+    });
     
     # Use more modern prefix key (Ctrl+A instead of Ctrl+B)
     prefix = "C-a";

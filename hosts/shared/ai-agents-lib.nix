@@ -12,7 +12,7 @@ rec {
       # renovate: datasource=npm depName=@upstash/context7-mcp
       context7 = "4.0.3";
       # renovate: datasource=npm depName=chrome-devtools-mcp
-      chromeDevtools = "1.7.0";
+      chromeDevtools = "1.8.0";
       # renovate: datasource=npm depName=puppeteer-mcp-server
       puppeteer = "0.7.2";
       # renovate: datasource=npm depName=@modelcontextprotocol/server-memory
@@ -24,7 +24,7 @@ rec {
       # renovate: datasource=pypi depName=mcp-server-fetch versioning=pep440
       fetch = "2026.8.18";
       # renovate: datasource=pypi depName=headroom-ai versioning=pep440
-      headroom = "0.36.2";
+      headroom = "0.36.5";
       # renovate: datasource=pypi depName=mcp-nixos versioning=pep440
       nixos = "3.0.1";
       # renovate: datasource=pypi depName=mcp-server-time versioning=pep440
