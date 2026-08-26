@@ -1,6 +1,15 @@
 { pkgs, lib, ... }:
 lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
+  # Give shell- and GUI-launched agents one deterministic local Docker target.
+  # Users can override per command with DOCKER_CONTEXT=remote.
+  home.sessionVariables.DOCKER_CONTEXT = "colima";
+
   programs.fish = {
+    shellAbbrs = {
+      "cstatus" = "colima status";
+      "cstart" = "colima start";
+    };
+
     # macOS-specific shell initialization for Homebrew integration
     # This addresses the nix-darwin path ordering issue: https://github.com/LnL7/nix-darwin/issues/122
     shellInit = ''

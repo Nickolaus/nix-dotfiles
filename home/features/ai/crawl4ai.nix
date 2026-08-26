@@ -17,6 +17,7 @@ let
   uv = "${pkgs.uv}/bin/uv";
   curl = "${pkgs.curl}/bin/curl";
   docker = "${pkgs.docker}/bin/docker";
+  timeout = "${pkgs.coreutils}/bin/timeout";
   openssl = "${pkgs.openssl}/bin/openssl";
 
   packageSpec = "${cfg.packageName}==${cfg.version}";
@@ -30,16 +31,79 @@ let
     else
       cfg.apiTokenEnvVar;
   llmEnvVarsShell = concatStringsSep " " (map escapeShellArg cfg.llmEnvVars);
-  findUvToolBinFunction = ''
-    find_uv_tool_bin() {
-      local name="$1"
-      local bin="$(${uv} tool dir --bin 2>/dev/null)/$name"
-      if [ ! -x "$bin" ]; then
-        bin="$(command -v "$name" 2>/dev/null || true)"
-      fi
-      printf '%s\n' "$bin"
-    }
+  dockerContextInit = ''
+    # Context is the runtime contract for Docker-backed agent services. Do not
+    # let a stale socket override the selected context.
+    unset DOCKER_HOST
+    export DOCKER_CONTEXT="''${DOCKER_CONTEXT:-colima}"
   '';
+  dockerRuntimeReady = ''
+    docker_runtime_ready() {
+      local start_runtime="''${1:-false}"
+      local max_attempts="''${2:-10}"
+      local attempt=1
+
+      if [ "$DOCKER_CONTEXT" = "colima" ] && [ "$start_runtime" = true ]; then
+        local colima_bin=""
+        local candidate
+        for candidate in "$(command -v colima 2>/dev/null || true)" /opt/homebrew/bin/colima /usr/local/bin/colima; do
+          if [ -x "$candidate" ]; then
+            colima_bin="$candidate"
+            break
+          fi
+        done
+
+        if [ -z "$colima_bin" ]; then
+          echo "Colima CLI not found; install Colima or set DOCKER_CONTEXT to another context." >&2
+          return 1
+        fi
+
+        if ! "$colima_bin" status >/dev/null 2>&1; then
+          echo "Starting Colima runtime for Docker context '$DOCKER_CONTEXT'..."
+          start_timeout="''${COLIMA_START_TIMEOUT_SECONDS:-90}"
+          case "$start_timeout" in
+            *[!0-9]*) start_timeout=90 ;;
+          esac
+          if ! ${timeout} "''${start_timeout}s" "$colima_bin" start; then
+            echo "Colima runtime did not start within $start_timeout seconds." >&2
+            return 1
+          fi
+        fi
+    fi
+
+    while [ "$attempt" -le "$max_attempts" ]; do
+    if ${timeout} 2s ${docker} info >/dev/null 2>&1; then
+    return 0
+    fi
+    attempt = $((attempt + 1))
+    if [ "$attempt" -le "$max_attempts" ];
+  then
+  ${pkgs.coreutils}/bin/sleep 1
+  fi
+  done
+
+  echo "Docker runtime unavailable for context '$DOCKER_CONTEXT'." >&2
+  if [ "$DOCKER_CONTEXT" = "colima" ];
+  then
+  echo "Start Colima with 'colima start' or set DOCKER_CONTEXT to another context." >&2
+  fi
+  return 1
+  }
+  '';
+  findUvToolBinFunction = ''
+  find_uv_tool_bin() {
+  local name = "$1"
+    local
+    bin="$(${uv} tool dir --bin 2>/dev/null)/$name"
+  if [ ! -x "$bin" ];
+  then
+  bin = "$(command -v "$name " 2>/dev/null || true)"
+    fi
+    printf '%
+    s\
+    n' "$bin"
+    }
+    '';
 
   crawl4aiInstructions = ''
 
@@ -54,7 +118,8 @@ let
     - `crawl4ai-setup-local` installs/updates Playwright browsers for the local CLI.
     - `crawl4ai-doctor-local` runs Crawl4AI diagnostics.
     - `crawl4ai-cli-smoke` verifies the local `crwl` command without crawling the web.
-    - `crawl4ai-server` starts the pinned Docker API/MCP server on ${serverUrl}.
+    - `crawl4ai-server` starts the pinned Docker API/MCP server on ${serverUrl},
+    using Colima by default and waiting for Docker readiness.
     - `crawl4ai-server-stop` stops and removes that local container.
     - `crawl4ai-mcp-schema` reads `${mcpSseUrl}` schemas through the server API.
     - `crawl4ai-update` manually upgrades the pinned uv tool install.
@@ -63,17 +128,20 @@ let
     - Prefer `context7` for library/framework docs and `fetch` for one static page.
     - Prefer the `web` MCP profile for browser QA of apps you are operating.
     - Use Crawl4AI only when the task needs crawler behavior: JS-rendered page
-      extraction, multi-page crawl, structured extraction, screenshots/PDFs, or
-      corpus ingestion.
+    extraction, multi-page crawl, structured extraction, screenshots/PDFs, or
+    corpus ingestion.
     - For MCP use, start the server explicitly with `crawl4ai-server`, export
-      `${apiTokenEnvVar}`, then connect the opt-in `web-crawl` MCP profile.
-    - Keep crawls bounded: domain allowlist in the prompt/spec, max pages/depth,
-      timeouts, and no credentialed crawling unless the user explicitly asks.
-    - Do not put API keys or session cookies in Nix files, prompts, receipts, or
-      committed Crawl4AI config. Pass provider keys through the shell environment
-      only for the server process that needs them.
-    - Do not expose Crawl4AI beyond loopback without a token, TLS-terminating
-      reverse proxy, and a task-specific reason.
+    `${apiTokenEnvVar}`, then connect the opt-in `web-crawl` MCP profile.
+    - Docker helpers default to `DOCKER_CONTEXT=colima`;
+  set `DOCKER_CONTEXT`
+  explicitly when using another Docker runtime or context.
+  - Keep crawls bounded: domain allowlist in the prompt/spec, max pages/depth,
+  timeouts, and no credentialed crawling unless the user explicitly asks.
+  - Do not put API keys or session cookies in Nix files, prompts, receipts, or
+  committed Crawl4AI config. Pass provider keys through the shell environment
+  only for the server process that needs them.
+  - Do not expose Crawl4AI beyond loopback without a token, TLS-terminating
+  reverse proxy, and a task-specific reason.
   '';
 in
 {
@@ -110,11 +178,11 @@ in
       type = types.port;
       default = 11235;
       description = ''
-        Standalone Home Manager fallback loopback port for the local Crawl4AI
-        Docker API/MCP server. When nix-darwin/NixOS supplies aiAgents, use
-        aiAgents.crawl4ai.port instead so the MCP profile and helper scripts
-        share one source of truth.
-      '';
+  Standalone Home Manager fallback loopback port for the local Crawl4AI
+  Docker API/MCP server. When nix-darwin/NixOS supplies aiAgents, use
+  aiAgents.crawl4ai.port instead so the MCP profile and helper scripts
+  share one source of truth.
+  '';
     };
 
     apiTokenEnvVar = mkOption {
@@ -142,9 +210,9 @@ in
         "GROQ_BASE_URL"
       ];
       description = ''
-        Provider/runtime environment variables forwarded to `crawl4ai-server`
-        when present in the calling shell. Values are never evaluated by Nix.
-      '';
+  Provider/runtime environment variables forwarded to `crawl4ai-server`
+  when present in the calling shell. Values are never evaluated by Nix.
+  '';
     };
   };
 
@@ -154,197 +222,230 @@ in
     home.file.".claude/CLAUDE.md".text = crawl4aiInstructions;
 
     home.activation.ensureCrawl4AIInstalled = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      ${uv} tool install ${escapeShellArg packageSpec} >/dev/null 2>&1 \
-        || echo "Warning: failed to install crawl4ai (uv tool install ${packageSpec})" >&2
-    '';
+  ${uv} tool install ${escapeShellArg packageSpec} >/dev/null 2>&1 \
+  || echo "Warning: failed to install crawl4ai (uv tool install ${packageSpec})" >&2
+  '';
 
     home.packages = [
       (pkgs.writeShellScriptBin "crawl4ai-status" ''
-        set -euo pipefail
+  set -euo pipefail
 
-        ${findUvToolBinFunction}
+  ${dockerContextInit}
+  ${dockerRuntimeReady}
 
-        echo "Crawl4AI package: ${packageSpec}"
-        echo "Crawl4AI Docker image: ${imageRef}"
-        echo "Crawl4AI server URL: ${serverUrl}"
-        echo "Crawl4AI MCP SSE URL: ${mcpSseUrl}"
-        echo "Crawl4AI token env: ${apiTokenEnvVar}"
-        echo
+  ${findUvToolBinFunction}
 
-        crwl_bin="$(find_uv_tool_bin crwl)"
-        setup_bin="$(find_uv_tool_bin crawl4ai-setup)"
-        doctor_bin="$(find_uv_tool_bin crawl4ai-doctor)"
+  echo "Crawl4AI package: ${packageSpec}"
+  echo "Crawl4AI Docker image: ${imageRef}"
+  echo "Crawl4AI server URL: ${serverUrl}"
+  echo "Crawl4AI MCP SSE URL: ${mcpSseUrl}"
+  echo "Docker context: $DOCKER_CONTEXT"
+  echo "Crawl4AI token env: ${apiTokenEnvVar}"
+  echo
 
-        if [ -n "$crwl_bin" ] && [ -x "$crwl_bin" ]; then
-          echo "  ok      crwl: $crwl_bin"
-          if "$crwl_bin" --help >/dev/null 2>&1; then
-            echo "  ok      CLI help renders"
-          else
-            echo "  warning CLI exists but '--help' failed"
-          fi
-        else
-          echo "  missing crwl -- run: uv tool install ${escapeShellArg packageSpec}"
-        fi
+  crwl_bin = "$(find_uv_tool_bin crwl)"
+    setup_bin="$(find_uv_tool_bin crawl4ai-setup)"
+  doctor_bin="$(find_uv_tool_bin crawl4ai-doctor)"
 
-        if [ -x "$setup_bin" ]; then
-          echo "  ok      setup: $setup_bin"
-        fi
-        if [ -x "$doctor_bin" ]; then
-          echo "  ok      doctor: $doctor_bin"
-        fi
+  if [ -n "$crwl_bin" ] && [ -x "$crwl_bin" ];
+  then
+  echo "  ok      crwl: $crwl_bin"
+  if "$crwl_bin" --help >/dev/null 2>&1; then
+  echo "  ok      CLI help renders"
+  else
+  echo "  warning CLI exists but '--help' failed"
+  fi
+  else
+  echo "  missing crwl -- run: uv tool install ${escapeShellArg packageSpec}"
+  fi
 
-        echo
-        if [ -x ${escapeShellArg docker} ]; then
-          if ${docker} ps --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx ${escapeShellArg cfg.containerName}; then
-            echo "Docker server: running (${cfg.containerName})"
-          elif ${docker} ps -a --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx ${escapeShellArg cfg.containerName}; then
-            echo "Docker server: stopped (${cfg.containerName})"
-          else
-            echo "Docker server: not created"
-          fi
-        else
-          echo "Docker server: docker client not found"
-        fi
+  if [ -x "$setup_bin" ]; then
+  echo "  ok      setup: $setup_bin"
+  fi
+  if [ -x "$doctor_bin" ]; then
+  echo "  ok      doctor: $doctor_bin"
+  fi
 
-        echo
-        echo "Opt-in MCP profile: web-crawl"
-        echo "Start server: export ${apiTokenEnvVar}=<secret>; crawl4ai-server"
-        echo "Schema:       crawl4ai-mcp-schema"
-      '')
+  echo
+  if [ -x ${escapeShellArg docker} ]; then
+  if docker_runtime_ready false 1; then
+  if ${docker} ps --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx ${escapeShellArg cfg.containerName}; then
+  echo "Docker server: running (${cfg.containerName})"
+  elif ${docker} ps -a --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx ${escapeShellArg cfg.containerName}; then
+  echo "Docker server: stopped (${cfg.containerName})"
+  else
+  echo "Docker server: not created"
+  fi
+  else
+  echo "Docker server: runtime unavailable (context: $DOCKER_CONTEXT)"
+  fi
+  else
+  echo "Docker server: docker client not found"
+  fi
+
+  echo
+  echo "Opt-in MCP profile: web-crawl"
+  echo "Start server: export ${apiTokenEnvVar}=<secret>; crawl4ai-server"
+  echo "Schema:       crawl4ai-mcp-schema"
+  '')
 
       (pkgs.writeShellScriptBin "crawl4ai-setup-local" ''
-        set -euo pipefail
+  set -euo pipefail
 
-        ${findUvToolBinFunction}
+  ${findUvToolBinFunction}
 
-        setup_bin="$(find_uv_tool_bin crawl4ai-setup)"
+  setup_bin = "$(find_uv_tool_bin crawl4ai-setup)"
 
-        if [ -z "$setup_bin" ] || [ ! -x "$setup_bin" ]; then
-          echo "crawl4ai-setup not found. Run 'home-manager switch' first." >&2
-          exit 1
-        fi
+    if [ -z "$setup_bin" ] || [ ! -x "$setup_bin" ];
+  then
+  echo "crawl4ai-setup not found. Run 'home-manager switch' first." >&2
+  exit 1
+  fi
 
-        exec "$setup_bin" "$@"
-      '')
+  exec "$setup_bin" "$@"
+  '')
 
       (pkgs.writeShellScriptBin "crawl4ai-doctor-local" ''
-        set -euo pipefail
+  set -euo pipefail
 
-        ${findUvToolBinFunction}
+  ${findUvToolBinFunction}
 
-        doctor_bin="$(find_uv_tool_bin crawl4ai-doctor)"
+  doctor_bin = "$(find_uv_tool_bin crawl4ai-doctor)"
 
-        if [ -z "$doctor_bin" ] || [ ! -x "$doctor_bin" ]; then
-          echo "crawl4ai-doctor not found. Run 'home-manager switch' first." >&2
-          exit 1
-        fi
+    if [ -z "$doctor_bin" ] || [ ! -x "$doctor_bin" ];
+  then
+  echo "crawl4ai-doctor not found. Run 'home-manager switch' first." >&2
+  exit 1
+  fi
 
-        exec "$doctor_bin" "$@"
-      '')
+  exec "$doctor_bin" "$@"
+  '')
 
       (pkgs.writeShellScriptBin "crawl4ai-cli-smoke" ''
-        set -euo pipefail
+  set -euo pipefail
 
-        ${findUvToolBinFunction}
+  ${findUvToolBinFunction}
 
-        crwl_bin="$(find_uv_tool_bin crwl)"
+  crwl_bin = "$(find_uv_tool_bin crwl)"
 
-        if [ -z "$crwl_bin" ] || [ ! -x "$crwl_bin" ]; then
-          echo "crwl not found. Run 'home-manager switch' first." >&2
-          exit 1
-        fi
+    if [ -z "$crwl_bin" ] || [ ! -x "$crwl_bin" ];
+  then
+  echo "crwl not found. Run 'home-manager switch' first." >&2
+  exit 1
+  fi
 
-        exec "$crwl_bin" --help
-      '')
+  exec "$crwl_bin" --help
+  '')
 
       (pkgs.writeShellScriptBin "crawl4ai-server" ''
-        set -euo pipefail
+  set -euo pipefail
 
-        token="$(printenv ${escapeShellArg apiTokenEnvVar} 2>/dev/null || true)"
-        if [ -z "$token" ]; then
-          echo "Set ${apiTokenEnvVar} before starting Crawl4AI server." >&2
-          echo "Example: export ${apiTokenEnvVar}=\"$(${openssl} rand -hex 32)\"" >&2
-          exit 1
-        fi
+  ${dockerContextInit}
+  ${dockerRuntimeReady}
 
-        if ${docker} ps --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx ${escapeShellArg cfg.containerName}; then
-          echo "Crawl4AI container '${cfg.containerName}' is already running."
-          exit 0
-        fi
+  token = "$(printenv ${escapeShellArg apiTokenEnvVar} 2>/dev/null || true)"
+    if [ -z "$token" ];
+  then
+  echo "Set ${apiTokenEnvVar} before starting Crawl4AI server." >&2
+  echo "Example: export ${apiTokenEnvVar}=\"$(${openssl} rand -hex 32)\"" >&2
+  exit 1
+  fi
 
-        if ${docker} ps -a --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx ${escapeShellArg cfg.containerName}; then
-          echo "Crawl4AI container '${cfg.containerName}' already exists but is stopped." >&2
-          echo "Run 'crawl4ai-server-stop' to remove it before starting with fresh env/image." >&2
-          exit 1
-        fi
+  docker_runtime_ready true
 
-        env_args=(--env ${escapeShellArg apiTokenEnvVar})
-        for var in ${llmEnvVarsShell}; do
-          if printenv "$var" >/dev/null 2>&1; then
-            env_args+=(--env "$var")
-          fi
-        done
+  if ${docker} ps --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx ${escapeShellArg cfg.containerName}; then
+  echo "Crawl4AI container '${cfg.containerName}' is already running."
+  exit 0
+  fi
 
-        exec ${docker} run -d \
-          --name ${escapeShellArg cfg.containerName} \
-          --pull missing \
-          --publish 127.0.0.1:${toString serverPort}:11235 \
-          --shm-size 1g \
-          --memory 4g \
-          --pids-limit 512 \
-          --cap-drop ALL \
-          --security-opt no-new-privileges:true \
-          --read-only \
-          --tmpfs /tmp \
-          --tmpfs /var/lib/redis:uid=999,gid=999,mode=0700 \
-          --tmpfs /var/lib/crawl4ai/outputs:uid=999,gid=999,mode=0700 \
-          --tmpfs /home/appuser/.crawl4ai:uid=999,gid=999,mode=0700 \
-          --tmpfs /home/appuser/.cache/url_seeder:uid=999,gid=999,mode=0700 \
-          --tmpfs /home/appuser/.gunicorn:uid=999,gid=999,mode=0700 \
-          "''${env_args[@]}" \
-          ${escapeShellArg imageRef}
-      '')
+  if ${docker} ps -a --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx ${escapeShellArg cfg.containerName}; then
+  echo "Crawl4AI container '${cfg.containerName}' already exists but is stopped." >&2
+  echo "Run 'crawl4ai-server-stop' to remove it before starting with fresh env/image." >&2
+  exit 1
+  fi
+
+  env_args = (--env ${ escapeShellArg apiTokenEnvVar})
+  for var in ${llmEnvVarsShell};
+  do
+    if printenv "$var" >/dev/null 2>&1; then
+    env_args+ =
+    (--env "$var")
+      fi
+      done
+
+      exec ${docker} run -d \
+  --name ${escapeShellArg cfg.containerName} \
+  --pull missing \
+  --publish 127.0.0.1:${toString serverPort}:11235 \
+  --shm-size 1g \
+  --memory 4g \
+  --pids-limit 512 \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --read-only \
+  --tmpfs /tmp \
+  --tmpfs /var/lib/redis:uid=999,gid=999,mode=0700 \
+  --tmpfs /var/lib/crawl4ai/outputs:uid=999,gid=999,mode=0700 \
+  --tmpfs /home/appuser/.crawl4ai:uid=999,gid=999,mode=0700 \
+  --tmpfs /home/appuser/.cache/url_seeder:uid=999,gid=999,mode=0700 \
+  --tmpfs /home/appuser/.gunicorn:uid=999,gid=999,mode=0700 \
+  "''${env_args[@]}" \
+  ${escapeShellArg imageRef}
+  '')
 
       (pkgs.writeShellScriptBin "crawl4ai-server-stop" ''
-        set -euo pipefail
+  set -euo pipefail
 
-        if ${docker} ps --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx ${escapeShellArg cfg.containerName}; then
-          ${docker} stop ${escapeShellArg cfg.containerName} >/dev/null
-        fi
+  ${dockerContextInit}
+  ${dockerRuntimeReady}
 
-        if ${docker} ps -a --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx ${escapeShellArg cfg.containerName}; then
-          ${docker} rm ${escapeShellArg cfg.containerName} >/dev/null
-          echo "Removed Crawl4AI container '${cfg.containerName}'."
-        else
-          echo "No Crawl4AI container '${cfg.containerName}' exists."
-        fi
-      '')
+  if ! docker_runtime_ready false 1;
+  then
+  echo "Cannot inspect Crawl4AI container: Docker context '$DOCKER_CONTEXT' is unavailable." >&2
+  exit 1
+  fi
+
+  if ${docker} ps --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx ${escapeShellArg cfg.containerName}; then
+  ${docker} stop ${escapeShellArg cfg.containerName} >/dev/null
+  fi
+
+  if ${docker} ps -a --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx ${escapeShellArg cfg.containerName}; then
+  ${docker} rm ${escapeShellArg cfg.containerName} >/dev/null
+  echo "Removed Crawl4AI container '${cfg.containerName}'."
+  else
+  echo "No Crawl4AI container '${cfg.containerName}' exists."
+  fi
+  '')
 
       (pkgs.writeShellScriptBin "crawl4ai-health" ''
-        set -euo pipefail
-        exec ${curl} -fsS ${escapeShellArg "${serverUrl}/health"}
-      '')
+  set -euo pipefail
+  exec ${curl} -fsS ${escapeShellArg "${serverUrl}/health"}
+  '')
 
       (pkgs.writeShellScriptBin "crawl4ai-mcp-schema" ''
-        set -euo pipefail
+  set -euo pipefail
 
-        token="$(printenv ${escapeShellArg apiTokenEnvVar} 2>/dev/null || true)"
-        headers=()
-        if [ -n "$token" ]; then
-          headers=(-H "Authorization: Bearer $token")
-        fi
+  token = "$(printenv ${escapeShellArg apiTokenEnvVar} 2>/dev/null || true)"
+    headers=()
+  if [ -n "$token" ];
+  then
+  headers =
+    (-H "Authorization: Bearer $token")
+      fi
 
-        exec ${curl} -fsS "''${headers[@]}" ${escapeShellArg "${serverUrl}/mcp/schema"}
-      '')
+      exec ${curl} -fsS "''${headers[@]}" ${escapeShellArg "${serverUrl}/mcp/schema"}
+  '')
 
       (pkgs.writeShellScriptBin "crawl4ai-update" ''
-        set -euo pipefail
+  set -euo pipefail
 
-        echo "Refreshing pinned global Crawl4AI uv tool install (${packageSpec})..."
-        ${uv} tool install --upgrade ${escapeShellArg packageSpec}
-        echo
-        crawl4ai-status
-      '')
+  echo "Refreshing pinned global Crawl4AI uv tool install (${packageSpec})..."
+  ${uv} tool install --upgrade ${escapeShellArg packageSpec}
+  echo
+  crawl4ai-status
+  ''   )
     ];
   };
 }
+
+

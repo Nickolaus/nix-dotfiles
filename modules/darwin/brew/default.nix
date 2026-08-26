@@ -38,6 +38,7 @@
     # CLI tools not available or problematic in Nix
     brews = [
       "nx" # Nx CLI via Homebrew; prefer brew for global CLI convenience
+      "colima" # Lightweight Docker runtime for macOS
       "docker-credential-helper" # Docker credential helper for secure storage of Docker credentials
       "argocd" # Declarative continuous delivery tool for Kubernetes
       "mysql-client" # MySQL client for interacting with MySQL databases
@@ -51,7 +52,6 @@
       "claude" # Claude desktop app; not packaged in nixpkgs, Homebrew cask tracks current releases
       "cursor" # AI-powered code editor; Nix package is broken/unmaintained (v0.47.8), Homebrew provides latest (v2.1.46+)
       "lm-studio" # Local LLM desktop app; Homebrew cask tracks current releases (v0.4.18) vs nixpkgs lmstudio (v0.4.10)
-      "orbstack" # Container management tool with better performance than the Nix version
       "utm" # Virtual machine manager for macOS (not available in nixpkgs)
       "android-platform-tools" # Official Android SDK platform-tools; newer than nixpkgs android-tools
       "openmtp" # Android MTP file transfer on macOS; use for phone storage access over USB

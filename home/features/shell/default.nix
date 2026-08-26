@@ -32,11 +32,14 @@
     shellAbbrs = {
       # 🐳 Docker & Containers
       "d" = "docker";
-      "dc" = "docker-compose";
+      "dc" = "docker compose";
       "dps" = "docker ps";
       "di" = "docker images";
-      "dcup" = "docker-compose up -d";
-      "dcdown" = "docker-compose down";
+      "dcup" = "docker compose up -d";
+      "dcdown" = "docker compose down";
+      "dctx" = "docker context show";
+      "dcl" = "docker context ls";
+      "dcuse" = "docker context use";
 
       # ☸️ Kubernetes  
       "kc" = "kubectl";
