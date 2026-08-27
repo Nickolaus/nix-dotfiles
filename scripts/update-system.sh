@@ -13,6 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 UPGRADE_BREW=false
+UPGRADE_AUTO_UPDATE_CASKS=false
 PRUNE_BREW=false
 DRY_RUN=false
 CLEANUP_ONLY=false
@@ -22,6 +23,7 @@ REPO_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
 DARWIN_HOST=${NIX_DARWIN_HOST:-zoidberg}
 NIXOS_HOST=${NIXOS_HOST:-}
 TEMP_FILES=()
+FAILED_HOMEBREW_UPGRADES=()
 
 track_temp_file() {
     TEMP_FILES+=("$1")
@@ -252,7 +254,10 @@ list_declared_outdated_homebrew() {
             ;;
         cask)
             declared_args=(--cask)
-            outdated_args=(--cask --greedy)
+            outdated_args=(--cask)
+            if [[ "$UPGRADE_AUTO_UPDATE_CASKS" == true ]]; then
+                outdated_args+=(--greedy)
+            fi
             label="casks"
             ;;
         *)
@@ -322,39 +327,30 @@ upgrade_declared_homebrew() {
     fi
 
     local name
-    local failed_name=""
     while IFS= read -r name; do
         [[ -n "$name" ]] || continue
         log_info "Upgrading Homebrew formula: $name"
         if ! HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade "$name"; then
-            failed_name=$name
-            break
+            FAILED_HOMEBREW_UPGRADES+=("formula:$name")
+            log_warning "Homebrew formula upgrade failed; continuing: $name"
         fi
     done < "$formulae_file"
-
-    if [[ -n "$failed_name" ]]; then
-        rm -f "$formulae_file" "$casks_file"
-        log_error "Homebrew formula upgrade failed: $failed_name"
-        return 1
-    fi
 
     while IFS= read -r name; do
         [[ -n "$name" ]] || continue
         log_info "Upgrading Homebrew cask: $name"
         if ! HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade --cask "$name"; then
-            failed_name=$name
-            break
+            FAILED_HOMEBREW_UPGRADES+=("cask:$name")
+            log_warning "Homebrew cask upgrade failed; continuing: $name"
         fi
     done < "$casks_file"
 
-    if [[ -n "$failed_name" ]]; then
-        rm -f "$formulae_file" "$casks_file"
-        log_error "Homebrew cask upgrade failed: $failed_name"
-        return 1
-    fi
-
     rm -f "$formulae_file" "$casks_file"
-    log_success "Declared Homebrew upgrades completed"
+    if ((${#FAILED_HOMEBREW_UPGRADES[@]} == 0)); then
+        log_success "Declared Homebrew upgrades completed"
+    else
+        log_warning "Declared Homebrew upgrades completed with failures"
+    fi
 }
 
 prune_homebrew() {
@@ -706,8 +702,14 @@ main() {
         cleanup_generations
     fi
 
-    echo -e "\n${GREEN}✅ System update completed successfully!${NC}"
-    echo -e "${BLUE}Your nix-dotfiles configuration is now up to date.${NC}"
+    if ((${#FAILED_HOMEBREW_UPGRADES[@]} > 0)); then
+        echo -e "\n${YELLOW}⚠️ System update completed with Homebrew warnings.${NC}"
+        echo -e "${BLUE}Your nix-dotfiles configuration is up to date; some Homebrew packages were not upgraded.${NC}"
+        log_warning "Homebrew upgrades not completed: ${FAILED_HOMEBREW_UPGRADES[*]}"
+    else
+        echo -e "\n${GREEN}✅ System update completed successfully!${NC}"
+        echo -e "${BLUE}Your nix-dotfiles configuration is now up to date.${NC}"
+    fi
 }
 
 usage() {
@@ -720,6 +722,7 @@ usage() {
     echo "  --dry-run        Show what would be done without executing"
     echo "  --cleanup        Clean generations older than 180 days, run Nix store GC, optimise the store, and prune caches"
     echo "  --upgrade-brew   Explicitly upgrade outdated Homebrew packages declared in the generated Brewfile"
+    echo "  --upgrade-auto-update-casks  Include self-updating casks such as Cursor"
     echo "  --prune-brew     Explicitly remove Homebrew packages not declared in the generated Brewfile"
     echo
     echo "Environment:"
@@ -737,6 +740,7 @@ usage() {
     echo "Homebrew policy:"
     echo "- Default: install missing declared packages with --no-upgrade"
     echo "- --upgrade-brew: mutable, sequential, declared-only Homebrew upgrades"
+    echo "- --upgrade-auto-update-casks: opt into upgrades for casks that update themselves"
     echo "- --prune-brew: destructive cleanup of undeclared Homebrew packages after confirmation"
 }
 
@@ -752,6 +756,9 @@ dry_run() {
     echo "4. Run Homebrew metadata update and brew bundle --no-upgrade for declared packages on macOS"
     if [[ "$UPGRADE_BREW" == true ]]; then
         echo "4a. Explicitly upgrade outdated declared Homebrew packages sequentially"
+        if [[ "$UPGRADE_AUTO_UPDATE_CASKS" == true ]]; then
+            echo "4a. Include self-updating casks"
+        fi
     fi
     if [[ "$PRUNE_BREW" == true ]]; then
         echo "4b. Preview and optionally prune undeclared Homebrew packages"
@@ -774,6 +781,10 @@ parse_args() {
                 CLEANUP_ONLY=true
                 ;;
             "--upgrade-brew")
+                UPGRADE_BREW=true
+                ;;
+            "--upgrade-auto-update-casks")
+                UPGRADE_AUTO_UPDATE_CASKS=true
                 UPGRADE_BREW=true
                 ;;
             "--prune-brew")
