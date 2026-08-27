@@ -39,7 +39,15 @@ lib.mkIf pkgs.stdenv.hostPlatform.isDarwin (
     launchd.agents.colima = {
       enable = true;
       config = {
-        ProgramArguments = [ colimaBin "start" "--foreground" ];
+        ProgramArguments = [
+          colimaBin
+          "start"
+          "--foreground"
+          "--vm-type"
+          "vz"
+          "--mount-type"
+          "virtiofs"
+        ];
         RunAtLoad = true;
         # Restart crashes, but respect a clean `colima stop`.
         KeepAlive = { SuccessfulExit = false; };
