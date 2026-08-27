@@ -57,7 +57,7 @@ lib.mkIf pkgs.stdenv.hostPlatform.isDarwin (
         StandardErrorPath = "${colimaLog}/colima.error.log";
         EnvironmentVariables = {
           HOME = config.home.homeDirectory;
-          PATH = "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin";
+          PATH = "/etc/profiles/per-user/${config.home.username}/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin";
           DOCKER_CONTEXT = "colima";
         };
       };
