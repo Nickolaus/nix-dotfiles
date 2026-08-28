@@ -43,6 +43,11 @@ lib.mkIf pkgs.stdenv.hostPlatform.isDarwin (
           colimaBin
           "start"
           "--foreground"
+          # Reserve enough VM capacity for database-backed development stacks.
+          "--cpu"
+          "4"
+          "--memory"
+          "8"
           "--vm-type"
           "vz"
           "--mount-type"
