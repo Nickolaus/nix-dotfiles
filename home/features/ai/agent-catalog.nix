@@ -131,6 +131,21 @@ let
           inherit (skill) owner trust implicit managed targets;
           expectedSkillDirs = expectedPaths;
           renderedSkillFiles = lib.optionals skill.managed (map (path: "${path}/SKILL.md") expectedPaths);
+          # Keep candidate content addressable before Home Manager activation.
+          # The pre-rebuild SkillSpector gate scans these Nix-store sources so a
+          # flake update cannot introduce a new skill between validation and
+          # activation.
+          scanSources = lib.optionals skill.managed [
+            (if skill.source != null then skill.source else
+            pkgs.runCommand "${name}-skillspector-source" { } ''
+              mkdir -p "$out"
+              cp ${pkgs.writeText "${name}-SKILL.md" skill.text} "$out/SKILL.md"
+              ${lib.concatMapStringsSep "\n" (relPath: ''
+                mkdir -p "$out/$(dirname ${lib.escapeShellArg relPath})"
+                cp ${pkgs.writeText "${name}-${builtins.baseNameOf relPath}" skill.extraFiles.${relPath}} "$out"/${lib.escapeShellArg relPath}
+              '') (builtins.attrNames skill.extraFiles)}
+            '')
+          ];
         })
       (builtins.attrNames cfg.skills);
     roles = builtins.attrNames cfg.roles;

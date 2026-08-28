@@ -6,6 +6,41 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 all_systems=false
+skip_skill_scan=false
+
+check_candidate_skills() {
+    if [[ "$skip_skill_scan" == true ]]; then
+        if [[ -n "${CI:-}" ]]; then
+            echo "error: SkillSpector bypass is forbidden in CI" >&2
+            return 2
+        fi
+        echo "Skipping SkillSpector gate (explicit emergency bypass)." >&2
+        return 0
+    fi
+
+    local manifest=$1
+    local scan_rc=0
+    ./scripts/check-skills.sh --manifest "$manifest" || scan_rc=$?
+    if [[ "$scan_rc" -ne 0 ]]; then
+        echo "SkillSpector gate failed" >&2
+        return "$scan_rc"
+    fi
+}
+
+check_candidate_skills_from_flake() {
+    local config_attr=$1
+    local manifest
+    local eval_rc=0
+    manifest=$(mktemp "${TMPDIR:-/tmp}/nix-dotfiles-catalog.XXXXXX")
+    if ! nix eval --raw "$config_attr" > "$manifest"; then
+        rm -f -- "$manifest"
+        echo "error: could not evaluate candidate catalog manifest" >&2
+        return 1
+    fi
+    check_candidate_skills "$manifest" || eval_rc=$?
+    rm -f -- "$manifest"
+    return "$eval_rc"
+}
 
 usage() {
     cat << 'EOF'
@@ -13,6 +48,8 @@ Usage: ./scripts/check-config.sh [--all-systems]
 
 Validate the current platform by default. Use --all-systems from a Linux
 machine or a configured remote builder to evaluate every declared host.
+The SkillSpector gate is enabled by default; only update-system.sh may bypass
+it after interactive confirmation with --skip-skill-scan.
 EOF
 }
 
@@ -21,6 +58,9 @@ parse_args() {
         case "$1" in
             --all-systems)
                 all_systems=true
+                ;;
+            --skip-skill-scan)
+                skip_skill_scan=true
                 ;;
             --help | -h)
                 usage
@@ -39,6 +79,7 @@ parse_args() {
 check_darwin() {
     echo "Checking AI agent catalog candidate..."
     nix eval '.#darwinConfigurations.zoidberg.config.home-manager.users."C.Hessel".home.file.".agents/catalog/manifest.json".text' > /dev/null
+    check_candidate_skills_from_flake '.#darwinConfigurations.zoidberg.config.home-manager.users."C.Hessel".home.file.".agents/catalog/manifest.json".text'
     if command -v agent-catalog-check > /dev/null 2>&1 && [ -f "$HOME/.agents/catalog/manifest.json" ]; then
         echo "Checking applied AI agent catalog..."
         agent-catalog-check
@@ -56,6 +97,7 @@ check_nixos() {
 
     echo "Evaluating NixOS host: $host"
     nix eval ".#nixosConfigurations.$host.config.system.build.toplevel.drvPath" > /dev/null
+    check_candidate_skills_from_flake ".#nixosConfigurations.$host.config.home-manager.users.\"C.Hessel\".home.file.\".agents/catalog/manifest.json\".text"
 
     echo "Evaluating installer package: farnsworth-installer $system"
     nix eval ".#packages.$system.farnsworth-installer.drvPath" > /dev/null

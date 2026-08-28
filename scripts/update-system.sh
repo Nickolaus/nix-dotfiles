@@ -17,6 +17,8 @@ UPGRADE_AUTO_UPDATE_CASKS=false
 PRUNE_BREW=false
 DRY_RUN=false
 CLEANUP_ONLY=false
+SKIP_SKILL_SCAN=false
+SKILLSPECTOR_VERSION="2.11.0"
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
@@ -70,6 +72,37 @@ confirm() {
     read -p "$prompt (y/N): " -n 1 -r
     echo
     [[ $REPLY =~ ^[Yy]$ ]]
+}
+
+ensure_skillspector() {
+    if ! command -v uv > /dev/null 2>&1; then
+        log_error "uv is required to install SkillSpector"
+        exit 1
+    fi
+
+    if command -v skillspector > /dev/null 2>&1 && skillspector --version 2> /dev/null | grep -Fq "$SKILLSPECTOR_VERSION"; then
+        log_success "SkillSpector $SKILLSPECTOR_VERSION is already installed"
+        return 0
+    fi
+
+    # Transitional fallback: SkillSpector is not currently available as a
+    # nixpkgs package. Install only when absent or at the wrong pinned version;
+    # normal upgrades reuse the already-installed binary and stay offline.
+    log_info "Installing pinned SkillSpector $SKILLSPECTOR_VERSION..."
+    if uv tool install --upgrade "skillspector==$SKILLSPECTOR_VERSION"; then
+        log_success "SkillSpector $SKILLSPECTOR_VERSION is ready"
+    else
+        log_error "Could not install SkillSpector $SKILLSPECTOR_VERSION"
+        exit 1
+    fi
+}
+
+run_config_check() {
+    if [[ "$SKIP_SKILL_SCAN" == true ]]; then
+        ./scripts/check-config.sh --skip-skill-scan
+    else
+        ./scripts/check-config.sh
+    fi
 }
 
 # Detect platform
@@ -149,7 +182,7 @@ check_system_health() {
     fi
 
     log_info "Validating current configuration..."
-    if ! ./scripts/check-config.sh; then
+    if ! run_config_check; then
         log_error "Configuration validation failed"
         log_info "Fix configuration errors before proceeding"
         exit 1
@@ -220,7 +253,7 @@ update_configuration() {
     fi
 
     log_info "Validating updated configuration..."
-    if ./scripts/check-config.sh; then
+    if run_config_check; then
         log_success "Updated configuration is valid"
     else
         log_error "Updated configuration validation failed"
@@ -689,6 +722,16 @@ main() {
         exit 0
     fi
 
+    if [[ "$SKIP_SKILL_SCAN" == true ]]; then
+        if ! confirm "Skip the SkillSpector security gate for this update?"; then
+            log_info "Update cancelled"
+            exit 0
+        fi
+        log_warning "SkillSpector gate bypassed for this update"
+    else
+        ensure_skillspector
+    fi
+
     # Execute update workflow
     check_system_health
     update_determinate
@@ -724,6 +767,7 @@ usage() {
     echo "  --upgrade-brew   Explicitly upgrade outdated Homebrew packages declared in the generated Brewfile"
     echo "  --upgrade-auto-update-casks  Include self-updating casks such as Cursor"
     echo "  --prune-brew     Explicitly remove Homebrew packages not declared in the generated Brewfile"
+    echo "  --skip-skill-scan  Emergency bypass for the SkillSpector pre-rebuild gate"
     echo
     echo "Environment:"
     echo "  NIX_DARWIN_HOST  Darwin host (default: zoidberg)"
@@ -789,6 +833,9 @@ parse_args() {
                 ;;
             "--prune-brew")
                 PRUNE_BREW=true
+                ;;
+            "--skip-skill-scan")
+                SKIP_SKILL_SCAN=true
                 ;;
             *)
                 log_error "Unknown option: $1"
