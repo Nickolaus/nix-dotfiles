@@ -3,16 +3,16 @@
     "caveman": {
       "flake": false,
       "locked": {
-        "lastModified": 1778615072,
-        "narHash": "sha256-Jlfas2MPoQx3pOw+yKCta8kYlOEY27SP5NXJtSL+GGI=",
+        "lastModified": 1788480809,
+        "narHash": "sha256-tEQDv0sIsCzdzaq/tdUSN8nb2xmQJkmjPtq8wKChqvQ=",
         "owner": "JuliusBrussee",
         "repo": "caveman",
-        "rev": "63a91ecadbf4c4719a4602a5abb00883f9966034",
+        "rev": "b82c0ad42c2bedc1f2cd78e414dadfaffbaaeec3",
         "type": "github"
       },
       "original": {
         "owner": "JuliusBrussee",
-        "ref": "v1.8.2",
+        "ref": "v2.6.0",
         "repo": "caveman",
         "type": "github"
       }
@@ -43,16 +43,16 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1781240755,
-        "narHash": "sha256-H0l8H2JhPT1Rs0p+CJC1a1qYtnZNgLGe6n7PmM+WvE4=",
+        "lastModified": 1787085599,
+        "narHash": "sha256-lPuayLN6W31zQ45UTQehP+tmoo/UrQJuRsJzi1wZ9Tg=",
         "owner": "DeusData",
         "repo": "codebase-memory-mcp",
-        "rev": "f0c9be19c5d74b84f418d807bfdce7b5d6a261ff",
+        "rev": "46ae198fc11cda80e817acbc5f5908d7c2de7032",
         "type": "github"
       },
       "original": {
         "owner": "DeusData",
-        "ref": "v0.8.1",
+        "ref": "v0.10.8",
         "repo": "codebase-memory-mcp",
         "type": "github"
       }
@@ -270,16 +270,16 @@
     "mattpocock-skills": {
       "flake": false,
       "locked": {
-        "lastModified": 1783516840,
-        "narHash": "sha256-XqF709Y9GMKINzZITlbCTyatG9AxRZh0qn2vcv1Z8yo=",
+        "lastModified": 1786025105,
+        "narHash": "sha256-I/EXHGW92nXz6JCLp8SKGgzXrbbUTkLAfxv8bc/ThwQ=",
         "owner": "mattpocock",
         "repo": "skills",
-        "rev": "d574778f94cf620fcc8ce741584093bc650a61d3",
+        "rev": "6acc160e4e0cd062dbbbd7a1b26ae92855edf07e",
         "type": "github"
       },
       "original": {
         "owner": "mattpocock",
-        "ref": "v1.1.0",
+        "ref": "v1.2.3",
         "repo": "skills",
         "type": "github"
       }
@@ -540,16 +540,16 @@
         "uv2nix": "uv2nix"
       },
       "locked": {
-        "lastModified": 1779822216,
-        "narHash": "sha256-8RHjJG8loqC742LoFK7O3MK7JDEhb1qw8VMBhzj04MM=",
+        "lastModified": 1786299277,
+        "narHash": "sha256-IrsD4pnu/47M/O9b8H9c7K8WENGv3FihlqzCB6szBXg=",
         "owner": "oraios",
         "repo": "serena",
-        "rev": "2449313c0d7427275c4c66aedff7d4881782f713",
+        "rev": "949a27ef1e5fda1a6e7b561e777bcece345c6ffd",
         "type": "github"
       },
       "original": {
         "owner": "oraios",
-        "ref": "v1.5.3",
+        "ref": "v1.7.0",
         "repo": "serena",
         "type": "github"
       }

@@ -19,12 +19,12 @@
     # AI agent source inputs. Flake input declarations must stay static here;
     # flake/ai-agent-sources.nix groups their typed use sites.
     caveman = {
-      url = "github:JuliusBrussee/caveman/v1.8.2";
+      url = "github:JuliusBrussee/caveman/v2.6.0";
       flake = false;
     };
 
     mattpocock-skills = {
-      url = "github:mattpocock/skills/v1.1.0";
+      url = "github:mattpocock/skills/v1.2.3";
       flake = false;
     };
 
@@ -39,9 +39,9 @@
       flake = false;
     };
 
-    serena.url = "github:oraios/serena/v1.5.3";
+    serena.url = "github:oraios/serena/v1.7.0";
 
-    codebase-memory-mcp.url = "github:DeusData/codebase-memory-mcp/v0.8.1";
+    codebase-memory-mcp.url = "github:DeusData/codebase-memory-mcp/v0.10.8";
 
     # Disko for declarative disk management
     disko = {

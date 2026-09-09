@@ -25,6 +25,15 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?\\s+\\w+ = \"(?<currentValue>[^\"]+)\";"
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "Update flake inputs pinned to an explicit GitHub release tag in their own URL (nix's built-in flake.lock digest tracking never rewrites these -- the tag string itself is the version pin).",
+      "fileMatch": ["^flake\\.nix$"],
+      "matchStrings": [
+        "url = \"github:(?<depName>[^/\"]+/[^/\"]+)/(?<currentValue>v\\d+\\.\\d+\\.\\d+)\";"
+      ],
+      "datasourceTemplate": "github-tags"
     }
   ],
   "nix": {
