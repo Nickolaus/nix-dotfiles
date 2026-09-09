@@ -148,10 +148,6 @@ let
       ${optionalString (codexHeadroomProxy.openaiTargetUrl != null) ''
         export OPENAI_TARGET_API_URL=${escapeShellArg codexHeadroomProxy.openaiTargetUrl}
       ''}
-      headroom_bin="$HOME/.local/bin/headroom"
-      if [ -x "$headroom_bin" ]; then
-        exec "$headroom_bin" proxy --host 127.0.0.1 --port ${toString codexHeadroomProxy.port}
-      fi
       exec ${pkgs.uv}/bin/uvx --from ${escapeShellArg codexHeadroomProxyFrom} headroom proxy \
         --host 127.0.0.1 --port ${toString codexHeadroomProxy.port}
     ) >>"$log_dir/headroom-proxy-shared.log" 2>>"$log_dir/headroom-proxy-shared.error.log" &

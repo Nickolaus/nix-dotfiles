@@ -103,9 +103,7 @@ in
     export UV_CACHE_DIR=${escapeShellArg "${uvRuntimeDir}/uv-cache"}
     mkdir -p "$UV_CACHE_DIR"
 
-    headroom_bin="$(${pkgs.uv}/bin/uv tool dir --bin 2>/dev/null)/headroom"
-    [ -x "$headroom_bin" ] \
-      || ${pkgs.uv}/bin/uv tool install ${escapeShellArg headroomProxyFrom} >/dev/null 2>&1 \
+    ${pkgs.uv}/bin/uv tool install ${escapeShellArg headroomProxyFrom} >/dev/null 2>&1 \
       || echo "Warning: failed to install headroom (${headroomProxyFrom})" >&2
   '';
 
