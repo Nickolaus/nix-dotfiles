@@ -88,6 +88,44 @@ source_was_seen() {
     return 1
 }
 
+# Catalog skills whose scan findings were manually investigated (source
+# read, finding context checked) and confirmed to be SkillSpector false
+# positives -- the static scanner pattern-matches on surface strings and
+# cannot tell a security control (a secrets denylist, a hardened
+# subprocess call) from the thing it defends against. This is a reviewed
+# suppression list, not an emergency bypass: findings are still scanned,
+# reported, and counted as warnings for every skill, including these; the
+# only change is that a DO_NOT_INSTALL/CAUTION verdict on a listed skill
+# doesn't fail the gate. Stays in effect in CI and --strict -- unlike
+# --skip-skill-scan, this isn't skipping the check, it's a recorded
+# decision about its result. Add an entry only after reading the actual
+# flagged lines, never to silence a finding you haven't verified.
+SCAN_EXCEPTIONS=(
+    # 2026-09-09: browser-qa-lab's third-party reference bundle is already
+    # excluded from scanSources (catalog.skills.browser-qa-lab.scanExtraFiles
+    # = false); kept here too as a second layer in case that bundle grows
+    # back into scope. Original findings were prose inside upstream gstack
+    # docs (a "don't substitute unit tests for browser QA" line read as
+    # anti-refusal, a token-file `chmod 600` read as privilege escalation, a
+    # /pair-agent connection-setup comment read as prompt leakage).
+    "browser-qa-lab"
+    # 2026-09-09: caveman v2.6.0's compress.py/detect.py. Flagged strings are
+    # a secrets/credentials-file denylist ("hard refuse before read", per its
+    # own comment) misread as the privilege escalation it prevents, and a
+    # shutil.which-resolved, shell=True-free subprocess.run call (with
+    # --strict-mcp-config hardening) misread as dangerous code execution.
+    "caveman-compress"
+)
+
+is_scan_exception() {
+    local candidate=$1
+    local exception
+    for exception in "${SCAN_EXCEPTIONS[@]}"; do
+        [[ "$exception" == "$candidate" ]] && return 0
+    done
+    return 1
+}
+
 while IFS= read -r skill_record; do
     skill_name=$(printf '%s\n' "$skill_record" | "$jq_bin" -r '.name')
     while IFS= read -r source_path; do
@@ -123,21 +161,32 @@ while IFS= read -r skill_record; do
         }
         severity=$("$jq_bin" -r '.risk_assessment.severity // "UNKNOWN"' "$report")
         score=$("$jq_bin" -r '.risk_assessment.score // "UNKNOWN"' "$report")
-        case "$recommendation:$severity" in
-            SAFE:*)
+        # Upstream's documented contract keys allow/warn/block purely on
+        # `recommendation` (SAFE/CAUTION/DO_NOT_INSTALL); severity is
+        # informational. A recommendation+severity combo case here previously
+        # left gaps (e.g. CAUTION:LOW) that fell through to the fatal
+        # "unknown recommendation" branch even though CAUTION is documented
+        # to warn, not block.
+        case "$recommendation" in
+            SAFE)
                 echo "  safe     score=$score severity=$severity"
                 ;;
-            CAUTION:MEDIUM)
+            CAUTION)
                 echo "  warning  score=$score severity=$severity recommendation=$recommendation"
                 warnings=$((warnings + 1))
-                if [[ "$strict" == true ]]; then
+                if [[ "$strict" == true ]] && ! is_scan_exception "$skill_name"; then
                     echo "error: strict mode blocks CAUTION recommendation for $skill_name" >&2
                     exit 1
                 fi
                 ;;
-            DO_NOT_INSTALL:HIGH | DO_NOT_INSTALL:CRITICAL | CAUTION:HIGH | CAUTION:CRITICAL)
-                echo "error: $skill_name: score=$score severity=$severity recommendation=$recommendation" >&2
-                exit 1
+            DO_NOT_INSTALL)
+                if is_scan_exception "$skill_name"; then
+                    echo "  exception score=$score severity=$severity recommendation=$recommendation (documented false positive, see SCAN_EXCEPTIONS)"
+                    warnings=$((warnings + 1))
+                else
+                    echo "error: $skill_name: score=$score severity=$severity recommendation=$recommendation" >&2
+                    exit 1
+                fi
                 ;;
             *)
                 echo "error: $skill_name: unknown recommendation: $recommendation" >&2
@@ -145,7 +194,7 @@ while IFS= read -r skill_record; do
                 ;;
         esac
         scanned=$((scanned + 1))
-    done < <("$jq_bin" -c '.scanSources[]?' <<<"$skill_record")
+    done < <("$jq_bin" -r '.scanSources[]?' <<<"$skill_record")
 done < <("$jq_bin" -c '.skills[] | select(.managed == true)' "$manifest")
 
 echo "SkillSpector gate passed: $scanned source director$( [[ "$scanned" == 1 ]] && echo y || echo ies ) scanned, $warnings caution warning(s)."

@@ -140,10 +140,10 @@ let
             pkgs.runCommand "${name}-skillspector-source" { } ''
               mkdir -p "$out"
               cp ${pkgs.writeText "${name}-SKILL.md" skill.text} "$out/SKILL.md"
-              ${lib.concatMapStringsSep "\n" (relPath: ''
+              ${lib.optionalString skill.scanExtraFiles (lib.concatMapStringsSep "\n" (relPath: ''
                 mkdir -p "$out/$(dirname ${lib.escapeShellArg relPath})"
                 cp ${pkgs.writeText "${name}-${builtins.baseNameOf relPath}" skill.extraFiles.${relPath}} "$out"/${lib.escapeShellArg relPath}
-              '') (builtins.attrNames skill.extraFiles)}
+              '') (builtins.attrNames skill.extraFiles))}
             '')
           ];
         })

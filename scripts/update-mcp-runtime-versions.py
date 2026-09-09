@@ -16,6 +16,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VERSIONS_FILE = REPO_ROOT / "hosts/shared/ai-agents-lib.nix"
 FLAKE_FILE = REPO_ROOT / "flake.nix"
+UPDATE_SCRIPT_FILE = REPO_ROOT / "scripts/update-system.sh"
 CODEX_EXAMPLE_FILE = REPO_ROOT / ".codex/config.example.toml"
 CODEX_PRIVATE_FILE = REPO_ROOT / ".codex/config.toml"
 
@@ -36,6 +37,15 @@ PIN_RE = re.compile(
 # comment annotation needed: owner/repo is the depName already.
 FLAKE_TAG_RE = re.compile(
     r'url = "github:(?P<depName>[^/"]+/[^/"]+)/(?P<currentValue>v\d+\.\d+\.\d+)";'
+)
+
+# update-system.sh-style pins: same `# renovate:` comment convention as
+# PIN_RE, but bash assignment syntax forbids spaces around `=`
+# (`KEY="value"`, not `KEY = "value"`).
+SHELL_PIN_RE = re.compile(
+    r"(?P<comment>[ \t]*# renovate: datasource=(?P<datasource>\S+) "
+    r"depName=(?P<depName>\S+)(?: versioning=(?P<versioning>\S+))?)\n"
+    r"(?P<prefix>[ \t]*(?P<key>\w+)=\")(?P<currentValue>[^\"]+)(?P<suffix>\")"
 )
 
 
@@ -103,8 +113,10 @@ def latest_for(datasource: str, dep_name: str) -> str:
     raise ValueError(f"unsupported datasource: {datasource}")
 
 
-def rewrite_versions_file(write: bool) -> tuple[bool, dict[str, str]]:
-    text = VERSIONS_FILE.read_text()
+def rewrite_pinned_file(
+    path: Path, pattern: re.Pattern[str], write: bool
+) -> tuple[bool, dict[str, str]]:
+    text = path.read_text()
     changed = False
     pinned_by_key: dict[str, str] = {}
 
@@ -128,10 +140,10 @@ def rewrite_versions_file(write: bool) -> tuple[bool, dict[str, str]]:
             f"{match.group('prefix')}{latest}{match.group('suffix')}"
         )
 
-    new_text = PIN_RE.sub(replace, text)
+    new_text = pattern.sub(replace, text)
 
     if write and changed:
-        VERSIONS_FILE.write_text(new_text)
+        path.write_text(new_text)
 
     return changed, pinned_by_key
 
@@ -205,8 +217,10 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    changed, pinned_by_key = rewrite_versions_file(args.write)
+    changed, pinned_by_key = rewrite_pinned_file(VERSIONS_FILE, PIN_RE, args.write)
     changed = rewrite_flake_tags(args.write) or changed
+    shell_changed, _ = rewrite_pinned_file(UPDATE_SCRIPT_FILE, SHELL_PIN_RE, args.write)
+    changed = shell_changed or changed
     nixos_version = pinned_by_key.get("nixos")
     if nixos_version:
         changed = (

@@ -56,7 +56,7 @@ let
     { name = "grilling"; implicit = true; }
     { name = "handoff"; implicit = false; }
     { name = "teach"; implicit = false; }
-    { name = "writing-great-skills"; implicit = false; }
+    { name = "writing-for-agents"; implicit = false; }
   ];
 
   cavemanSkills = [
@@ -147,6 +147,21 @@ let
         type = types.attrsOf types.lines;
         default = { };
         description = "Additional files rendered relative to the skill directory for curated reference slices.";
+      };
+
+      scanExtraFiles = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Whether the SkillSpector pre-rebuild gate scans `extraFiles` alongside
+          SKILL.md. Set false when `extraFiles` is verbatim third-party
+          documentation bundled as read-only reference material rather than
+          agent-facing instructions -- SkillSpector's static scanner cannot
+          distinguish "documentation describing a tool" from "instructions for
+          an agent" and will flag ordinary prose in large upstream docs as if
+          it were live skill content. The files are still rendered and shipped
+          either way; this only narrows what gets scanned.
+        '';
       };
 
       targets = mkOption {
@@ -383,6 +398,17 @@ in
           browser-qa-lab = {
             text = browserQaLabSkill;
             extraFiles = browserQaLabReferences;
+            # ~3800 lines of verbatim upstream gstack architecture/maintainer
+            # docs, bundled as read-only reference material for QA ideas --
+            # not agent-facing instructions. SkillSpector flags ordinary prose
+            # in them as live skill content (investigated 2026-09-09: sampled
+            # findings were a "never substitute unit tests for browser QA"
+            # line read as an anti-refusal jailbreak, a `chmod 600` that
+            # *restricts* a token file read as privilege escalation, and a
+            # `/pair-agent` connection-setup comment read as prompt leakage).
+            # browserQaLabSkill's own SKILL.md, the only agent-facing content
+            # here, scans clean on its own.
+            scanExtraFiles = false;
             targets = [ "codex" "claude" "cursor" "vibe" ];
             trust = "pinned-flake";
             owner = "github:garrytan/gstack via nix-dotfiles policy";

@@ -18,7 +18,9 @@ PRUNE_BREW=false
 DRY_RUN=false
 CLEANUP_ONLY=false
 SKIP_SKILL_SCAN=false
-SKILLSPECTOR_VERSION="2.11.0"
+# renovate: datasource=github-tags depName=NVIDIA/skillspector
+SKILLSPECTOR_TAG="v2.11.1"
+SKILLSPECTOR_REPO="https://github.com/NVIDIA/skillspector.git"
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
@@ -80,19 +82,20 @@ ensure_skillspector() {
         exit 1
     fi
 
-    if command -v skillspector > /dev/null 2>&1 && skillspector --version 2> /dev/null | grep -Fq "$SKILLSPECTOR_VERSION"; then
-        log_success "SkillSpector $SKILLSPECTOR_VERSION is already installed"
+    if command -v skillspector > /dev/null 2>&1 && skillspector --version 2> /dev/null | grep -Fq "${SKILLSPECTOR_TAG#v}"; then
+        log_success "SkillSpector $SKILLSPECTOR_TAG is already installed"
         return 0
     fi
 
     # Transitional fallback: SkillSpector is not currently available as a
-    # nixpkgs package. Install only when absent or at the wrong pinned version;
-    # normal upgrades reuse the already-installed binary and stay offline.
-    log_info "Installing pinned SkillSpector $SKILLSPECTOR_VERSION..."
-    if uv tool install --upgrade "skillspector==$SKILLSPECTOR_VERSION"; then
-        log_success "SkillSpector $SKILLSPECTOR_VERSION is ready"
+    # nixpkgs package, and upstream only ships via git (never published to
+    # PyPI) -- install only when absent or at the wrong pinned tag; normal
+    # upgrades reuse the already-installed binary and stay offline.
+    log_info "Installing pinned SkillSpector $SKILLSPECTOR_TAG..."
+    if uv tool install "skillspector @ git+${SKILLSPECTOR_REPO}@${SKILLSPECTOR_TAG}"; then
+        log_success "SkillSpector $SKILLSPECTOR_TAG is ready"
     else
-        log_error "Could not install SkillSpector $SKILLSPECTOR_VERSION"
+        log_error "Could not install SkillSpector $SKILLSPECTOR_TAG"
         exit 1
     fi
 }
