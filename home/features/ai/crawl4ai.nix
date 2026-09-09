@@ -11,6 +11,7 @@ let
     ;
 
   cfg = config.crawl4ai;
+  aiAgentsLib = import ../../../hosts/shared/ai-agents-lib.nix { inherit lib pkgs; };
   aiCfg = if osConfig ? aiAgents then osConfig.aiAgents else null;
   aiCrawl4AI = if aiCfg != null && aiCfg ? crawl4ai then aiCfg.crawl4ai else null;
 
@@ -158,7 +159,7 @@ in
 
     version = mkOption {
       type = types.str;
-      default = "0.9.1";
+      default = aiAgentsLib.mcpPackageVersions.pypi.crawl4ai;
       description = "Pinned Crawl4AI version used for the uv tool and Docker image.";
     };
 

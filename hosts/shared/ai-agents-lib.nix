@@ -21,6 +21,8 @@ rec {
       sequentialThinking = "2026.7.4";
     };
     pypi = {
+      # renovate: datasource=pypi depName=crawl4ai versioning=pep440
+      crawl4ai = "0.9.1";
       # renovate: datasource=pypi depName=mcp-server-fetch versioning=pep440
       fetch = "2026.8.18";
       # renovate: datasource=pypi depName=headroom-ai versioning=pep440
