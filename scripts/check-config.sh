@@ -79,6 +79,8 @@ parse_args() {
 check_darwin() {
     echo "Checking AI agent catalog candidate..."
     nix eval '.#darwinConfigurations.zoidberg.config.home-manager.users."C.Hessel".home.file.".agents/catalog/manifest.json".text' > /dev/null
+    echo "Realizing SkillSpector scan sources..."
+    nix build --no-link '.#darwinConfigurations.zoidberg.config.home-manager.users."C.Hessel".aiAgentCatalog.scanSourcesClosure'
     check_candidate_skills_from_flake '.#darwinConfigurations.zoidberg.config.home-manager.users."C.Hessel".home.file.".agents/catalog/manifest.json".text'
     if command -v agent-catalog-check > /dev/null 2>&1 && [ -f "$HOME/.agents/catalog/manifest.json" ]; then
         echo "Checking applied AI agent catalog..."
@@ -97,6 +99,8 @@ check_nixos() {
 
     echo "Evaluating NixOS host: $host"
     nix eval ".#nixosConfigurations.$host.config.system.build.toplevel.drvPath" > /dev/null
+    echo "Realizing SkillSpector scan sources..."
+    nix build --no-link ".#nixosConfigurations.$host.config.home-manager.users.\"C.Hessel\".aiAgentCatalog.scanSourcesClosure"
     check_candidate_skills_from_flake ".#nixosConfigurations.$host.config.home-manager.users.\"C.Hessel\".home.file.\".agents/catalog/manifest.json\".text"
 
     echo "Evaluating installer package: farnsworth-installer $system"

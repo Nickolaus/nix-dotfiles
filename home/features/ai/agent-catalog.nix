@@ -156,6 +156,36 @@ let
   manifestJson = builtins.toJSON manifest;
   manifestPath = ".agents/catalog/manifest.json";
 
+  # `builtins.toJSON manifest` strips Nix's path-context when it serializes
+  # scanSources to text, so scripts/check-config.sh (which only ever reads
+  # manifest.json as plain JSON, via `nix eval --raw ...text`) has no way to
+  # rebuild a scanSources path that hasn't been built under the current
+  # nixpkgs revision -- `nix-store --realise <bare-output-path>` can fetch an
+  # already-known store path or find one already present, but it cannot
+  # derive-then-build one from scratch. Flake-fetched scanSources (most
+  # skills) get away with this because content-addressed fetches are usually
+  # already realized during evaluation; the local pkgs.runCommand-based ones
+  # (skills with `text` set, e.g. browser-qa-lab, graphify-auto) are not --
+  # their output hash depends on the pkgs revision, so any `nix flake
+  # update` that bumps nixpkgs produces an output nobody has ever built, and
+  # the pre-rebuild scan gate hard-fails until something else (typically a
+  # full darwin-rebuild switch) happens to build it first.
+  #
+  # This aggregate re-expresses every scanSources path as a real Nix build
+  # dependency (linkFarm forces its inputs to be built as a side effect of
+  # building the farm itself), so `nix build` on this one derivation forces
+  # every scanSources path to exist on disk -- flake-fetched ones as a
+  # no-op, local runCommand-based ones as an actual (near-instant,
+  # writeText+cp) build -- before scripts/check-config.sh ever hands
+  # anything to the scanner. Internal-only: never rendered to disk, never
+  # added to home.file.
+  scanSourcesClosure = pkgs.linkFarm "agent-catalog-scan-sources"
+    (lib.concatMap
+      (skill: lib.imap0
+        (i: src: { name = "${skill.name}-${toString i}"; path = src; })
+        skill.scanSources)
+      manifest.skills);
+
   checkPython = pkgs.writeText "agent-catalog-check.py" ''
     import json
     import os
@@ -362,6 +392,25 @@ let
   '';
 in
 {
+  options.aiAgentCatalog.scanSourcesClosure = lib.mkOption {
+    type = lib.types.package;
+    internal = true;
+    readOnly = true;
+    description = ''
+      Aggregate derivation bundling every managed catalog skill's
+      SkillSpector scanSources (see manifest.skills[].scanSources above).
+      Exists purely so `nix build` can force-realize them into the local
+      store before the pre-rebuild scan runs (scripts/check-config.sh) --
+      builtins.toJSON strips path-context when serializing manifest.json,
+      so the manifest text alone gives no way to rebuild a scanSources
+      path that was never built under the current nixpkgs revision. Not
+      rendered to disk; do not add this to home.file.
+    '';
+  };
+
+  config = {
+  aiAgentCatalog.scanSourcesClosure = scanSourcesClosure;
+
   home.file = lib.mkIf catalogEnabled (
     builtins.listToAttrs managedSkillEntries
     // builtins.listToAttrs [
@@ -457,4 +506,5 @@ in
 
     ${pkgs.jq}/bin/jq -R -s 'split("\n") | map(select(length > 0))' "$materializedTmp" > "$materializedState"
   '';
+  };
 }
