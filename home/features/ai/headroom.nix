@@ -17,7 +17,13 @@ let
   proxyNames = builtins.attrNames proxies;
 
   stateDir = "${config.home.homeDirectory}/.local/state/headroom";
-  uvRuntimeDir = "/private/tmp/${config.home.username}/headroom-install";
+  # Same Darwin/Linux split as rtk.nix and workflow-receipts.nix: macOS
+  # symlinks /tmp -> /private/tmp and Codex's sandbox needs the canonical
+  # path there; Linux (and WSL) has no /private, so use XDG state home.
+  uvRuntimeDir =
+    if pkgs.stdenv.hostPlatform.isDarwin
+    then "/private/tmp/${config.home.username}/headroom-install"
+    else "${config.xdg.stateHome}/headroom-install";
   launchdPath = "/etc/profiles/per-user/${config.home.username}/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
   uvx = "${pkgs.uv}/bin/uvx";
