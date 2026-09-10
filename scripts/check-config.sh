@@ -32,6 +32,12 @@ nix eval .#nixosConfigurations.bender.config.system.build.toplevel.drvPath >/dev
 echo "Evaluating NixOS host: bender-aarch64"
 nix eval .#nixosConfigurations.bender-aarch64.config.system.build.toplevel.drvPath >/dev/null
 
+echo "Evaluating standalone Home Manager: C.Hessel"
+nix eval '.#homeConfigurations."C.Hessel".activationPackage.drvPath' >/dev/null
+
+echo "Evaluating standalone Home Manager: C.Hessel-aarch64"
+nix eval '.#homeConfigurations."C.Hessel-aarch64".activationPackage.drvPath' >/dev/null
+
 echo "Evaluating installer package: farnsworth-installer aarch64-linux"
 nix eval .#packages.aarch64-linux.farnsworth-installer.drvPath >/dev/null
 
