@@ -10,7 +10,7 @@ rec {
   mcpPackageVersions = {
     npm = {
       # renovate: datasource=npm depName=@upstash/context7-mcp
-      context7 = "4.0.6";
+      context7 = "4.0.7";
       # renovate: datasource=npm depName=chrome-devtools-mcp
       chromeDevtools = "1.9.0";
       # renovate: datasource=npm depName=puppeteer-mcp-server
