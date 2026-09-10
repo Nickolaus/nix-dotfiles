@@ -49,6 +49,12 @@
     impermanence = {
       url = "github:nix-community/impermanence";
     };
+
+    # NixOS-WSL for the bender host (NixOS running under WSL2)
+    nixos-wsl = {
+      url = "github:nix-community/NixOS-WSL";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -59,6 +65,7 @@
     , sops-nix
     , disko
     , impermanence
+    , nixos-wsl
     , ...
     }:
     let
@@ -120,14 +127,34 @@
           inherit system;
           modules = [ ./images/installer.nix ];
         }).config.system.build.isoImage;
-      # Standalone Home Manager (non-NixOS Linux, e.g. WSL2).
-      # Reuses home/farnsworth.nix with the desktop stack (hyprland/waybar)
+      # Standalone Home Manager (non-NixOS Linux, e.g. a plain distro under WSL2).
+      # Reuses home/bender.nix with the desktop stack (hyprland/waybar)
       # disabled since there's no Wayland session to run it against.
       mkWslHome = system:
         home-manager.lib.homeManagerConfiguration {
           pkgs = nixpkgs.legacyPackages.${system};
           extraSpecialArgs = extraArgs // { desktop = false; };
-          modules = [ ./home/farnsworth.nix ];
+          modules = [ ./home/bender.nix ];
+        };
+      # bender - NixOS-WSL. No disko/impermanence: WSL2 owns the disk image,
+      # and there's no bootloader to configure inside the VM.
+      mkWslSystem = system:
+        nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = extraArgs // { desktop = false; };
+          modules = [
+            ./hosts/bender
+            nixos-wsl.nixosModules.default
+            home-manager.nixosModules.default
+            {
+              home-manager.useGlobalPkgs = true;
+              home-manager.useUserPackages = true;
+              home-manager.extraSpecialArgs = extraArgs // { desktop = false; };
+              home-manager.users."C.Hessel" = {
+                imports = [ ./home/bender.nix ];
+              };
+            }
+          ];
         };
     in
     {
@@ -150,9 +177,18 @@
         # Farnsworth x86_64 variant (explicit)
         # Build with: nixos-rebuild switch --flake .#farnsworth-x86
         farnsworth-x86 = mkFarnsworthSystem "x86_64-linux";
+
+        # bender - NixOS-WSL (WSL2 on Windows)
+        # Build with: nixos-rebuild switch --flake .#bender
+        bender = mkWslSystem "x86_64-linux";
+
+        # bender ARM64 variant (Windows on ARM)
+        # Build with: nixos-rebuild switch --flake .#bender-aarch64
+        bender-aarch64 = mkWslSystem "aarch64-linux";
       };
 
-      # Standalone Home Manager configurations (non-NixOS Linux, e.g. WSL2)
+      # Standalone Home Manager configurations (non-NixOS Linux, e.g. a plain
+      # distro under WSL2, as a fallback to the bender NixOS-WSL host above)
       # Build with: nix run home-manager -- switch --flake .#C.Hessel
       homeConfigurations = {
         "C.Hessel" = mkWslHome "x86_64-linux";

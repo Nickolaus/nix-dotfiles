@@ -132,17 +132,19 @@ install_linux() {
             print_step "Available NixOS configurations:"
             echo "  1. farnsworth     - ARM development laptop (default)"
             echo "  2. farnsworth-x86 - x86_64 variant"
+            echo "  3. bender         - NixOS-WSL (x86_64)"
+            echo "  4. bender-aarch64 - NixOS-WSL (ARM64 Windows)"
             echo ""
             read -p "Enter configuration name (default: farnsworth): " config
             config="${config:-farnsworth}"
         fi
-        
+
         print_step "Using configuration: $config"
-        
+
         # Validate configuration exists
         if ! nix eval ".#nixosConfigurations.${config}.config.system.nixos.version" &> /dev/null; then
             print_error "Configuration '${config}' not found in flake!"
-            print_step "Available configurations: farnsworth, farnsworth-x86"
+            print_step "Available configurations: farnsworth, farnsworth-x86, bender, bender-aarch64"
             exit 1
         fi
         
@@ -213,6 +215,8 @@ usage() {
     echo "CONFIG (Linux only):"
     echo "  farnsworth         - ARM development laptop (default)"
     echo "  farnsworth-x86     - x86_64 variant"
+    echo "  bender             - NixOS-WSL (x86_64)"
+    echo "  bender-aarch64     - NixOS-WSL (ARM64 Windows)"
     echo ""
     echo "Examples:"
     echo "  $0                           # Auto-detect platform"
@@ -220,6 +224,7 @@ usage() {
     echo "  $0 linux                     # Install Linux (interactive selection)"
     echo "  $0 linux farnsworth          # Install farnsworth (ARM)"
     echo "  $0 linux farnsworth-x86      # Install farnsworth (x86_64)"
+    echo "  $0 linux bender              # Install bender (NixOS-WSL)"
     echo ""
     echo "If no platform is specified, it will be auto-detected."
 }
