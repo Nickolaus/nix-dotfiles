@@ -6,6 +6,7 @@
     ./caveman.nix
     ./chonkie.nix
     ./codebase-memory.nix
+    ./commit-workflow.nix
     ./crawl4ai.nix
     ./cursor-agent.nix
     ./graphify.nix
