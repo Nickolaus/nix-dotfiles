@@ -120,6 +120,15 @@
           inherit system;
           modules = [ ./images/installer.nix ];
         }).config.system.build.isoImage;
+      # Standalone Home Manager (non-NixOS Linux, e.g. WSL2).
+      # Reuses home/farnsworth.nix with the desktop stack (hyprland/waybar)
+      # disabled since there's no Wayland session to run it against.
+      mkWslHome = system:
+        home-manager.lib.homeManagerConfiguration {
+          pkgs = nixpkgs.legacyPackages.${system};
+          extraSpecialArgs = extraArgs // { desktop = false; };
+          modules = [ ./home/farnsworth.nix ];
+        };
     in
     {
       # macOS configurations
@@ -142,6 +151,14 @@
         # Build with: nixos-rebuild switch --flake .#farnsworth-x86
         farnsworth-x86 = mkFarnsworthSystem "x86_64-linux";
       };
+
+      # Standalone Home Manager configurations (non-NixOS Linux, e.g. WSL2)
+      # Build with: nix run home-manager -- switch --flake .#C.Hessel
+      homeConfigurations = {
+        "C.Hessel" = mkWslHome "x86_64-linux";
+        "C.Hessel-aarch64" = mkWslHome "aarch64-linux";
+      };
+
       # Custom installer ISOs with SSH pre-enabled
       # Build with: nix build .#packages.aarch64-linux.farnsworth-installer
       # Or: nix build .#packages.x86_64-linux.farnsworth-installer
