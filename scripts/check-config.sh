@@ -112,6 +112,9 @@ check_wsl() {
 
     echo "Evaluating NixOS host: $host"
     nix eval ".#nixosConfigurations.$host.config.system.build.toplevel.drvPath" > /dev/null
+    echo "Realizing SkillSpector scan sources..."
+    nix build --no-link ".#nixosConfigurations.$host.config.home-manager.users.\"C.Hessel\".aiAgentCatalog.scanSourcesClosure"
+    check_candidate_skills_from_flake ".#nixosConfigurations.$host.config.home-manager.users.\"C.Hessel\".home.file.\".agents/catalog/manifest.json\".text"
 }
 
 check_home_configs() {
