@@ -1,4 +1,4 @@
-{ pkgs, lib, desktop ? true, ... }:
+{ pkgs, lib, desktop, ... }:
 {
   imports = [
     ./packages.nix

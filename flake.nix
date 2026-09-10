@@ -84,6 +84,11 @@
         inherit sops-nix disko impermanence;
         flake = self;
         remapKeys = false;
+        # `desktop` gates the Wayland stack from inside `imports`, so it must be
+        # supplied as a specialArg by every caller. A module-level default would
+        # send the module system through `config._module.args` while `imports`
+        # is still being computed, which is infinite recursion.
+        desktop = true;
       };
       mkDarwinSystem =
         { system
