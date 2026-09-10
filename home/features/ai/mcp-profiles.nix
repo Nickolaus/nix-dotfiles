@@ -45,7 +45,9 @@ let
   # the FastMCP stdio profile proxy, or `codex mcp login <name>` has no real
   # remote HTTP server to authenticate. Profile onboarding still uses the proxy
   # for Cursor/Vibe and for non-OAuth stdio aggregations.
-  codexDirectProfileServers = {
+  # Guarded like `profiles` above: standalone Home Manager has no `osConfig`,
+  # so `aiCfg` is null and there are no host-level MCP servers to point at.
+  codexDirectProfileServers = optionalAttrs (aiCfg != null) {
     atlassian = {
       atlassian = {
         url = aiCfg.mcpServers.atlassian.url;

@@ -141,7 +141,13 @@
       # disabled since there's no Wayland session to run it against.
       mkWslHome = system:
         home-manager.lib.homeManagerConfiguration {
-          pkgs = nixpkgs.legacyPackages.${system};
+          # `legacyPackages` carries no config, so unlike the NixOS and Darwin
+          # hosts this path needs its own allowUnfree for slack, warp-terminal,
+          # and the other unfree packages home/bender.nix pulls in.
+          pkgs = import nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
+          };
           extraSpecialArgs = extraArgs // { desktop = false; };
           modules = [ ./home/bender.nix ];
         };
