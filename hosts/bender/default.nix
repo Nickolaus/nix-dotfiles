@@ -33,7 +33,10 @@
     shell = pkgs.fish;
   };
   programs.fish.enable = true;
-  security.sudo.wheelNeedsPassword = lib.mkDefault true;
+  # NixOS-WSL's wsl-distro.nix sets this to `false` at mkDefault priority, so a
+  # mkDefault here would collide instead of winning. Requiring the password
+  # keeps an unattended process inside the VM from escalating silently.
+  security.sudo.wheelNeedsPassword = lib.mkForce true;
 
   environment.systemPackages = with pkgs; [
     vim
