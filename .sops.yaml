@@ -1,4 +1,18 @@
+# Recipients that can decrypt secrets.yaml. sops encrypts the file's data key
+# once per entry, so any single matching private key opens the file.
+#
+# After changing this list, re-key the existing file so it matches:
+#   sops updatekeys home/features/secrets/secrets.yaml
+#
+# Removing a recipient only affects future commits. This repo is public, so
+# every previous version of secrets.yaml stays readable to anyone who still
+# holds a key that was a recipient at the time it was written.
+#
+# The list below is a folded scalar, so it cannot carry inline comments:
+#   age16s0rp...leg0g  main identity, copied to every host
+#   age1um6sja...me23  offline backup, kept off all machines
 creation_rules:
   - path_regex: secrets/[^/]+\.(yaml|json|env|ini)$
     age: >-
-      age16s0rprtnkla2gfcwlk70tt0vgte4wcxms9qun2r28nprc5pqu9xqhleg0g
+      age16s0rprtnkla2gfcwlk70tt0vgte4wcxms9qun2r28nprc5pqu9xqhleg0g,
+      age1um6sjatz6qn4hpjs8ynv4jdnde6pft737lc5kprhwkesljmncd2qwume23
