@@ -42,6 +42,33 @@ check_candidate_skills_from_flake() {
     return "$eval_rc"
 }
 
+secrets_file="home/features/secrets/secrets.yaml"
+
+# Every sops-nix secret resolves a top-level key out of secrets.yaml at
+# activation time, so a name that exists in Nix but not in the encrypted file
+# only fails once the secrets are installed. Compare the two statically, which
+# needs no age identity and therefore also runs on machines that cannot decrypt.
+check_sops_secrets() {
+    local config_attr=$1
+    local declared yaml_keys missing
+
+    echo "Checking SOPS secret declarations..."
+    if ! declared=$(nix eval --raw "$config_attr" --apply \
+        'x: builtins.concatStringsSep "\n" (map (s: s.key) (builtins.attrValues x))'); then
+        echo "error: could not evaluate sops.secrets" >&2
+        return 1
+    fi
+
+    yaml_keys=$(grep -E '^[A-Za-z0-9_]+:' "$secrets_file" | sed 's/:.*//' || true)
+
+    missing=$(comm -23 <(sort <<< "$declared") <(sort <<< "$yaml_keys"))
+    if [[ -n "$missing" ]]; then
+        echo "error: declared in Nix but absent from $secrets_file:" >&2
+        echo "$missing" >&2
+        return 1
+    fi
+}
+
 usage() {
     cat << 'EOF'
 Usage: ./scripts/check-config.sh [--all-systems]
@@ -89,6 +116,8 @@ check_darwin() {
         echo "Skipping applied AI agent catalog check (agent-catalog-check or manifest not present yet)."
     fi
 
+    check_sops_secrets '.#darwinConfigurations.zoidberg.config.home-manager.users."C.Hessel".sops.secrets'
+
     echo "Evaluating Darwin host: zoidberg"
     nix eval .#darwinConfigurations.zoidberg.config.system.build.toplevel.drvPath > /dev/null
 }
@@ -102,6 +131,7 @@ check_nixos() {
     echo "Realizing SkillSpector scan sources..."
     nix build --no-link ".#nixosConfigurations.$host.config.home-manager.users.\"C.Hessel\".aiAgentCatalog.scanSourcesClosure"
     check_candidate_skills_from_flake ".#nixosConfigurations.$host.config.home-manager.users.\"C.Hessel\".home.file.\".agents/catalog/manifest.json\".text"
+    check_sops_secrets ".#nixosConfigurations.$host.config.home-manager.users.\"C.Hessel\".sops.secrets"
 
     echo "Evaluating installer package: farnsworth-installer $system"
     nix eval ".#packages.$system.farnsworth-installer.drvPath" > /dev/null
@@ -115,6 +145,7 @@ check_wsl() {
     echo "Realizing SkillSpector scan sources..."
     nix build --no-link ".#nixosConfigurations.$host.config.home-manager.users.\"C.Hessel\".aiAgentCatalog.scanSourcesClosure"
     check_candidate_skills_from_flake ".#nixosConfigurations.$host.config.home-manager.users.\"C.Hessel\".home.file.\".agents/catalog/manifest.json\".text"
+    check_sops_secrets ".#nixosConfigurations.$host.config.home-manager.users.\"C.Hessel\".sops.secrets"
 }
 
 check_home_configs() {
@@ -122,6 +153,7 @@ check_home_configs() {
 
     echo "Evaluating standalone Home Manager: $name"
     nix eval ".#homeConfigurations.\"$name\".activationPackage.drvPath" > /dev/null
+    check_sops_secrets ".#homeConfigurations.\"$name\".config.sops.secrets"
 }
 
 check_all_systems() {
