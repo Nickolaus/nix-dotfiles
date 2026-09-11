@@ -1,5 +1,4 @@
-{ sops
-, config
+{ config
 , pkgs
 , lib
 , ...
@@ -90,11 +89,14 @@ in
   ];
 
   sops = {
-    age.keyFile = "${
-    if pkgs.stdenv.hostPlatform.isDarwin
-    then "/Users/C.Hessel/Library/Application Support/sops/age/keys.txt"
-    else "/home/C.Hessel/.config/sops/age/keys.txt"
-    }";
+    # The age identity is a manual bootstrap artifact: sops-nix needs it to
+    # decrypt, so Nix cannot place it. Both branches point at the location the
+    # sops CLI probes by default on that platform, so `sops` run by hand and
+    # sops-nix agree on which key to use.
+    age.keyFile =
+      if pkgs.stdenv.hostPlatform.isDarwin
+      then "${config.home.homeDirectory}/Library/Application Support/sops/age/keys.txt"
+      else "${config.home.homeDirectory}/.config/sops/age/keys.txt";
 
     defaultSopsFile = ./secrets.yaml;
 
