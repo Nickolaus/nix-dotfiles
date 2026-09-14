@@ -4,6 +4,94 @@
 , ...
 }:
 let
+  # One sops secret per SSH identity, rendered to the path the ssh_config and
+  # git includes already point at. Both sides read the same `file`, so a
+  # rotation cannot leave them disagreeing.
+  sshKeySecrets = lib.mapAttrs'
+    (_name: identity: lib.nameValuePair identity.sopsKey {
+      path = "${config.home.homeDirectory}/.ssh/${identity.file}";
+      format = "yaml";
+      mode = "0600";
+    })
+    config.sshKeys.identities;
+
+  # Derived, not hand-listed: `//` lets an inline secret silently win over a
+  # generated one, which would drop an SSH identity without any error.
+  inlineSecrets = {
+    openai_api_key = {
+      path = "${config.home.homeDirectory}/.config/opencommit/openai_api_key";
+      format = "yaml";
+      mode = "0600";
+    };
+
+    claude_api_key = {
+      path = "${config.home.homeDirectory}/.config/opencommit/claude_api_key";
+      format = "yaml";
+      mode = "0600";
+    };
+
+    context7_api_key = {
+      path = "${config.home.homeDirectory}/.config/mcp/context7_api_key";
+      format = "yaml";
+      mode = "0600";
+    };
+
+    cloudflare_mcp_token = {
+      path = cloudflareMcpTokenPath;
+      format = "yaml";
+      mode = "0600";
+    };
+
+    github_mcp_pat = {
+      path = githubMcpPatPath;
+      format = "yaml";
+      mode = "0600";
+    };
+
+    unifi_mcp_username = {
+      path = "${config.home.homeDirectory}/.config/mcp/unifi_username";
+      format = "yaml";
+      mode = "0600";
+    };
+
+    unifi_mcp_password = {
+      path = "${config.home.homeDirectory}/.config/mcp/unifi_password";
+      format = "yaml";
+      mode = "0600";
+    };
+
+    proxmox_mcp_config_json = {
+      path = "${config.home.homeDirectory}/.config/mcp/proxmox-config.json";
+      format = "yaml";
+      mode = "0600";
+    };
+
+    infisical_universal_auth_client_secret = {
+      path = "${config.home.homeDirectory}/.config/mcp/infisical_universal_auth_client_secret";
+      format = "yaml";
+      mode = "0600";
+    };
+
+    resend_api_key = {
+      path = "${config.home.homeDirectory}/.config/mcp/resend_api_key";
+      format = "yaml";
+      mode = "0600";
+    };
+
+    grafana_service_account_token = {
+      path = "${config.home.homeDirectory}/.config/mcp/grafana_service_account_token";
+      format = "yaml";
+      mode = "0600";
+    };
+
+    homelab_gpg_signing_subkey = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
+      format = "yaml";
+      mode = "0600";
+    };
+  };
+  shadowedSshKeys =
+    lib.intersectLists (lib.attrNames sshKeySecrets) (lib.attrNames inlineSecrets);
+
   cloudflareMcpTokenPath = "${config.home.homeDirectory}/.config/mcp/cloudflare_mcp_token";
   githubMcpPatPath = "${config.home.homeDirectory}/.config/mcp/github_mcp_pat";
   launchdMcpEnvNames = [
@@ -88,6 +176,14 @@ in
     ./homelab-gpg-signing.nix
   ];
 
+  assertions = [
+    {
+      assertion = shadowedSshKeys == [ ];
+      message = "sshKeys.identities: sopsKey collides with an inline secret, so the SSH identity would be dropped: "
+        + lib.concatStringsSep ", " shadowedSshKeys;
+    }
+  ];
+
   sops = {
     # The age identity is a manual bootstrap artifact: sops-nix needs it to
     # decrypt, so Nix cannot place it. Both branches point at the location the
@@ -100,88 +196,8 @@ in
 
     defaultSopsFile = ./secrets.yaml;
 
-    secrets.ssh_key = {
-      path = "${config.home.homeDirectory}/.ssh/id_ed25519";
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.ssh_key_personal = {
-      path = "${config.home.homeDirectory}/.ssh/id_ed25519_personal";
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.openai_api_key = {
-      path = "${config.home.homeDirectory}/.config/opencommit/openai_api_key";
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.claude_api_key = {
-      path = "${config.home.homeDirectory}/.config/opencommit/claude_api_key";
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.context7_api_key = {
-      path = "${config.home.homeDirectory}/.config/mcp/context7_api_key";
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.cloudflare_mcp_token = {
-      path = cloudflareMcpTokenPath;
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.github_mcp_pat = {
-      path = githubMcpPatPath;
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.unifi_mcp_username = {
-      path = "${config.home.homeDirectory}/.config/mcp/unifi_username";
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.unifi_mcp_password = {
-      path = "${config.home.homeDirectory}/.config/mcp/unifi_password";
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.proxmox_mcp_config_json = {
-      path = "${config.home.homeDirectory}/.config/mcp/proxmox-config.json";
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.infisical_universal_auth_client_secret = {
-      path = "${config.home.homeDirectory}/.config/mcp/infisical_universal_auth_client_secret";
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.resend_api_key = {
-      path = "${config.home.homeDirectory}/.config/mcp/resend_api_key";
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.grafana_service_account_token = {
-      path = "${config.home.homeDirectory}/.config/mcp/grafana_service_account_token";
-      format = "yaml";
-      mode = "0600";
-    };
-
-    secrets.homelab_gpg_signing_subkey = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
-      format = "yaml";
-      mode = "0600";
-    };
+    # SSH identities come from sshKeys; the rest are declared inline.
+    secrets = sshKeySecrets // inlineSecrets;
   };
 
   home.packages = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin [

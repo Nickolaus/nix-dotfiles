@@ -1,6 +1,28 @@
 { config, lib, pkgs, ... }:
 let
   homeDir = config.home.homeDirectory;
+  keys = config.sshKeys;
+
+  signingKey = keys.signing.keys.${keys.signing.active};
+
+  # allowed_signers entry per signing key. The validity stamps scope a key to
+  # the window it signed in, so a retired key still verifies its own commits.
+  signerLine = _name: key:
+    "${key.principal} namespaces=\"git\""
+    + lib.optionalString (key.validAfter != null) " valid-after=\"${key.validAfter}\""
+    + lib.optionalString (key.validBefore != null) " valid-before=\"${key.validBefore}\""
+    + " ${key.publicKey}";
+
+  # One -i per identity the scope offers, in the same order ssh_config lists
+  # them, so a repo pinned to a scope follows that scope through a rotation.
+  gitIncludes = lib.mapAttrs'
+    (name: scope: lib.nameValuePair ".config/git/${name}.inc" {
+      text = ''
+        [core]
+          sshCommand = ssh ${lib.concatMapStringsSep " " (path: "-i ${path}") (keys.scopePaths scope)} -o IdentitiesOnly=yes
+      '';
+    })
+    keys.gitIncludes;
 in
 {
   imports = [
@@ -18,7 +40,7 @@ in
       enable = true;
     };
 
-    signing.key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHBw37pfQ1qRRONPampA3kv/2AhcmZxgzdMPcXuRI9Ue";
+    signing.key = signingKey.publicKey;
     signing.format = "ssh";
     signing.signByDefault = true;
 
@@ -64,18 +86,9 @@ in
     };
   };
 
-  home.file = {
-    ".ssh/allowed_signers".text = "c.hessel@shopware.com namespaces=\"git\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHBw37pfQ1qRRONPampA3kv/2AhcmZxgzdMPcXuRI9Ue";
-
-    ".config/git/work.inc".text = ''
-      [core]
-        sshCommand = ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes
-    '';
-
-    ".config/git/personal.inc".text = ''
-      [core]
-        sshCommand = ssh -i ~/.ssh/id_ed25519_personal -o IdentitiesOnly=yes
-    '';
+  home.file = gitIncludes // {
+    ".ssh/allowed_signers".text =
+      lib.concatStringsSep "\n" (lib.mapAttrsToList signerLine keys.signing.keys);
 
     ".config/git/templates/hooks/post-checkout" = {
       executable = true;
