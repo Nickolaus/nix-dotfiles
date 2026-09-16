@@ -19,9 +19,18 @@
 
   ids.gids.nixbld = 350;
 
+  # nix-darwin only writes the Directory Services record for users listed in
+  # knownUsers; without it the account's UserShell is whatever it was at account
+  # creation and never tracks this file.
+  users.knownUsers = [ "C.Hessel" ];
   users.users."C.Hessel" = {
+    uid = 501;
     home = "/Users/C.Hessel";
-    shell = "${pkgs.fish}/bin/fish";
+    # Pass the package, not an interpolated "${pkgs.fish}/bin/fish" string:
+    # nix-darwin maps a shell package to /run/current-system/sw/bin/fish, which
+    # stays valid across rebuilds, while a raw store path dies at the next GC
+    # and drops logins back to /bin/sh.
+    shell = pkgs.fish;
   };
 
   home-manager.backupFileExtension = "backup";
@@ -39,7 +48,7 @@
   nixpkgs.config.allowUnfree = true;
 
   programs.fish.enable = true;
-  environment.shells = [ "${pkgs.fish}/bin/fish" ];
+  environment.shells = [ pkgs.fish ];
 
   documentation.enable = false;
   documentation.man.enable = false;
