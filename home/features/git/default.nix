@@ -3,25 +3,35 @@ let
   homeDir = config.home.homeDirectory;
   keys = config.sshKeys;
 
-  signingKey = keys.signing.keys.${keys.signing.active};
-
   # allowed_signers entry per signing key. The validity stamps scope a key to
   # the window it signed in, so a retired key still verifies its own commits.
-  signerLine = _name: key:
+  signerLine = name: key:
     "${key.principal} namespaces=\"git\""
     + lib.optionalString (key.validAfter != null) " valid-after=\"${key.validAfter}\""
     + lib.optionalString (key.validBefore != null) " valid-before=\"${key.validBefore}\""
-    + " ${key.publicKey}";
+    + " ${keys.signingPublicKey name}";
 
   # One -i per identity the scope offers, in the same order ssh_config lists
   # them, so a repo pinned to a scope follows that scope through a rotation.
+  # A tree may also pin its own signing key and author email; both are optional
+  # and fall through to the global git identity when unset.
   gitIncludes = lib.mapAttrs'
-    (name: scope: lib.nameValuePair ".config/git/${name}.inc" {
-      text = ''
-        [core]
-          sshCommand = ssh ${lib.concatMapStringsSep " " (path: "-i ${path}") (keys.scopePaths scope)} -o IdentitiesOnly=yes
-      '';
-    })
+    (name: inc:
+      let
+        userLines =
+          lib.optional (inc.email != null) "  email = ${inc.email}"
+          ++ lib.optional (inc.signingKey != null)
+            "  signingkey = ${keys.signingPublicKey inc.signingKey}";
+      in
+      lib.nameValuePair ".config/git/${name}.inc" {
+        text = lib.concatStringsSep "\n" (
+          [
+            "[core]"
+            "  sshCommand = ssh ${lib.concatMapStringsSep " " (path: "-i ${path}") (keys.scopePaths inc.scope)} -o IdentitiesOnly=yes"
+          ]
+          ++ lib.optionals (userLines != [ ]) ([ "" "[user]" ] ++ userLines)
+        ) + "\n";
+      })
     keys.gitIncludes;
 in
 {
@@ -40,7 +50,7 @@ in
       enable = true;
     };
 
-    signing.key = signingKey.publicKey;
+    signing.key = keys.signingPublicKey keys.signing.active;
     signing.format = "ssh";
     signing.signByDefault = true;
 

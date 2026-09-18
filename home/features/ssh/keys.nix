@@ -6,9 +6,14 @@ in
   # Single source of truth for SSH key material and its use.
   #
   # `identities` describe key material: one entry per real keypair, one sops
-  # secret, one file on disk. `scopes` describe use: which identities answer
-  # for which hosts. The split lets several scopes share one keypair today and
-  # separate onto their own later without touching anything but this file.
+  # secret, one file on disk. Everything else references an identity by name
+  # rather than repeating its path or public half, so a rotation touches this
+  # file and the sops entry and nothing else:
+  #
+  #   scopes.<name>       which identities authenticate to which hosts
+  #   signing.keys.<name> which identity signs commits, and for what window
+  #   gitIncludes.<name>  which scope, signing key, and author email a repo
+  #                       tree uses, via the includeIf rules in the git module
   options.sshKeys = {
     identities = mkOption {
       description = "Key material, keyed by identity name.";
@@ -27,12 +32,22 @@ in
             type = types.str;
             description = "Top-level key in secrets.yaml holding the private half.";
           };
+
+          publicKey = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Public half, in authorized_keys format. Required only for an
+              identity a signing key references; git needs the public half to
+              name the signer and to build allowed_signers.
+            '';
+          };
         };
       });
     };
 
     scopes = mkOption {
-      description = "How identities are used, keyed by scope name.";
+      description = "How identities authenticate, keyed by scope name.";
       default = { };
       type = types.attrsOf (types.submodule {
         options = {
@@ -64,9 +79,10 @@ in
       active = mkOption {
         type = types.str;
         description = ''
-          Signing key used for new commits. Singular because git signs with
-          exactly one identity; overlap during a rotation is expressed by
-          leaving the retired key in `keys` with a validity window.
+          Signing key for repositories no `gitIncludes` entry covers. Singular
+          because git signs with exactly one identity; overlap during a
+          rotation is expressed by leaving the retired key in `keys` with a
+          validity window.
         '';
       };
 
@@ -79,14 +95,18 @@ in
         default = { };
         type = types.attrsOf (types.submodule {
           options = {
+            identity = mkOption {
+              type = types.str;
+              description = ''
+                Identity holding this signing key. The public half is read from
+                that identity rather than repeated here, so the two cannot
+                disagree.
+              '';
+            };
+
             principal = mkOption {
               type = types.str;
               description = "Identity the signature is attributed to.";
-            };
-
-            publicKey = mkOption {
-              type = types.str;
-              description = "Public half, in authorized_keys format.";
             };
 
             validAfter = mkOption {
@@ -106,13 +126,38 @@ in
     };
 
     gitIncludes = mkOption {
-      type = types.attrsOf types.str;
-      default = { };
       description = ''
-        Map of git include name to scope name. Each entry renders
-        `.config/git/<name>.inc` pinning that scope's identities, for the
-        `includeIf` rules in the git module to point at.
+        Per-tree git configuration, keyed by include name. Each entry renders
+        `.config/git/<name>.inc` for the `includeIf` rules in the git module to
+        point at.
       '';
+      default = { };
+      type = types.attrsOf (types.submodule {
+        options = {
+          scope = mkOption {
+            type = types.str;
+            description = "Scope whose identities this tree authenticates with.";
+          };
+
+          signingKey = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Signing key for this tree. Null falls back to
+              `sshKeys.signing.active`.
+            '';
+          };
+
+          email = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Author email for this tree. Null leaves the global git identity
+              in place.
+            '';
+          };
+        };
+      });
     };
 
     defaultIdentity = mkOption {
@@ -144,6 +189,13 @@ in
       readOnly = true;
       description = "Scope name -> ssh_config paths, in offer order.";
     };
+
+    signingPublicKey = mkOption {
+      type = types.functionTo types.str;
+      internal = true;
+      readOnly = true;
+      description = "Signing key name -> public half of its identity.";
+    };
   };
 
   # These invariants all fail silently otherwise: a duplicate sopsKey drops an
@@ -167,8 +219,20 @@ in
       scopesWithUnknown = lib.filter (s: unknownIn s != [ ]) (lib.attrNames cfg.scopes);
       emptyScopes = lib.filter (s: cfg.scopes.${s}.identities == [ ]) (lib.attrNames cfg.scopes);
 
-      unknownIncludes = lib.filterAttrs
-        (_n: scope: !(cfg.scopes ? ${scope}))
+      signingNames = lib.attrNames cfg.signing.keys;
+      signingUnknownIdentity =
+        lib.filter (n: !(cfg.identities ? ${cfg.signing.keys.${n}.identity})) signingNames;
+      signingWithoutPublicKey = lib.filter
+        (n:
+          let id = cfg.signing.keys.${n}.identity;
+          in cfg.identities ? ${id} && cfg.identities.${id}.publicKey == null)
+        signingNames;
+
+      unknownIncludeScopes = lib.filterAttrs
+        (_n: inc: !(cfg.scopes ? ${inc.scope}))
+        cfg.gitIncludes;
+      unknownIncludeSigning = lib.filterAttrs
+        (_n: inc: inc.signingKey != null && !(cfg.signing.keys ? ${inc.signingKey}))
         cfg.gitIncludes;
     in
     [
@@ -202,6 +266,16 @@ in
             contestedHosts);
       }
       {
+        assertion = signingUnknownIdentity == [ ];
+        message = "sshKeys.signing.keys: unknown identity referenced by "
+          + lib.concatStringsSep ", " signingUnknownIdentity;
+      }
+      {
+        assertion = signingWithoutPublicKey == [ ];
+        message = "sshKeys.signing.keys: identity has no publicKey, so git cannot name the signer: "
+          + lib.concatStringsSep ", " signingWithoutPublicKey;
+      }
+      {
         assertion = cfg.identities ? ${cfg.defaultIdentity};
         message = "sshKeys.defaultIdentity refers to an undeclared identity, so Host * would point at a key that does not exist: ${cfg.defaultIdentity}";
       }
@@ -210,20 +284,34 @@ in
         message = "sshKeys.signing.active refers to an undeclared signing key: ${cfg.signing.active}";
       }
       {
-        assertion = unknownIncludes == { };
+        assertion = unknownIncludeScopes == { };
         message = "sshKeys.gitIncludes: unknown scope referenced by "
-          + lib.concatStringsSep ", " (lib.attrNames unknownIncludes);
+          + lib.concatStringsSep ", " (lib.attrNames unknownIncludeScopes);
+      }
+      {
+        assertion = unknownIncludeSigning == { };
+        message = "sshKeys.gitIncludes: unknown signing key referenced by "
+          + lib.concatStringsSep ", " (lib.attrNames unknownIncludeSigning);
       }
     ];
 
   config.sshKeys = {
     # Falls back rather than throwing so an unknown name surfaces as the
-    # assertion below instead of a bare "attribute missing" trace.
+    # assertion above instead of a bare "attribute missing" trace.
     identityPath = name:
       "~/.ssh/${(config.sshKeys.identities.${name} or { file = "undeclared-identity-${name}"; }).file}";
 
     scopePaths =
       scope: map config.sshKeys.identityPath config.sshKeys.scopes.${scope}.identities;
+
+    signingPublicKey = name:
+      let
+        key = config.sshKeys.signing.keys.${name};
+        identity = config.sshKeys.identities.${key.identity} or { publicKey = null; };
+      in
+      if identity.publicKey == null
+      then "undeclared-public-key-${name}"
+      else identity.publicKey;
 
     defaultIdentity = "work";
 
@@ -231,6 +319,7 @@ in
       work = {
         file = "id_ed25519";
         sopsKey = "ssh_key";
+        publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHBw37pfQ1qRRONPampA3kv/2AhcmZxgzdMPcXuRI9Ue";
       };
 
       personal = {
@@ -240,7 +329,7 @@ in
     };
 
     scopes = {
-      work-forge = {
+      work = {
         identities = [ "work" ];
         hosts = {
           "github.com" = { HostName = "github.com"; User = "git"; };
@@ -248,7 +337,7 @@ in
         };
       };
 
-      personal-forge = {
+      personal = {
         identities = [ "personal" ];
         hosts = {
           "github.com-personal" = { HostName = "github.com"; User = "git"; };
@@ -260,14 +349,14 @@ in
     signing = {
       active = "work";
       keys.work = {
+        identity = "work";
         principal = "c.hessel@shopware.com";
-        publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHBw37pfQ1qRRONPampA3kv/2AhcmZxgzdMPcXuRI9Ue";
       };
     };
 
     gitIncludes = {
-      work = "work-forge";
-      personal = "personal-forge";
+      work.scope = "work";
+      personal.scope = "personal";
     };
 
     defaults = {
