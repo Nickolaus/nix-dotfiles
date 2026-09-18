@@ -255,18 +255,6 @@ in
           "gitlab.com-personal" = { HostName = "gitlab.com"; User = "git"; };
         };
       };
-
-      # Shares the personal identity today. Giving the homelab its own keypair
-      # is an entry in `identities` plus a name swap here.
-      homelab = {
-        identities = [ "personal" ];
-        hosts = {
-          "home-assistant" = { HostName = "192.168.2.50"; User = "root"; };
-          "ha-test-vm" = { HostName = "192.168.2.40"; User = "root"; StrictHostKeyChecking = "no"; };
-          "192.168.2.40" = { User = "root"; StrictHostKeyChecking = "no"; };
-          "192.168.2.*" = { User = "root"; StrictHostKeyChecking = "no"; };
-        };
-      };
     };
 
     signing = {
