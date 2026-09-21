@@ -397,12 +397,16 @@ in
 
       keys = {
         # Retired 2026-09-21. The window keeps every commit it signed before
-        # that date verifiable; dropping the entry would make the whole signed
-        # history read as unverified.
+        # the cutover verifiable; dropping the entry would make the whole
+        # signed history read as unverified.
+        #
+        # The stamps are exclusive bounds at midnight, so the retired key needs
+        # the day *after* its last use: commits made on the cutover day itself
+        # were still signed with it. Both keys therefore cover 2026-09-21.
         work-legacy = {
           identity = "work-legacy";
           principal = "c.hessel@shopware.com";
-          validBefore = "20260921";
+          validBefore = "20260922";
         };
 
         work = {
