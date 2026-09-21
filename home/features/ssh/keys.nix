@@ -379,7 +379,6 @@ in
         identities = [ "work" "work-legacy" ];
         hosts = {
           "github.com" = { HostName = "github.com"; User = "git"; };
-          "gitlab.com" = { HostName = "gitlab.com"; User = "git"; };
         };
       };
 
@@ -387,7 +386,6 @@ in
         identities = [ "personal" "personal-legacy" ];
         hosts = {
           "github.com-personal" = { HostName = "github.com"; User = "git"; };
-          "gitlab.com-personal" = { HostName = "gitlab.com"; User = "git"; };
         };
       };
     };
