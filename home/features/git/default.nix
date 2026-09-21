@@ -84,6 +84,11 @@ in
       core.untrackedCache = true;
       init.templateDir = "~/.config/git/templates";
 
+      # Without this git can sign but never verify: `git log --show-signature`
+      # reports "No signature" on a perfectly good signature because it has no
+      # principal list to check it against.
+      gpg.ssh.allowedSignersFile = "${homeDir}/.ssh/allowed_signers";
+
       includeIf."gitdir:${homeDir}/Programming/work/".path = "~/.config/git/work.inc";
       includeIf."gitdir:${homeDir}/Programming/personal/".path = "~/.config/git/personal.inc";
       includeIf."gitdir:${homeDir}/.config/nix-dotfiles/".path = "~/.config/git/personal.inc";
