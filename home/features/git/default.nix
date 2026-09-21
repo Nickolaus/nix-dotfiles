@@ -4,12 +4,20 @@ let
   keys = config.sshKeys;
 
   # allowed_signers entry per signing key. The validity stamps scope a key to
-  # the window it signed in, so a retired key still verifies its own commits.
+  # the window it signed in, so a retired key still verifies its own commits;
+  # git passes the commit's own timestamp as the verification time.
+  #
+  # allowed_signers(5) takes the options as one comma-separated field. Spacing
+  # them apart makes ssh-keygen read the first option as the key type, and the
+  # line then matches no principal at all.
   signerLine = name: key:
-    "${key.principal} namespaces=\"git\""
-    + lib.optionalString (key.validAfter != null) " valid-after=\"${key.validAfter}\""
-    + lib.optionalString (key.validBefore != null) " valid-before=\"${key.validBefore}\""
-    + " ${keys.signingPublicKey name}";
+    let
+      quoted = opt: value: "${opt}=\"${value}\"";
+      options = [ (quoted "namespaces" "git") ]
+        ++ lib.optional (key.validAfter != null) (quoted "valid-after" key.validAfter)
+        ++ lib.optional (key.validBefore != null) (quoted "valid-before" key.validBefore);
+    in
+    "${key.principal} ${lib.concatStringsSep "," options} ${keys.signingPublicKey name}";
 
   # One -i per identity the scope offers, in the same order ssh_config lists
   # them, so a repo pinned to a scope follows that scope through a rotation.
@@ -21,7 +29,7 @@ let
         userLines =
           lib.optional (inc.email != null) "  email = ${inc.email}"
           ++ lib.optional (inc.signingKey != null)
-            "  signingkey = ${keys.signingPublicKey inc.signingKey}";
+            "  signingkey = ${keys.signingKeyPath inc.signingKey}";
       in
       lib.nameValuePair ".config/git/${name}.inc" {
         text = lib.concatStringsSep "\n" (
@@ -50,7 +58,7 @@ in
       enable = true;
     };
 
-    signing.key = keys.signingPublicKey keys.signing.active;
+    signing.key = keys.signingKeyPath keys.signing.active;
     signing.format = "ssh";
     signing.signByDefault = true;
 

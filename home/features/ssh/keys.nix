@@ -196,6 +196,18 @@ in
       readOnly = true;
       description = "Signing key name -> public half of its identity.";
     };
+
+    signingKeyPath = mkOption {
+      type = types.functionTo types.str;
+      internal = true;
+      readOnly = true;
+      description = ''
+        Signing key name -> private key path. git signs through
+        `ssh-keygen -Y sign`, which resolves a literal public key only via the
+        agent; pointing at the path instead keeps signing working in a shell
+        with no agent, and across reboots.
+      '';
+    };
   };
 
   # These invariants all fail silently otherwise: a duplicate sopsKey drops an
@@ -304,6 +316,9 @@ in
     scopePaths =
       scope: map config.sshKeys.identityPath config.sshKeys.scopes.${scope}.identities;
 
+    signingKeyPath = name:
+      config.sshKeys.identityPath config.sshKeys.signing.keys.${name}.identity;
+
     signingPublicKey = name:
       let
         key = config.sshKeys.signing.keys.${name};
@@ -316,21 +331,52 @@ in
     defaultIdentity = "work";
 
     identities = {
-      work = {
+      # Retired 2026-09-21. Kept alongside the replacements until every remote
+      # has moved over; dropped once nothing offers them any more.
+      work-legacy = {
         file = "id_ed25519";
         sopsKey = "ssh_key";
         publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHBw37pfQ1qRRONPampA3kv/2AhcmZxgzdMPcXuRI9Ue";
       };
 
-      personal = {
+      personal-legacy = {
         file = "id_ed25519_personal";
         sopsKey = "ssh_key_personal";
+      };
+
+      work = {
+        file = "id_work";
+        sopsKey = "ssh_key_work";
+      };
+
+      personal = {
+        file = "id_personal";
+        sopsKey = "ssh_key_personal_new";
+      };
+
+      homelab = {
+        file = "id_homelab";
+        sopsKey = "ssh_key_homelab";
+      };
+
+      work-signing = {
+        file = "id_work_signing";
+        sopsKey = "ssh_key_work_signing";
+        publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDYjW+MEJSTHyCPCxVA5RIXUNb9FWRwELuN7HbVDHo4G";
+      };
+
+      personal-signing = {
+        file = "id_personal_signing";
+        sopsKey = "ssh_key_personal_signing";
+        publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKHP4qOtsiMOkcqLqKz1Y7n8J0qrzSdmqbLYCyR4Oc4F";
       };
     };
 
     scopes = {
+      # New key first; the legacy key stays listed as a fallback until it is
+      # withdrawn from every remote, then both it and its identity go.
       work = {
-        identities = [ "work" ];
+        identities = [ "work" "work-legacy" ];
         hosts = {
           "github.com" = { HostName = "github.com"; User = "git"; };
           "gitlab.com" = { HostName = "gitlab.com"; User = "git"; };
@@ -338,7 +384,7 @@ in
       };
 
       personal = {
-        identities = [ "personal" ];
+        identities = [ "personal" "personal-legacy" ];
         hosts = {
           "github.com-personal" = { HostName = "github.com"; User = "git"; };
           "gitlab.com-personal" = { HostName = "gitlab.com"; User = "git"; };
@@ -348,9 +394,27 @@ in
 
     signing = {
       active = "work";
-      keys.work = {
-        identity = "work";
-        principal = "c.hessel@shopware.com";
+
+      keys = {
+        # Retired 2026-09-21. The window keeps every commit it signed before
+        # that date verifiable; dropping the entry would make the whole signed
+        # history read as unverified.
+        work-legacy = {
+          identity = "work-legacy";
+          principal = "c.hessel@shopware.com";
+          validBefore = "20260921";
+        };
+
+        work = {
+          identity = "work-signing";
+          principal = "c.hessel@shopware.com";
+          validAfter = "20260921";
+        };
+
+        personal = {
+          identity = "personal-signing";
+          principal = "nickolausone+github@posteo.de";
+        };
       };
     };
 
