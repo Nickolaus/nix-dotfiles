@@ -34,6 +34,24 @@ rec {
     };
   };
 
+  # Prebuilt upstream release binaries. scripts/update-mcp-runtime-versions.py
+  # bumps `version` and refreshes each `release-sha256` hash from the
+  # release's own sha256sum.txt in the same pass.
+  prebuiltReleases = {
+    ollaya = {
+      # renovate: datasource=github-releases depName=ollaya-dev/ollaya
+      version = "0.7.5";
+      # release-sha256: depName=ollaya-dev/ollaya asset=ollaya-darwin-arm64.tgz
+      darwinArm64Hash = "sha256-fH15yuklbXmqkxEfKNKtJPEkw9cwxnhtJ2lPzvFDpDc=";
+    };
+  };
+
+  ollaya = pkgs.callPackage ../../packages/ollaya {
+    inherit (prebuiltReleases.ollaya) version darwinArm64Hash;
+  };
+
+  ollayaSupported = lib.meta.availableOn pkgs.stdenv.hostPlatform ollaya;
+
   # Shared by every script that reads/edits TOML via tomlkit (Vibe's config.toml merge,
   # the MCP-profile onboarding scripts) -- one derivation instead of each caller declaring
   # its own identical `pkgs.python3.withPackages (ps: [ ps.tomlkit ])`.

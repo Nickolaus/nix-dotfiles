@@ -73,6 +73,11 @@
       "description": "Label repo-owned Python project dependency updates.",
       "matchManagers": ["pep621"],
       "addLabels": ["python"]
+    },
+    {
+      "description": "ollaya pins a release version plus its tarball hash; scripts/update-mcp-runtime-versions.py updates both together, Renovate can only bump the version.",
+      "matchDepNames": ["ollaya-dev/ollaya"],
+      "enabled": false
     }
   ]
 }
