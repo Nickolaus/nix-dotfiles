@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import re
 import subprocess
@@ -47,6 +48,23 @@ SHELL_PIN_RE = re.compile(
     r"depName=(?P<depName>\S+)(?: versioning=(?P<versioning>\S+))?)\n"
     r"(?P<prefix>[ \t]*(?P<key>\w+)=\")(?P<currentValue>[^\"]+)(?P<suffix>\")"
 )
+
+# Hash pins for prebuilt release assets: a `# release-sha256:` comment naming
+# the release (depName) and asset above a `key = "sha256-...";` binding. The
+# version comes from the same depName's `github-releases` renovate pin, so a
+# version bump and its hash always land in one pass.
+RELEASE_HASH_RE = re.compile(
+    r"(?P<comment>[ \t]*# release-sha256: depName=(?P<depName>\S+) asset=(?P<asset>\S+))\n"
+    r"(?P<prefix>[ \t]*(?P<key>\w+) = \")(?P<currentValue>[^\"]+)(?P<suffix>\";)"
+)
+
+
+def fetch_text(url: str) -> str:
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "nix-dotfiles-mcp-runtime-version-check"}
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.read().decode()
 
 
 def fetch_json(url: str) -> dict:
@@ -103,6 +121,23 @@ def latest_github_tag(dep_name: str) -> str:
     return best_name
 
 
+def latest_github_release(dep_name: str) -> str:
+    # Pins store the bare version; release tags are `vX.Y.Z`.
+    payload = fetch_json(f"https://api.github.com/repos/{dep_name}/releases/latest")
+    return payload["tag_name"].removeprefix("v")
+
+
+def release_asset_sri(dep_name: str, version: str, asset: str) -> str:
+    sums = fetch_text(
+        f"https://github.com/{dep_name}/releases/download/v{version}/sha256sum.txt"
+    )
+    for line in sums.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[1].lstrip("*") == asset:
+            return "sha256-" + base64.b64encode(bytes.fromhex(parts[0])).decode()
+    raise ValueError(f"{asset} missing from {dep_name} v{version} sha256sum.txt")
+
+
 def latest_for(datasource: str, dep_name: str) -> str:
     if datasource == "npm":
         return latest_npm(dep_name)
@@ -110,6 +145,8 @@ def latest_for(datasource: str, dep_name: str) -> str:
         return latest_pypi(dep_name)
     if datasource == "github-tags":
         return latest_github_tag(dep_name)
+    if datasource == "github-releases":
+        return latest_github_release(dep_name)
     raise ValueError(f"unsupported datasource: {datasource}")
 
 
@@ -128,6 +165,7 @@ def rewrite_pinned_file(
         key = match.group("key")
         latest = latest_for(datasource, dep_name)
         pinned_by_key[key] = latest
+        pinned_by_key[dep_name] = latest
 
         if current == latest:
             print(f"ok: {dep_name} {current}")
@@ -146,6 +184,41 @@ def rewrite_pinned_file(
         path.write_text(new_text)
 
     return changed, pinned_by_key
+
+
+def rewrite_release_hashes(
+    path: Path, pinned_by_key: dict[str, str], write: bool
+) -> bool:
+    text = path.read_text()
+    changed = False
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal changed
+        dep_name = match.group("depName")
+        asset = match.group("asset")
+        current = match.group("currentValue")
+        version = pinned_by_key.get(dep_name)
+        if version is None:
+            raise ValueError(f"release-sha256 for {dep_name} has no github-releases pin")
+        latest = release_asset_sri(dep_name, version, asset)
+
+        if current == latest:
+            print(f"ok: {dep_name} {asset} hash")
+            return match.group(0)
+
+        changed = True
+        print(f"update: {dep_name} {asset} hash for v{version}")
+        return (
+            f"{match.group('comment')}\n"
+            f"{match.group('prefix')}{latest}{match.group('suffix')}"
+        )
+
+    new_text = RELEASE_HASH_RE.sub(replace, text)
+
+    if write and changed:
+        path.write_text(new_text)
+
+    return changed
 
 
 def rewrite_flake_tags(write: bool) -> bool:
@@ -203,7 +276,7 @@ def sync_codex_nixos_config(path: Path, nixos_version: str, write: bool) -> bool
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Check or update npm/PyPI MCP runtime version pins."
+        description="Check or update npm/PyPI/GitHub MCP runtime version pins."
     )
     parser.add_argument(
         "--write",
@@ -218,6 +291,7 @@ def main() -> int:
     args = parser.parse_args()
 
     changed, pinned_by_key = rewrite_pinned_file(VERSIONS_FILE, PIN_RE, args.write)
+    changed = rewrite_release_hashes(VERSIONS_FILE, pinned_by_key, args.write) or changed
     changed = rewrite_flake_tags(args.write) or changed
     shell_changed, _ = rewrite_pinned_file(UPDATE_SCRIPT_FILE, SHELL_PIN_RE, args.write)
     changed = shell_changed or changed
