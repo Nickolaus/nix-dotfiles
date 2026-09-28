@@ -113,8 +113,7 @@ in
     # identity -- see hosts/shared/codex.nix), forcing ANTHROPIC_BASE_URL/AUTH_TOKEN/API_KEY
     # here would count as "another auth source" to Claude Code and silently disable a
     # logged-in claude.ai subscription's connectors, Remote Control, and subscription
-    # billing. Claude Code has no local-coding route at all as a result -- OpenCode is the
-    # one tool with a local-coding provider (home/features/ai/headroom.nix).
+    # billing.
     #
     # `.claude/settings.json` has no single owner: besides not being managed here, it's
     # also written directly by third-party installers (e.g. an IDE's own Claude Code

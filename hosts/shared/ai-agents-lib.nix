@@ -40,13 +40,12 @@ rec {
   tomlkitPython = pkgs.python3.withPackages (ps: [ ps.tomlkit ]);
 
   # Shared by every activation script that owns exactly one top-level key in a JSON config
-  # file a third-party tool also writes to (Claude's `.claude.json` mcpServers, OpenCode's
-  # opencode.json provider.local-ollama) -- identical mechanics (create-if-missing, validate,
-  # `jq --slurpfile` merge, atomic `mv`), differing only in the one jq filter each caller
-  # actually needs. Not used for TOML mergers (Codex/Vibe): those need genuinely different
-  # control flow (delete-only vs. full merge with a state sidecar), not just a different
-  # filter string, so forcing them through this same shape would add coupling instead of
-  # removing duplication.
+  # file a third-party tool also writes to (Claude's `.claude.json` mcpServers) --
+  # create-if-missing, validate, `jq --slurpfile` merge, atomic `mv`, parameterized by the
+  # one jq filter the caller needs. Not used for TOML mergers (Codex/Vibe): those need
+  # genuinely different control flow (delete-only vs. full merge with a state sidecar), not
+  # just a different filter string, so forcing them through this same shape would add
+  # coupling instead of removing duplication.
   mkJsonMergeActivation =
     { configPath
     , defaultContent ? "{}"

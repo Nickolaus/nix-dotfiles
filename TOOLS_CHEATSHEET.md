@@ -162,11 +162,10 @@ oco-provider setup   # Interactive API key configuration (OpenAI/Claude)
 #### Local Profile Selection
 ```bash
 # Inspect or switch the local Ollama-backed profiles used by OpenCommit
-oco-profile          # Show current provider/model + commit/general/coding profiles
+oco-profile          # Show current provider/model + commit/general profiles
 oco-profile status
 oco-profile commit   # Reset to the declarative commit profile
 oco-profile general  # Use the lightweight general local profile
-oco-profile coding   # Use the heavier coding local profile
 oco-profile default  # Alias for commit
 ```
 
@@ -207,8 +206,7 @@ oco-local                    # Automatically sets model: tavernari/git-commit-me
 # Configuration:
 # - API URL: http://127.0.0.1:11434/api/chat (default local endpoint)
 # - Default Model: tavernari/git-commit-message:latest (commit-optimized)
-# - Shared local profiles: commit / general / coding
-# - Coding profile route: http://127.0.0.1:11436 (raw backend: http://127.0.0.1:11435)
+# - Shared local profiles: commit / general
 # - Cost: 100% Free
 # - Privacy: 100% Local (never leaves your machine)
 # - Speed: 2-3 seconds (varies by model size)
@@ -283,23 +281,14 @@ Your opencommit system is pre-optimized with:
 #### Service Management
 ```bash
 # Health and status
-llm-status           # Check default backend, coding backend, session proxy, and residency
+llm-status           # Check backend health and residency
 llm-models           # Show declarative local profiles and install state
-llm-doctor           # Check endpoints, session proxy, installs, cloud-disable state, codex/claude presence
-llm-logs             # Tail default, coding, and session-proxy logs
-llm-logs coding      # Tail the coding-endpoint log only
-llm-logs session     # Tail the session-proxy log only
-
-# Coding session lifecycle
-llm-session start coding    # Preload qwen3-coder and start a warm coding session
-llm-session refresh coding  # Refresh the coding idle timer to 10m
-llm-session status coding   # Show residency, PROCESSOR, CONTEXT, UNTIL
-llm-session finish coding   # Explicitly unload the coding model
+llm-doctor           # Check endpoint, installs, cloud-disable state, codex/claude presence
+llm-logs             # Tail the Ollama server log
 
 # Model management
 llm-pull commit      # Pull tavernari/git-commit-message:latest
 llm-pull general     # Pull qwen3:8b-q4_K_M
-llm-pull coding      # Pull qwen3-coder:30b-a3b-q4_K_M
 llm-pull all         # Pull all declared profiles
 ```
 
@@ -307,53 +296,33 @@ llm-pull all         # Pull all declared profiles
 ```bash
 # commit  -> tavernari/git-commit-message:latest via default endpoint (11434)
 # general -> qwen3:8b-q4_K_M via default endpoint (11434)
-# coding  -> qwen3-coder:30b-a3b-q4_K_M via session endpoint (11436), backed by coding endpoint (11435)
-# 480b is intentionally not part of the local profile catalog on this machine
 ```
 
 #### Interactive Usage
 ```bash
 # Run a declared profile
 llm-run general
-llm-run coding      # Interactive shell uses the raw coding backend
 
 # One-shot commands
 llm-run general "Explain this bash command: ls -la"
-llm-run coding "Write a Nix module for an Ollama model pin"
 
 # Smoke tests
 llm-smoke general
-llm-smoke coding    # Goes through the session-aware coding proxy
+llm-smoke commit
 ```
 
 #### Service Configuration
 - **Host**: `127.0.0.1` (localhost only for security)
 - **Default Endpoint**: `11434` with `32768` context
-- **Raw Coding Endpoint**: `11435` with `65536` context
-- **Session Proxy Endpoint**: `11436`, forwarding to `11435`
-- **Session Proxy Upstream Timeout**: `180s` (`localAi.runtime.sessionProxy.timeoutSeconds`) — bounds worst-case wait when the coding backend is slow/stuck behind another request; fails fast with a clear error instead of hanging
-- **Idle Keep-Alive**: `10m` on both backends
+- **Idle Keep-Alive**: `10m`
 - **Parallel Requests**: `1`
 - **Max Loaded Models**: `1`
 - **Queue Limit**: `32`
-- **Coding Proxy Defaults**: injects `think=false` for native Ollama chat/generate and `reasoning_effort=none` for OpenAI-compatible chat unless the client overrides it
 - **Cloud Features**: disabled via `OLLAMA_NO_CLOUD=1` and `~/.ollama/server.json`
 - **Acceleration**: Apple Silicon Metal via the standard Ollama runtime; not forced to CPU-only
-- **Coding Flash Attention**: enabled
-- **Coding KV Cache**: `q8_0`
 - **Models**: Stored in `~/.ollama/models/`
-- **Logs**:
-  - default endpoint: `~/.ollama/logs/server.log`
-  - coding endpoint: `~/.local/state/ollama/coding-server.log`
-  - session proxy: `~/.local/state/ollama/session-proxy.log`
-
-#### Session Behavior
-- `keep_alive=10m` means 10 minutes after the last completed request, not after service start
-- Submitted coding-agent requests through `11436` refresh residency automatically
-- Unsent editor typing does not refresh the model
-- The session proxy defaults the coding route to non-thinking mode so Qwen does not spend editor time on hidden reasoning unless a client opts in explicitly
-- Use `llm-session finish coding` when a task is done and you want to release memory immediately
-- Prefer one local coding agent at a time. Cline and Roo share the same single-request coding backend, so running both together mostly creates queueing, not throughput
+- **Logs**: `~/.ollama/logs/server.log`
+- **Keep-alive semantics**: `keep_alive=10m` means 10 minutes after the last completed request, not after service start
 
 #### Agent Config Ownership
 - Shared defaults come from `aiAgents`
@@ -491,9 +460,7 @@ headroom-pause [name]           # Stop one proxy instance (name), or all of them
 headroom-resume [name]          # Restart one proxy instance (name), or all of them if omitted
 ```
 
-Claude Code has no local-coding route at all (no wrapper, no native provider): its config schema has no multi-provider concept, and forcing `ANTHROPIC_BASE_URL` globally would silently disable claude.ai subscription connectors/Remote Control. Plain `claude` always uses the real subscription. Use OpenCode (below) for free/local coding instead.
-
-OpenCode needs no wrapper at all: a `local-ollama` provider is merged natively into `~/.config/opencode/opencode.json` -- pick it from OpenCode's own `/models` picker or `opencode --model local-ollama/<id>`. OpenCode is the only tool wired up to the local-coding Ollama backend: it's a single loaded model processing one request at a time, so a second independent consumer risks one app's request silently starving another's.
+Claude Code is not routed through Headroom: forcing `ANTHROPIC_BASE_URL` globally would silently disable claude.ai subscription connectors/Remote Control. Plain `claude` always uses the real subscription.
 
 - Installed via `uvx --from "headroom-ai[...]" headroom ...` (no Nix package exists upstream — it's a fast-moving maturin/Rust+Python build with a large optional-ML dependency surface). `uv`/`uvx` resolves a **prebuilt wheel** on this platform, so no Rust toolchain is pulled in.
 - Two integration layers, both declarative:
@@ -508,18 +475,15 @@ OpenCode needs no wrapper at all: a `local-ollama` provider is merged natively i
 - **Why no separate "gateway" tool (LiteLLM/Portkey/etc.) was needed**: every one of these tools speaks either Anthropic Messages (Claude Code) or an OpenAI-compatible wire format (everyone else, including Mistral Cloud) — and the Headroom proxy already speaks both on the same port (`/v1/messages`, `/v1/chat/completions`, `/v1/responses`). It **is** the protocol-agnostic gateway; no extra layer needed. What differs per tool is only how each one is told to point at it:
   | Tool | Native override mechanism | Auth preserved? | Default routing |
   | --- | --- | --- | --- |
-  | Claude Code | `ANTHROPIC_BASE_URL`/`AUTH_TOKEN`/`API_KEY` env vars | yes — plain `claude` never sets these, so claude.ai subscription login/connectors/Remote Control stay intact | **no local-coding route at all** (a global override here would count as "another auth source" and silently disable subscription connectors — see `home/features/ai/agent-configs.nix`; use OpenCode instead) |
-  | Codex | `openai_base_url` in the managed `config.toml` | yes — keeps ChatGPT sign-in *or* API key on the built-in `openai` provider | **on by default** (compression only; no local-Ollama route) |
-  | Vibe | `api_base` on the "mistral" provider entry, guarded `tomlkit` rewrite in `~/.vibe/config.toml` | yes — same `MISTRAL_API_KEY`/`Authorization: Bearer` passthrough | **on by default**, opt out with `headroom-pause vibe`; no local-Ollama route exists for Vibe at all |
-  | OpenCode | `provider.local-ollama` in `opencode.json`, merged in natively | n/a — separate named provider, doesn't touch any other provider's auth | opt-in, no wrapper: pick `local-ollama` from `/models` or `--model`. The only tool with a local-Ollama route. |
+  | Claude Code | `ANTHROPIC_BASE_URL`/`AUTH_TOKEN`/`API_KEY` env vars | yes — plain `claude` never sets these, so claude.ai subscription login/connectors/Remote Control stay intact | **not routed** (a global override here would count as "another auth source" and silently disable subscription connectors — see `home/features/ai/agent-configs.nix`) |
+  | Codex | `openai_base_url` in the managed `config.toml` | yes — keeps ChatGPT sign-in *or* API key on the built-in `openai` provider | **on by default** (compression only) |
+  | Vibe | `api_base` on the "mistral" provider entry, guarded `tomlkit` rewrite in `~/.vibe/config.toml` | yes — same `MISTRAL_API_KEY`/`Authorization: Bearer` passthrough | **on by default**, opt out with `headroom-pause vibe` |
   | Cursor | **No config file or env var exists** — Settings ➜ Models ➜ OpenAI API Key ➜ Advanced ➜ Override Base URL | one-time manual step, confirmed by Cursor's own forum/docs; no tool works around this | opt-in (manual) |
-- **Codex and Vibe's default routing is fully declarative, no wrapper needed** — both tools' own native base-URL override mechanisms point at a proxy unconditionally for compression, so the plain `codex`/`vibe` commands are compressed automatically with no auth-model change. **OpenCode's local-Ollama route is opt-in** as a real, baked-in named provider (no separate command) — the only tool wired up to that backend, deliberately: it's a single loaded model processing one request at a time, so a second independent consumer risks one app's request silently starving another's. **Claude Code has no local-Ollama route at all** — its config schema has no concept of multiple named providers, so switching providers always means different `ANTHROPIC_*` values at launch, and doing that globally breaks claude.ai subscription auth (see the routing table above).
+- **Codex and Vibe's default routing is fully declarative, no wrapper needed** — both tools' own native base-URL override mechanisms point at a proxy unconditionally for compression, so the plain `codex`/`vibe` commands are compressed automatically with no auth-model change. **Claude Code is not routed** — its config schema has no concept of multiple named providers, so switching providers always means different `ANTHROPIC_*` values at launch, and doing that globally breaks claude.ai subscription auth (see the routing table above).
   - **Codex** already defaulted to real OpenAI (ChatGPT sign-in or API key). The shared proxy's `OPENAI_TARGET_API_URL` is deliberately left untouched (real OpenAI), so Codex's destination and auth are unchanged — just compressed.
   - **Vibe** already defaulted to real Mistral Cloud (`https://api.mistral.ai`) via its `mistral` provider, `api_key_env_var = "MISTRAL_API_KEY"`. Unlike Claude/Codex, Vibe has no config-file/env-var base-URL override — it only ever reads `~/.vibe/config.toml`, which also holds live, interactively-edited user state (model choice, `default_agent`, tool permissions, `/mcp add`-created servers). So the *same* `tomlkit` merge pass that already handles `mcp_servers` (`home/features/ai/vibe.nix`) also rewrites the "mistral" provider's `api_base` to the dedicated Vibe proxy — but only while that field is still holding a value we recognise (the direct Mistral default, or our own proxy URL already); a value you've customized to something else yourself is left alone. End-to-end forwarding to the real Mistral API (route + auth passthrough) was live-verified with a real HTTP request before enabling this by default.
-- **OpenCode's `local-ollama` provider is baked into `~/.config/opencode/opencode.json` declaratively** (`home/features/ai/headroom.nix`, `home.activation.mergeOpencodeLocalProvider`) — a `jq`-based merge that only ever touches the `provider.local-ollama` key, so any other provider or setting you (or `opencode auth login`) add to that file is left alone. Its custom-provider config needs every model listed explicitly (no wildcard), but the local-coding route is always exactly one pinned model (`aiAgents.localCoding.model`), so a static entry is all that's needed — no live-generated catalog, no wrapper binary.
-- **Claude Code has no local-coding route.** Its config schema has no multi-provider concept at all, so the only way to point it at local Ollama is overriding `ANTHROPIC_BASE_URL`/`AUTH_TOKEN`/`API_KEY`/`MODEL` at process start — globally, that breaks claude.ai subscription auth (above); scoped to a single invocation, it would still share the same single-loaded-model, single-request-at-a-time Ollama backend as OpenCode. OpenCode already covers free/local coding natively.
 - **`.claude/settings.json` has no single owner.** Not Nix-managed (see `home/features/ai/agent-configs.nix`), and also written directly by third-party installers (e.g. an IDE's own Claude Code plugin/hook installer) and by Claude Code's own CLI/settings persistence — don't assume Nix controls its contents when debugging it.
-- **Opting out of default routing**: `headroom-pause` stops every registered proxy; `headroom-pause <name>` (e.g. `headroom-pause vibe`) stops just one — the same, single mechanism for all tools, no per-tool escape-hatch commands. Since Codex/Vibe point at their proxies unconditionally, whichever instance you stop will fail to connect until `headroom-resume [name]` (or a rebuild that removes the routing); OpenCode's `local-ollama` provider likewise just becomes unusable, with no effect on `claude` or OpenCode's other providers.
+- **Opting out of default routing**: `headroom-pause` stops every registered proxy; `headroom-pause <name>` (e.g. `headroom-pause vibe`) stops just one — the same, single mechanism for all tools, no per-tool escape-hatch commands. Since Codex/Vibe point at their proxies unconditionally, whichever instance you stop will fail to connect until `headroom-resume [name]` (or a rebuild that removes the routing); `claude` is unaffected.
 - Proxy state/logs live at `~/.local/state/headroom/` (`headroom-proxy-<name>.log`/`.error.log` per registered instance, e.g. `headroom-proxy-shared.log`, `headroom-proxy-vibe.log`); the proxy itself persists savings stats at `~/.headroom/`.
 
 #### Mistral Vibe
@@ -561,8 +525,6 @@ llm-doctor
 
 # View service logs
 llm-logs
-llm-logs coding
-llm-logs session
 
 # Check disk space (models can be large)
 df -h ~/.ollama/
@@ -573,9 +535,8 @@ df -h ~/.ollama/
 |--------|-------|----------|------|
 | `commit` | `tavernari/git-commit-message:latest` | Fast local commit messages | ~4.4GB |
 | `general` | `qwen3:8b-q4_K_M` | Lightweight chat and explanations | ~5.2GB |
-| `coding` | `qwen3-coder:30b-a3b-q4_K_M` | Local coding agents and heavier code tasks | ~19GB |
 
-**Total if you install all declared local profiles**: about `28.6 GB`
+**Total if you install all declared local profiles**: about `9.6 GB`
 
 #### Integration Examples
 ```bash
@@ -584,9 +545,9 @@ git add .
 oco                  # Uses configured model for commit messages
 
 # Quick model switching for different local tasks
-oco-profile coding   # Temporarily use the coding profile and coding endpoint
+oco-profile general  # Temporarily use the general profile
 git add .
-oco                  # Generate commit with coding model
+oco                  # Generate commit with the general model
 
 oco-profile commit   # Switch back to the default commit profile
 ```
@@ -594,11 +555,11 @@ oco-profile commit   # Switch back to the default commit profile
 #### Advanced Configuration
 ```bash
 # Custom model setup for specific projects
-echo 'OCO_MODEL="qwen3-coder:30b-a3b-q4_K_M"' > .env    # Unmanaged ad hoc model override
+echo 'OCO_MODEL="qwen3:8b-q4_K_M"' > .env    # Unmanaged ad hoc model override
 
 # Batch commit with different models
 oco-profile commit && git add . && oco        # Use commit-optimized model
-oco-profile coding && git add . && oco        # Use code-optimized model
+oco-profile general && git add . && oco       # Use general-purpose model
 
 # Performance monitoring
 time llm-run general "test prompt"

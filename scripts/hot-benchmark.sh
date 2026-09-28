@@ -507,7 +507,6 @@ get_declared_profile_for_model() {
     case "$model" in
         "tavernari/git-commit-message:latest") echo "commit" ;;
         "qwen3:8b-q4_K_M") echo "general" ;;
-        "qwen3-coder:30b-a3b-q4_K_M") echo "coding" ;;
         *) echo "" ;;  # Unmanaged model - will fallback to direct config
     esac
 }

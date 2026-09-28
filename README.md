@@ -373,7 +373,7 @@ oco-provider status   # Show detailed provider information
 # Health checks and configuration
 oco-check             # Validate setup and service status
 oco-provider          # Full provider management interface
-oco-profile           # Inspect or switch the local commit/general/coding profiles
+oco-profile           # Inspect or switch the local commit/general profiles
 
 # Conventional commit types (works with any provider)
 oco-feat              # Generate feat: commit
@@ -384,29 +384,20 @@ oco-docs              # Generate docs: commit
 ### Local AI - Declarative Ollama Profiles
 ```bash
 # Service and profile status
-llm-status            # Default backend, coding backend, session proxy, contexts, residency
-llm-models            # Declared profiles, service mapping, endpoints, install status
-llm-doctor            # Reachability, cloud-disable state, session proxy, profile/install checks
-llm-logs              # Tail all local AI logs
-llm-logs coding       # Tail only the coding-endpoint log
-llm-logs session      # Tail only the session-proxy log
-
-# Coding-session lifecycle
-llm-session start coding    # Preload qwen3-coder on the coding backend
-llm-session refresh coding  # Extend the current coding idle window
-llm-session status coding   # Show residency, PROCESSOR, CONTEXT, UNTIL
-llm-session finish coding   # Explicitly unload the coding model
+llm-status            # Backend health, context, residency
+llm-models            # Declared profiles, endpoint, install status
+llm-doctor            # Reachability, cloud-disable state, profile/install checks
+llm-logs              # Tail the Ollama server log
 
 # Explicit model installation
 llm-pull commit       # tavernari/git-commit-message:latest
 llm-pull general      # qwen3:8b-q4_K_M
-llm-pull coding       # qwen3-coder:30b-a3b-q4_K_M
 llm-pull all          # Pull all declared profiles
 
 # Interactive and one-shot usage
 llm-run general "Explain this code"
-llm-run coding        # Interactive coding shell on the raw 64k coding backend
-llm-smoke coding      # Sanity-check the coding profile through the session proxy
+llm-run general       # Interactive shell
+llm-smoke general     # Sanity-check the general profile
 ```
 
 ### OpenAI & Claude - Cloud Providers (Providers 2 & 3: Premium Quality)
@@ -434,26 +425,20 @@ oco-claude            # Auto-loads Claude key from encrypted secrets
 | **Claude** | ⚡ 7s | 🧠 Advanced | 💰 ~$0.02/commit | ☁️ Cloud API | Complex reasoning, refactoring |
 
 ### Model Selection by Provider
-- **Ollama**: Shared declarative local profiles for commit, general, and coding tasks
+- **Ollama**: Shared declarative local profiles for commit and general tasks
 - **OpenAI**: Range from cost-effective to premium models  
 - **Claude**: Fast and advanced reasoning models available
 
 ### Local Profile Catalog
 - **`commit`**: `tavernari/git-commit-message:latest` for fast local commit generation
 - **`general`**: `qwen3:8b-q4_K_M` for lightweight local chat and explanations
-- **`coding`**: `qwen3-coder:30b-a3b-q4_K_M` for heavier local coding workflows on the dedicated 64k coding stack
-- **Unsupported locally on this machine**: `qwen3-coder:480b`
-- **Expected disk for declared models**: about `28.6 GB`
+- **Expected disk for declared models**: about `9.6 GB`
 
-### Session-Aware Coding Endpoint
-- **Default backend**: `http://127.0.0.1:11434`
-- **Raw coding backend**: `http://127.0.0.1:11435`
-- **Session-aware coding proxy**: `http://127.0.0.1:11436`
-- The proxy exists so coding-agent traffic refreshes model residency through real requests instead of relying only on a long static timeout.
-- The proxy also defaults Qwen coding traffic to non-thinking mode unless the client explicitly asks for reasoning.
+### Local Endpoint
+- **Ollama backend**: `http://127.0.0.1:11434`
 - `keep_alive=10m` means 10 minutes after the last completed request, not 10 minutes after startup.
-- Unsent typing in Cursor or Cline does not refresh residency; submitted requests do.
-- `llm-session finish coding` is the intended task-finished path when you want memory back immediately.
+
+### Agent Configuration
 - Codex, Claude Code, Cursor, and Vibe all derive shared defaults from `aiAgents`.
 - Ownership is tool-specific:
   - Codex shared defaults: `/etc/codex/managed_config.toml`
@@ -482,16 +467,14 @@ oco-claude            # Auto-loads Claude key from encrypted secrets
 - `codebase-memory-mcp` is built from its pinned upstream flake and natively registered for Codex/Claude/Vibe, no per-repo onboarding required. Upstream's own default cache is one shared, intentionally cross-repo DB (`~/.cache/codebase-memory-mcp`) — this repo instead points `command` at `codebaseMemoryScopedWrapper` (`hosts/shared/ai-agents.nix`), a small wrapper that resolves `git rev-parse --show-toplevel` at spawn time and sets `CBM_CACHE_DIR` to a per-repo slot under `~/.cache/codebase-memory-mcp/repos/<slug>-<hash>/`, refusing to start outside a git repo rather than fall back to the shared cache. Nothing is ever written inside a repo's own working tree, so there's no tracked/untracked `.codex/config.toml` state and no rebase/branch-switch risk (`docs/codex-mcp-config-rebase-research-2026.md` covers why that matters; `docs/codebase-memory-mcp-scoped-cache-handoff.md` covers the upstream `CBM_CACHE_SCOPE=git-root` feature this wrapper stands in for). Once visible, it is the zero-token structural graph for call graphs, dead code, Cypher queries, and git-diff impact; prefer it over grep for "who calls X" / "what breaks if I change Y" questions. Graphify (below) remains the tool for deep, cross-document (code + docs + papers + media) architecture exploration invoked on demand.
 - The wrapper enables `auto_index=true` on every start so new repos index transparently on first MCP connection. The global upstream cache remains separate and may be empty or have `auto_index=false`; that's expected, not a sign anything is broken. Run `codex-ai-status` from a repo to inspect active Codex MCP config, the resolved per-repo cache, and Graphify presence; run `codebase-memory-status` when you need both the global and current-repo cache details. It also contributes a short "use the graph, not broad reads" section to the same global `.codex/AGENTS.md`/`.claude/CLAUDE.md`/`.vibe/AGENTS.md` that `caveman.nix` writes — Home Manager merges both via `types.lines`, each feature owning its own section.
 - Do not run upstream `codebase-memory-mcp update` for this install: the binary is Nix-managed from the pinned `codebase-memory-mcp` flake input, so upgrades are deliberate flake pin bumps plus rebuilds. Repo graph freshness is separate and handled by scoped `auto_index`/watch or a one-off MCP `index_repository` refresh.
-- `headroom` (context compression) runs as an `uvx`-resolved MCP server (`headroom_compress`/`headroom_retrieve`/`headroom_stats`, exposed via `aiAgents`) plus a declarative registry of persistent local proxies (launchd, macOS) that speak the Anthropic/OpenAI-compatible wire protocols and compress LLM traffic before forwarding it on. Every instance is one entry in `aiAgents.headroom.proxies` (single source of truth, `hosts/shared/ai-agents.nix`) — `home/features/ai/headroom.nix` itself has zero per-tool knowledge and just spins up whatever's declared there, so onboarding a future provider that needs its own upstream is one new attrset entry, never a code change. Two entries exist today: `shared` (port 8787) covers Claude Code and Codex; `vibe` (port 8788) covers Vibe's Mistral Cloud traffic, since Codex and Vibe need different upstream targets and a single proxy instance only forwards OpenAI-shaped traffic to one place. All three route through by default (opt-out via `headroom-pause [name]` — omit `name` to stop all instances, or give one, e.g. `headroom-pause vibe`, to stop just that tool — the same mechanism for all three, no per-tool escape hatches) — each tool's own native base-URL override (or, for Vibe, its "mistral" provider's `api_base`, rewritten in place via a guarded `tomlkit` merge that never touches a value you've customized to something else) just points at `<entry>.url`, which forwards on to the same destination each already used (real OpenAI for Codex, local Ollama for Claude, real Mistral Cloud for Vibe), so nothing changes except compression. Cursor has no config file or env var for this, so it stays a one-time manual step (Settings > Models > OpenAI API Key > Advanced > Override Base URL); `headroom-opencode` stays an explicit opt-in wrapper since OpenCode needs a live-generated model catalog. Run `headroom-status` for health (see `TOOLS_CHEATSHEET.md`).
+- `headroom` (context compression) runs as an `uvx`-resolved MCP server (`headroom_compress`/`headroom_retrieve`/`headroom_stats`, exposed via `aiAgents`) plus a declarative registry of persistent local proxies (launchd, macOS) that speak the Anthropic/OpenAI-compatible wire protocols and compress LLM traffic before forwarding it on. Every instance is one entry in `aiAgents.headroom.proxies` (single source of truth, `hosts/shared/ai-agents.nix`) — `home/features/ai/headroom.nix` itself has zero per-tool knowledge and just spins up whatever's declared there, so onboarding a future provider that needs its own upstream is one new attrset entry, never a code change. Two entries exist today: `shared` (port 8787) covers Claude Code and Codex; `vibe` (port 8788) covers Vibe's Mistral Cloud traffic, since Codex and Vibe need different upstream targets and a single proxy instance only forwards OpenAI-shaped traffic to one place. Codex and Vibe route through by default (opt-out via `headroom-pause [name]` — omit `name` to stop all instances, or give one, e.g. `headroom-pause vibe`, to stop just that tool — the same mechanism for every tool, no per-tool escape hatches) — each tool's own native base-URL override (or, for Vibe, its "mistral" provider's `api_base`, rewritten in place via a guarded `tomlkit` merge that never touches a value you've customized to something else) just points at `<entry>.url`, which forwards on to the same destination each already used (real OpenAI for Codex, real Mistral Cloud for Vibe), so nothing changes except compression. Cursor has no config file or env var for this, so it stays a one-time manual step (Settings > Models > OpenAI API Key > Advanced > Override Base URL). Run `headroom-status` for health (see `TOOLS_CHEATSHEET.md`).
 - `chonkie` is installed as explicit-use local RAG ingestion and chunking tooling, not as a default codebase-analysis path. `home/features/ai/chonkie.nix` uses the same `uv tool install` pattern as Graphify for the fast-moving Python CLI, with narrow default extras (`cli`, `semantic`, `code`, `api`, `viz`) instead of `chonkie[all]`: enough for recursive/semantic/code chunking, CLI output, and local API experiments, without provider SDKs, vector DB clients, or torch. It adds `chonkie-status`, `chonkie-rag-smoke`, `chonkie-serve`, and `chonkie-update`. `chonkie-serve` binds localhost by default and refuses Headroom-reserved ports (8787/8788), but no Chonkie/Headroom tuning is applied globally; provider routing for Chonkie pipelines should be explicit per pipeline, never via global `OPENAI_BASE_URL`/`OPENAI_API_BASE`. This preserves Codex and Claude subscription auth: Chonkie local chunkers do not need subscriptions, and Chonkie provider-backed embeddings/genie features use provider API SDKs/keys rather than ChatGPT or Claude Code subscription entitlements. The upstream Chonkie agent skill is declared in the catalog as runtime-owned `external-experimental`, so it remains explicit-only by policy.
 - `codeburn` is installed as a declared Darwin Homebrew formula because no nixpkgs package is available. Use it for richer local dashboards and model/task analysis (`codeburn`, `codeburn overview`, `codeburn compare`, `codeburn yield`); treat mutating features such as `codeburn optimize --apply`, `codeburn guard install`, and `codeburn menubar` as explicit review-first actions.
-- `opencode` (opencode.ai) is installed from nixpkgs as a general multi-provider coding CLI, in addition to its Headroom wrapper above.
+- `opencode` (opencode.ai) is installed from nixpkgs as a general multi-provider coding CLI.
 - Graphify is intentionally handled in two separate, non-conflicting layers instead of one Nix-managed integration, because those are genuinely two different use cases:
   - **Global/personal** (`home/features/ai/graphify.nix`): a plain `uv tool install "graphifyy[anthropic]"`, asserted idempotently on every switch (only installs if missing, never force-upgraded — same non-fatal, install-only-if-absent pattern as the rest of this file), puts a real `graphify` command on `PATH` in every shell on this machine regardless of project — upstream's own recommended mode for solo/ad-hoc use. `graphify-status` reports CLI presence and user-scope skill installs (`~/.claude/skills/graphify`, `~/.codex/skills/graphify`, `~/.cursor/skills/graphify`, `~/.agents/skills/graphify` — the last one is also how Vibe picks it up, via the same Agent-Skills path `caveman.nix` uses); `graphify-update` upgrades the CLI and deliberately re-runs each platform's installer to refresh those skill files (never done silently).
   - **Project-shipped** (per-repo, not Nix-managed): `graphify-onboard [dir]` scripts upstream's own recommended team-onboarding sequence — build the graph (`graphify .`), install project-scoped skill files for every onboarded platform (`graphify <platform> install --project`), wire git hooks for auto-rebuild and conflict-free `graph.json` merges (`graphify hook install`), then leave a `git status` summary of what to commit. One command instead of remembering five. Whether a repo additionally pins an exact Graphify version in its own `mise.toml` for CI reproducibility is a separate, reviewed, per-repo decision — `mise` (`programs.mise.enable`, `home/features/shell/default.nix`) and `uv` (`packages.nix`) are already present, and mise's `pipx:` backend automatically shells out to `uv tool install` whenever `uv` is on `PATH`, so that needs no dotfiles wiring either.
 - Agent Graphify rule: Graphify is available lazily through the Nix-managed `graphify-auto` skill (`~/.codex/skills`, `~/.claude/skills`, `~/.agents/skills`). In git repos, agents should run `graphify-ensure` when Graphify context is requested. It creates `graphify-out/` when missing, updates it when present, and ensures project skill files/hooks. Only fall back to repo-scoped `codebase-memory` when `graphify-ensure` is unavailable or fails. For Jira/Atlassian-driven work, if the connector/curl returns only app-shell HTML, login pages, or opaque compressed output after two attempts, the agent should ask for pasted ticket text instead of inferring requirements from branch names. Codex needs Atlassian as a direct HTTP MCP server for OAuth, so the actionable setup is `mcp-profile-onboard atlassian <repo>`, then `codex mcp login atlassian`, then a new Codex session.
-- For Cline or Cursor local coding, point the provider to `http://127.0.0.1:11436`.
-- Prefer one local coding agent at a time on this machine. The coding endpoint is single-request (`NUM_PARALLEL=1`), so running Cline and Roo together turns waits into queue time very quickly.
 
 **🔧 For detailed AI tools usage, see [TOOLS_CHEATSHEET.md](./TOOLS_CHEATSHEET.md#-ai--llm-tools)**
 

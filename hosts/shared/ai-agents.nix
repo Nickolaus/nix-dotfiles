@@ -266,7 +266,6 @@ in
 {
   imports = [
     (mkAliasOptionModule [ "codexManaged" "enable" ] [ "aiAgents" "codex" "managed" "enable" ])
-    (mkAliasOptionModule [ "codexManaged" "homeManagerUser" ] [ "aiAgents" "homeManagerUser" ])
     (mkAliasOptionModule [ "codexManaged" "requirements" "enable" ] [ "aiAgents" "codex" "requirements" "enable" ])
     (mkAliasOptionModule [ "codexManaged" "requirements" "settings" ] [ "aiAgents" "codex" "requirements" "settings" ])
   ];
@@ -274,12 +273,6 @@ in
   options.aiAgents = {
     enable = mkEnableOption "shared AI agent defaults" // {
       default = true;
-    };
-
-    homeManagerUser = mkOption {
-      type = types.nullOr types.str;
-      default = null;
-      description = "Home Manager user whose localAi settings seed shared agent defaults.";
     };
 
     targets = {
@@ -536,14 +529,6 @@ in
       '';
     };
 
-    localCoding = {
-      model = mkOption {
-        type = types.str;
-        readOnly = true;
-        description = "Shared local coding model identifier.";
-      };
-    };
-
     codex.requirements = {
       enable = mkEnableOption "managed Codex requirements" // {
         default = true;
@@ -587,11 +572,7 @@ in
         subscription connectors and Remote Control for anyone the policy
         applies to, with no easy user-level override (see
         home/features/ai/agent-configs.nix for the same trade-off already made
-        at the user-settings layer). Claude Code has no local-coding route at
-        all -- unlike Codex/OpenCode, it has no native multi-provider config,
-        and a wrapper script would still race with other local-coding
-        consumers for the single-loaded-model backend (see
-        home/features/ai/ollama.nix, aiAgents.headroom.proxies.shared).
+        at the user-settings layer).
       '';
     };
 

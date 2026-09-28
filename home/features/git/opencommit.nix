@@ -2,27 +2,16 @@
 let
   llm = config.localAi;
   defaultEndpoint = llm.endpoint;
-  codingEndpoint = llm.codingEndpoint;
   localApiUrl = "${defaultEndpoint}/api/chat";
   commitModel = llm.profiles.commit.model;
   generalModel = llm.profiles.general.model;
-  codingModel = llm.profiles.coding.model;
-  commitService = llm.profiles.commit.service;
-  generalService = llm.profiles.general.service;
-  codingService = llm.profiles.coding.service;
   commonShell = ''
     set -euo pipefail
 
     default_endpoint="${defaultEndpoint}"
-    coding_endpoint="${codingEndpoint}"
     default_chat_endpoint="${defaultEndpoint}/api/chat"
-    coding_chat_endpoint="${codingEndpoint}/api/chat"
     commit_model="${commitModel}"
     general_model="${generalModel}"
-    coding_model="${codingModel}"
-    commit_service="${commitService}"
-    general_service="${generalService}"
-    coding_service="${codingService}"
 
     current_config_value() {
       opencommit config get "$1" 2>/dev/null | sed -n "s/^.*$1=//p" | tail -1
@@ -36,19 +25,6 @@ let
       case "$1" in
         commit) echo "$commit_model" ;;
         general) echo "$general_model" ;;
-        coding) echo "$coding_model" ;;
-        *)
-          echo "Unknown local AI profile: $1" >&2
-          return 1
-          ;;
-      esac
-    }
-
-    profile_service() {
-      case "$1" in
-        commit) echo "$commit_service" ;;
-        general) echo "$general_service" ;;
-        coding) echo "$coding_service" ;;
         *)
           echo "Unknown local AI profile: $1" >&2
           return 1
@@ -59,18 +35,6 @@ let
     service_endpoint() {
       case "$1" in
         default) echo "$default_endpoint" ;;
-        coding) echo "$coding_endpoint" ;;
-        *)
-          echo "Unknown service: $1" >&2
-          return 1
-          ;;
-      esac
-    }
-
-    service_chat_endpoint() {
-      case "$1" in
-        default) echo "$default_chat_endpoint" ;;
-        coding) echo "$coding_chat_endpoint" ;;
         *)
           echo "Unknown service: $1" >&2
           return 1
@@ -81,7 +45,6 @@ let
     endpoint_service() {
       case "$1" in
         "$default_endpoint") echo "default" ;;
-        "$coding_endpoint") echo "coding" ;;
         *) echo "unmanaged" ;;
       esac
     }
@@ -120,7 +83,6 @@ let
       case "$1" in
         "$commit_model") echo "commit" ;;
         "$general_model") echo "general" ;;
-        "$coding_model") echo "coding" ;;
         *) echo "" ;;
       esac
     }
@@ -187,11 +149,10 @@ in {
       fi
       echo ""
 
-      if [[ "$provider" == "ollama" ]] || [[ "$api_url" == "$default_chat_endpoint" ]] || [[ "$api_url" == "$coding_chat_endpoint" ]]; then
+      if [[ "$provider" == "ollama" ]] || [[ "$api_url" == "$default_chat_endpoint" ]]; then
         echo "Declared local AI profiles"
-        for profile in commit general coding; do
-          service="$(profile_service "$profile")"
-          echo "  $profile -> $(profile_model "$profile") via $service at $(service_endpoint "$service")"
+        for profile in commit general; do
+          echo "  $profile -> $(profile_model "$profile") at $default_endpoint"
         done
         echo ""
 
@@ -203,7 +164,7 @@ in {
 
         if service_ready "$current_service"; then
           echo "Ollama: reachable on $current_service"
-          if [[ -n "$declared_profile" ]] && installed_model_for_service "$(profile_service "$declared_profile")" "$model"; then
+          if [[ -n "$declared_profile" ]] && installed_model_for_service default "$model"; then
             echo "Model availability: installed"
           elif [[ -n "$declared_profile" ]]; then
             echo "Model availability: missing"
@@ -218,7 +179,7 @@ in {
           echo "Ollama: unavailable on $current_service"
           echo "Next steps:"
           echo "  1. Check the local AI service: llm-status"
-          echo "  2. Inspect logs: llm-logs $current_service"
+          echo "  2. Inspect logs: llm-logs"
           exit 1
         fi
       elif [[ "$provider" == "openai" ]]; then
@@ -276,15 +237,13 @@ in {
         echo ""
         echo "Profiles"
 
-        for profile in commit general coding; do
-          service="$(profile_service "$profile")"
-          endpoint="$(service_endpoint "$service")"
+        for profile in commit general; do
           model="$(profile_model "$profile")"
-          printf "  %-7s -> %-36s service=%-7s endpoint=%s\n" "$profile" "$model" "$service" "$endpoint"
+          printf "  %-7s -> %-36s endpoint=%s\n" "$profile" "$model" "$default_endpoint"
 
-          if installed_model_for_service "$service" "$model"; then
+          if installed_model_for_service default "$model"; then
             echo "           installed"
-          elif service_ready "$service"; then
+          elif service_ready default; then
             echo "           missing (llm-pull $profile)"
           else
             echo "           unknown (service unavailable)"
@@ -301,7 +260,7 @@ in {
         status)
           show_status
           ;;
-        reset|default|commit|general|coding)
+        reset|default|commit|general)
           case "$1" in
             reset|default)
               profile="commit"
@@ -311,25 +270,22 @@ in {
               ;;
           esac
 
-          service="$(profile_service "$profile")"
           model="$(profile_model "$profile")"
-          api_url="$(service_chat_endpoint "$service")"
 
           opencommit config set OCO_AI_PROVIDER=ollama
-          opencommit config set OCO_API_URL="$api_url"
+          opencommit config set OCO_API_URL="$default_chat_endpoint"
           opencommit config set OCO_API_KEY=ollama
           opencommit config set OCO_MODEL="$model"
 
           echo "OpenCommit local profile set to $profile -> $model"
-          echo "Service: $service"
-          echo "Endpoint: $(service_endpoint "$service")"
-          if service_ready "$service" && ! installed_model_for_service "$service" "$model"; then
+          echo "Endpoint: $default_endpoint"
+          if service_ready default && ! installed_model_for_service default "$model"; then
             echo "Model is not installed yet."
             echo "Next step: llm-pull $profile"
           fi
           ;;
         *)
-          echo "Usage: oco-profile [status|default|reset|commit|general|coding]"
+          echo "Usage: oco-profile [status|default|reset|commit|general]"
           exit 1
           ;;
       esac
@@ -351,7 +307,7 @@ in {
         echo "API URL: ''${url:-unset}"
         echo "Model: ''${model:-unset}"
 
-        if [[ "$provider" == "ollama" ]] || [[ "$url" == "$default_chat_endpoint" ]] || [[ "$url" == "$coding_chat_endpoint" ]]; then
+        if [[ "$provider" == "ollama" ]] || [[ "$url" == "$default_chat_endpoint" ]]; then
           echo "Local service: $local_service"
           if [[ "$local_service" != "unmanaged" ]] && service_ready "$local_service"; then
             echo "Ollama: reachable"
@@ -498,7 +454,7 @@ in {
         exit 1
       fi
 
-      if ! installed_model_for_service "$(profile_service commit)" "$commit_model"; then
+      if ! installed_model_for_service default "$commit_model"; then
         echo "Commit profile is not installed."
         echo "Next step: llm-pull commit"
         exit 1

@@ -72,35 +72,9 @@ let
   allLabelsShell = lib.concatMapStringsSep " " labelFor proxyNames;
   knownNamesShell = builtins.concatStringsSep " " proxyNames;
   # "shared" is just the well-known key for the general-purpose instance most tools
-  # (Claude, Codex, OpenCode) use -- a naming convention in the data, not special-cased
+  # (Claude, Codex) use -- a naming convention in the data, not special-cased
   # machinery. Falls back gracefully if a from-scratch config ever omits it.
   sharedProxyUrl = if proxies ? shared then proxies.shared.url else null;
-
-  # Native, baked-in local-coding provider for OpenCode: a permanent, named entry in
-  # OpenCode's own config, selectable from its `/models` picker or `--model
-  # local-ollama/<id>`, no wrapper binary needed. OpenCode's custom-provider schema
-  # requires every model to be listed explicitly (no wildcard "any model" support), but
-  # the local-coding route is always exactly one pinned model (`aiAgents.localCoding.model`),
-  # so a static entry needs no live generation at all. OpenCode is the only integration
-  # this repo wires up to the local-coding Ollama backend -- that backend is a single
-  # loaded model processing one request at a time (`localAi.runtime`, ollama.nix), so
-  # adding a second independent consumer risks one app's request silently starving
-  # another's with no shared visibility between them.
-  localCodingModel = if aiCfg != null then aiCfg.localCoding.model else null;
-  opencodeLocalProvider = optionalAttrs (sharedProxyUrl != null && localCodingModel != null) {
-    local-ollama = {
-      npm = "@ai-sdk/openai-compatible";
-      name = "Local Ollama (Headroom)";
-      options = {
-        baseURL = "${sharedProxyUrl}/v1";
-        apiKey = "ollama";
-      };
-      models = {
-        "${localCodingModel}" = { name = localCodingModel; };
-      };
-    };
-  };
-  opencodeLocalProviderFile = pkgs.writeText "opencode-local-provider.json" (builtins.toJSON opencodeLocalProvider);
 in
 {
   home.file.".local/state/headroom/.keep".text = "";
@@ -154,22 +128,15 @@ in
       echo "config already points straight at one of the proxies above, no wrapper command"
       echo "needed."
       echo
-      echo "OpenCode has a native 'local-ollama' provider baked into"
-      echo "~/.config/opencode/opencode.json -- opt-in, no wrapper needed: pick it from"
-      echo "OpenCode's /models picker, or 'opencode --model local-ollama/${toString localCodingModel}'."
-      echo "It's the only integration wired up to the local-coding Ollama backend, by design:"
-      echo "that backend is a single loaded model processing one request at a time."
-      echo
-      echo "Claude Code has no local-coding route: it has no native multi-provider config"
-      echo "(unlike Codex/OpenCode), and forcing ANTHROPIC_BASE_URL globally would count as"
-      echo "\"another auth source\" and silently disable claude.ai subscription connectors/"
-      echo "Remote Control -- so plain 'claude' always uses your real subscription."
+      echo "Claude Code is not routed through Headroom: forcing ANTHROPIC_BASE_URL globally"
+      echo "would count as \"another auth source\" and silently disable claude.ai subscription"
+      echo "connectors/Remote Control -- so plain 'claude' always uses your real subscription."
       echo
       echo "Cursor has no config file or env var for this -- one-time manual step:"
       echo "  Settings > Models > OpenAI API Key > Advanced > Override Base URL -> ${toString sharedProxyUrl}/v1"
       echo
       echo "Opt out of default routing (Codex/Vibe will fail to connect until resumed or"
-      echo "rebuilt; OpenCode's local-ollama provider just becomes unusable):"
+      echo "rebuilt):"
       echo "  headroom-pause [name]   - stop one instance (name), or all of them if omitted"
       echo "  headroom-resume [name]  - restart one instance (name), or all of them if omitted"
       echo
@@ -203,9 +170,8 @@ in
         labels="${allLabelsShell}"
         echo "Stopping all managed Headroom proxy instances -- Codex and Vibe are hardwired"
         echo "to them by default, so both will fail to connect until you run"
-        echo "'headroom-resume' (or rebuild). OpenCode's local-ollama provider also stops"
-        echo "working; the default 'claude' command (claude.ai subscription) and OpenCode's"
-        echo "other providers are unaffected."
+        echo "'headroom-resume' (or rebuild). The default 'claude' command (claude.ai"
+        echo "subscription) is unaffected."
       fi
       for label in $labels; do
         launchctl bootout "$domain/$label" 2>/dev/null || echo "$label: already stopped."
@@ -245,20 +211,53 @@ in
     builtins.listToAttrs (lib.mapAttrsToList mkProxyAgent proxies)
   );
 
-  # Merges (never fully overwrites) the `local-ollama` provider into OpenCode's own
-  # ~/.config/opencode/opencode.json -- any other provider, model default, or setting the
-  # user (or `opencode auth login`) has added stays untouched; only the `provider.
-  # local-ollama` key is owned by Nix here, same restraint restoreCodexUserConfig and the
-  # Vibe config merge (this directory) take with their respective tools' user-editable
-  # config files.
-  home.activation.mergeOpencodeLocalProvider = mkIf (opencodeLocalProvider != { }) (
-    lib.hm.dag.entryAfter [ "writeBoundary" ] (aiAgentsLib.mkJsonMergeActivation {
-      configPath = "${config.home.homeDirectory}/.config/opencode/opencode.json";
-      defaultContent = builtins.toJSON { "$schema" = "https://opencode.ai/config.json"; };
-      jqArgName = "provider";
-      jqFilter = ".provider = ((.provider // {}) + $provider[0])";
-      valueFile = "${opencodeLocalProviderFile}";
-      invalidJsonWarning = "warning: ~/.config/opencode/opencode.json is not valid JSON; skipping local-ollama provider merge for OpenCode";
-    })
-  );
+  # Keeps OpenCode free of the `local-ollama` provider id, which has no backend. Touches only
+  # that provider, `model`/`small_model` values anywhere in opencode.json that point at it,
+  # and its entries in the TUI's recent/favorite/variant model state. Each file is rewritten
+  # in place (same directory, same mode) only when it references `local-ollama`; unreadable
+  # or non-JSON files are left alone.
+  home.activation.removeOpencodeLocalProvider = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    jq=${pkgs.jq}/bin/jq
+
+    opencode_scrub() {
+      local file="$1" check="$2" filter="$3" tmp mode
+      [ -f "$file" ] || return 0
+      "$jq" -e "$check" "$file" >/dev/null 2>&1 || return 0
+      if [[ -v DRY_RUN ]]; then
+        echo "Would remove local-ollama references from $file"
+        return 0
+      fi
+      mode="$(${pkgs.coreutils}/bin/stat -c %a "$file")"
+      tmp="$(${pkgs.coreutils}/bin/mktemp "$file.XXXXXX")"
+      if "$jq" "$filter" "$file" > "$tmp" && ${pkgs.coreutils}/bin/chmod "$mode" "$tmp"; then
+        ${pkgs.coreutils}/bin/mv "$tmp" "$file"
+        verboseEcho "Removed local-ollama references from $file"
+      else
+        ${pkgs.coreutils}/bin/rm -f "$tmp"
+        echo "Warning: could not clean local-ollama references from $file; leaving it as-is." >&2
+      fi
+    }
+
+    opencode_scrub ${escapeShellArg "${config.home.homeDirectory}/.config/opencode/opencode.json"} '
+      def local: type == "string" and startswith("local-ollama/");
+      ((.provider? | type) == "object" and (.provider | has("local-ollama")))
+      or ([.. | objects | (.model?, .small_model?) | select(local)] | length > 0)
+    ' '
+      def local: type == "string" and startswith("local-ollama/");
+      (if (.provider | type) == "object" then del(.provider."local-ollama") else . end)
+      | (if .provider == {} then del(.provider) else . end)
+      | walk(if type == "object"
+          then with_entries(select((.key == "model" or .key == "small_model") and (.value | local) | not))
+          else . end)
+    '
+
+    opencode_scrub ${escapeShellArg "${config.home.homeDirectory}/.local/state/opencode/model.json"} '
+      ([(.recent?, .favorite?) | arrays | .[] | select(.providerID? == "local-ollama")] | length > 0)
+      or ((.variant? | type) == "object" and ([.variant | keys[] | select(startswith("local-ollama/"))] | length > 0))
+    ' '
+      (if (.recent | type) == "array" then .recent |= map(select(.providerID? != "local-ollama")) else . end)
+      | (if (.favorite | type) == "array" then .favorite |= map(select(.providerID? != "local-ollama")) else . end)
+      | (if (.variant | type) == "object" then .variant |= with_entries(select(.key | startswith("local-ollama/") | not)) else . end)
+    '
+  '';
 }
