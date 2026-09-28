@@ -98,7 +98,8 @@ Two fixture sets of 12 search hits each (6 relevant, 6 junk), questions `relevan
 
 - `laya:en` `choice` answers are at chance level on both sets (it kept shoe ads and charger shops). Its `noul` is usable on set A but drops a true hit on set B (`tokio::time::timeout` 0.25 while Python asyncio scored 0.71). It is not good enough as a pre-filter either.
 - `winnow:e4b` separates cleanly: relevant `noul` 0.45-0.97 vs junk 0.01-0.04.
-- The shipped `linkgate` model (query moved from the instructions into the state, `keep` unless `fetch=skip` with confidence ≥ 0.5) scored set A at 11/12. Its one miss keeps a junk hit (skip at 0.46 confidence), which is the intended failure direction; every relevant hit was kept.
+- The shipped `linkgate` model (query moved from the instructions into the state) with the keep rule from design decision 4 scored 12/12 on both sets. The closest calls were a relevant hit at `relevant` 0.53 (`tokio::time::timeout`) and a junk hit at 0.08 (Python `asyncio.wait_for`).
+- `fetch` confidence varies between model loads: the same junk hit scored skip 0.46 in one run and 0.62 in another. A confidence threshold alone therefore leaks junk intermittently; in a live 15-hit session, both junk hits (skip confidence 0.28 and 0.49, `relevant` 0.05) were kept under a confidence-only rule.
 
 ### Latency and memory
 
@@ -137,7 +138,7 @@ Two fixture sets of 12 search hits each (6 relevant, 6 junk), questions `relevan
 3. **Frozen `linkgate` model.** Callers send only `{query, title, url, snippet}` and cannot fall back to the weaker `laya` router. Questions:
    - `relevant` (`noul`): "This search result (title, url, snippet) is useful for answering the research query in the state's `query` field."
    - `fetch` (`choice`): open / maybe / skip, where skip means unrelated, commercial, or wrong platform.
-4. **Keep policy.** Drop a hit only when `fetch=skip` with confidence ≥ `ollaya.skipConfidence` (0.5). `relevant` is reported but never a reason to drop.
+4. **Keep policy.** Drop a hit only when `fetch=skip` and either its confidence is ≥ `ollaya.skipConfidence` (0.5) or `relevant` is < `ollaya.dropRelevantBelow` (0.1). Two independent questions agreeing is required for low-confidence skips; `relevant` alone never drops a hit. Measured separation so far: junk `relevant` 0.01-0.08, relevant hits 0.21-0.97. `confidence` is TypeSafe-normalized over three options, so 0.5 means a skip probability of about 0.67.
 5. **`ollaya-gate` is the primary path.** One command scores a whole result list (JSONL in, JSONL out, input order preserved). MCP `decide` needs one tool call per hit and is the fallback.
 6. **stdio MCP in an opt-in profile.** `mcpServers.ollaya` has `targets = [ ]`; `mcpProfiles.decide` adds it to the default servers. `--http` would add a second persistent process for no gain.
 7. **Agent instructions override upstream.** The managed snippet requires `model: "linkgate"`, forbids `pull_model`, and forbids routing, triage, skill, or MCP-profile selection, regardless of the Ollaya MCP server's own instructions.
@@ -154,7 +155,7 @@ Two fixture sets of 12 search hits each (6 relevant, 6 junk), questions `relevan
 
 ## Risks
 
-- **False negatives.** A confident wrong skip drops the only good source. Mitigation: the 0.5 skip threshold; on set A the lowest-confidence junk skip was 0.46 and every relevant hit had `fetch=open`. Raise `ollaya.skipConfidence` if gold hits are ever dropped.
+- **False negatives.** A wrong skip drops the only good source. Mitigation: a skip needs high confidence or a `relevant` score under 0.1; every relevant hit measured so far had `fetch=open` and `relevant` ≥ 0.21. Raise `ollaya.skipConfidence` or lower `ollaya.dropRelevantBelow` if gold hits are ever dropped.
 - **Small fixtures.** Two sets of 12 hits, both English and both technical. Non-English queries and non-technical topics are unmeasured.
 - **Upstream churn.** The project is days old; the MCP tool description is already wrong about auto-pull. Pinned version plus hash; updates go through `scripts/update-system.sh` only.
 - **MCP surface.** `pull_model` can start multi-GB downloads, and the upstream MCP instructions push routing use. Only the managed instruction snippet counters this; the profile gateway cannot filter tools.

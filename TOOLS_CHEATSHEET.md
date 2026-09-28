@@ -448,7 +448,7 @@ ollaya-stop      # Stop the daemon
 - Pinned prebuilt release (`prebuiltReleases.ollaya` in `hosts/shared/ai-agents-lib.nix`, package in `packages/ollaya`), aarch64-darwin only. `scripts/update-mcp-runtime-versions.py --write` bumps the version and its tarball hash together.
 - No launchd agent: the first `ollaya`, `ollaya-gate`, or MCP call starts a detached `ollaya serve` on `127.0.0.1:11435`. Loaded models unload after `OLLAYA_KEEP_ALIVE` (5m) idle; the idle daemon uses about 15 MB. `winnow:e4b` uses about 8 GB while loaded.
 - Models live in `~/.local/share/ollaya/models`, logs in `~/.local/state/ollaya/server.log`. The pidfile is always `~/.ollaya/server.11435.pid`.
-- `ollaya-gate` drops a hit only when `fetch=skip` reaches `ollaya.skipConfidence` (0.5). Expect about 0.4 s per hit warm, plus up to 26 s for a cold model load.
+- `ollaya-gate` drops a hit only when `fetch=skip` and either its confidence reaches `ollaya.skipConfidence` (0.5) or `relevant` is below `ollaya.dropRelevantBelow` (0.1). Expect about 0.4 s per hit warm, plus up to 26 s for a cold model load.
 - MCP access is opt-in via `mcp-profile-decide`; agents must pass `model: "linkgate"` and must not call `pull_model`. The bundled upstream `ollaya-decisions` skill is not installed: it recommends `curl | sh` installs and routing/triage use.
 
 #### AI Usage Reporting
