@@ -339,11 +339,6 @@ in
         publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHBw37pfQ1qRRONPampA3kv/2AhcmZxgzdMPcXuRI9Ue";
       };
 
-      personal-legacy = {
-        file = "id_ed25519_personal";
-        sopsKey = "ssh_key_personal";
-      };
-
       work = {
         file = "id_work";
         sopsKey = "ssh_key_work";
@@ -383,7 +378,7 @@ in
       };
 
       personal = {
-        identities = [ "personal" "personal-legacy" ];
+        identities = [ "personal" ];
         hosts = {
           "github.com-personal" = { HostName = "github.com"; User = "git"; };
         };
