@@ -41,7 +41,7 @@
 
     serena.url = "github:oraios/serena/v1.7.0";
 
-    codebase-memory-mcp.url = "github:DeusData/codebase-memory-mcp/v0.10.8";
+    codebase-memory-mcp.url = "github:DeusData/codebase-memory-mcp/v0.11.0";
 
     # Disko for declarative disk management
     disko = {
