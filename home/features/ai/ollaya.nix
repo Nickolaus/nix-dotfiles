@@ -198,6 +198,7 @@ in
     home.file.".codex/AGENTS.md".text = ollayaInstructions;
     home.file.".vibe/AGENTS.md".text = ollayaInstructions;
     home.file.".claude/CLAUDE.md".text = ollayaInstructions;
+    home.file.".config/opencode/AGENTS.md".text = ollayaInstructions;
 
     home.packages = [
       ollaya
