@@ -73,6 +73,43 @@ let
     ${pkgs.coreutils}/bin/mkdir -p "$cache_dir"
 
     export CBM_CACHE_DIR="$cache_dir"
+
+    # codebase-memory-mcp's daemon rendezvous socket is a single machine-wide
+    # namespace by default ($CBM_RUNTIME_DIR, default /tmp/cbm-daemon-<uid>),
+    # independent of $CBM_CACHE_DIR: whichever repo's client starts the daemon
+    # first "wins" it, and every other repo/worktree gets rejected with
+    # "CBM could not start because the active account daemon uses a different
+    # cache directory" until that daemon exits (DeusData/codebase-memory-mcp,
+    # observed on v0.10.8 and v0.11.0; see
+    # docs/codebase-memory-mcp-stale-lock-root-cause.md). v0.11.0 exposes
+    # CBM_RUNTIME_DIR as a supported override (confirmed via `strings` on the
+    # installed binary: `env_vars = ["CBM_CACHE_DIR", "CBM_RUNTIME_DIR"]`), so
+    # scope it per repo the same way CBM_CACHE_DIR is scoped above -- each
+    # repo then gets its own daemon instead of contending for one. Kept short
+    # (hash only, no nested repos/ dir) because Unix domain socket paths have
+    # a ~104-byte limit on macOS and the daemon's .sock files live directly
+    # under this directory.
+    runtime_dir="/tmp/cbm-daemon-$(${pkgs.coreutils}/bin/id -u)-$hash"
+    ${pkgs.coreutils}/bin/mkdir -p "$runtime_dir"
+    export CBM_RUNTIME_DIR="$runtime_dir"
+
+    # Upstream's daemon rendezvous/version-cohort lock has no PID-liveness
+    # check on its stale-generation reclaim path (DeusData/codebase-memory-mcp
+    # issue #2178, open as of v0.11.0): a hard-killed daemon leaves
+    # cbm-<hash>.sock/.anc/.lock/.startup-v2.lock/.lifetime.lock and
+    # cbm-version-cohort-*.lock files behind in $CBM_RUNTIME_DIR that wedge
+    # every future client in *this repo's* scoped runtime dir with "CBM
+    # daemon could not start within 30000 ms" / "pre-coordination or
+    # unverified CBM generation is active" forever. Check with `lsof` on this
+    # specific scoped runtime_dir rather than a global `pgrep` for the daemon
+    # process name: now that each repo has its own runtime dir, another
+    # repo's live daemon must not block cleanup of this repo's genuinely
+    # stale files, and this repo's own live daemon (if any) always has open
+    # file handles under its own runtime_dir.
+    if [ -n "$(${pkgs.coreutils}/bin/ls -A "$runtime_dir" 2>/dev/null)" ] && [ -z "$(/usr/bin/lsof +D "$runtime_dir" 2>/dev/null)" ]; then
+      ${pkgs.coreutils}/bin/rm -rf "''${runtime_dir:?}"/cbm-*
+    fi
+
     "$cbm_bin" config set auto_index true >/dev/null 2>&1 || true
 
     exec "$cbm_bin" "$@"
