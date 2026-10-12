@@ -42,7 +42,6 @@ let
     { name = "improve-codebase-architecture"; implicit = false; }
     { name = "prototype"; implicit = true; }
     { name = "research"; implicit = true; }
-    { name = "resolving-merge-conflicts"; implicit = true; }
     { name = "setup-matt-pocock-skills"; implicit = false; }
     { name = "tdd"; implicit = true; }
     { name = "to-spec"; implicit = false; }
