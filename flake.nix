@@ -19,12 +19,12 @@
     # AI agent source inputs. Flake input declarations must stay static here;
     # flake/ai-agent-sources.nix groups their typed use sites.
     caveman = {
-      url = "github:JuliusBrussee/caveman/v2.6.0";
+      url = "github:JuliusBrussee/caveman/v3.2.0";
       flake = false;
     };
 
     mattpocock-skills = {
-      url = "github:mattpocock/skills/v1.2.3";
+      url = "github:mattpocock/skills/v1.3.1";
       flake = false;
     };
 
