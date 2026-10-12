@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import re
 import subprocess
 import sys
@@ -68,13 +69,14 @@ def fetch_text(url: str) -> str:
 
 
 def fetch_json(url: str) -> dict:
-    request = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "nix-dotfiles-mcp-runtime-version-check",
-        },
-    )
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "nix-dotfiles-mcp-runtime-version-check",
+    }
+    github_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if github_token and url.startswith("https://api.github.com/"):
+        headers["Authorization"] = f"Bearer {github_token}"
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.load(response)
 
