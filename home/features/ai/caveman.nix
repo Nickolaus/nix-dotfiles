@@ -168,14 +168,17 @@ in
       Self-cleaning: this activation script always runs, and disabling this runs
       the installer's own `--uninstall`, which removes exactly its own settings.json
       entries and hook files (confirmed it preserves unrelated hooks -- e.g. an IDE's
-      own installer, or rtk's -- untouched). Independent of the always-on CLAUDE.md
-      skill text above, which this option does not affect.
+      own installer, or rtk's -- untouched). When disabled, the pinned SKILL.md is
+      embedded in Claude's global CLAUDE.md instead (hooks otherwise inject it).
     '';
   };
 
   config.home.file = {
     ".codex/AGENTS.md".text = cavemanDefaultInstructions;
     ".vibe/AGENTS.md".text = cavemanDefaultInstructions;
+  } // lib.optionalAttrs (!cfg.claudeHooks.enable) {
+    # With hooks installed, SessionStart/UserPromptSubmit already inject the
+    # ruleset into Claude Code; embedding it too pays the same tokens every turn.
     ".claude/CLAUDE.md".text = cavemanDefaultInstructions;
   };
 
