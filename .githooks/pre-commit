@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Fast guardrail for staged changes. Heavy validation: scripts/check-config.sh.
+# Bypass in an emergency with `git commit --no-verify`.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[[ -z "$staged" ]] && exit 0
+
+nix_files=$(grep -E '\.nix$' <<<"$staged" || true)
+if [[ -n "$nix_files" ]]; then
+    echo "pre-commit: parsing staged .nix files" >&2
+    while IFS= read -r f; do
+        nix-instantiate --parse "$f" >/dev/null
+    done <<<"$nix_files"
+fi
+
+sh_files=$(grep -E '\.sh$' <<<"$staged" || true)
+if [[ -n "$sh_files" ]]; then
+    echo "pre-commit: bash -n on staged scripts" >&2
+    while IFS= read -r f; do
+        bash -n "$f"
+    done <<<"$sh_files"
+fi
+
+# Catalog manifest eval catches removed or renamed skill pins and broken
+# module wiring (the usual `update-system` failure) in one targeted eval.
+if grep -qE '^(flake\.(nix|lock)|flake/|hosts/|home/|modules/|overlays/|packages/)' <<<"$staged" \
+    && [[ "$(uname -s)" == Darwin ]]; then
+    echo "pre-commit: evaluating zoidberg catalog manifest" >&2
+    nix eval --raw '.#darwinConfigurations.zoidberg.config.home-manager.users."C.Hessel".home.file.".agents/catalog/manifest.json".text' >/dev/null
+fi
