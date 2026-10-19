@@ -421,9 +421,6 @@ in
         fetch = mkUvxMcpServer {
           package = "mcp-server-fetch";
           version = mcpPackageVersions.pypi.fetch;
-          # mcp-server-fetch 2026.7.10 still imports `McpError`; mcp 2.0.0
-          # renamed that symbol to `MCPError`, crashing before initialize.
-          withPackages = [ "mcp<2" ];
         };
         # @modelcontextprotocol/server-memory defaults to storing memory.jsonl
         # next to its own installed package, not per-repo -- it's already a
@@ -445,9 +442,6 @@ in
         time = mkUvxMcpServer {
           package = "mcp-server-time";
           version = mcpPackageVersions.pypi.time;
-          # mcp-server-time 2026.7.10 has the same pre-handshake mcp 2.x
-          # import incompatibility as fetch.
-          withPackages = [ "mcp<2" ];
         };
         # Single-purpose (Jira/Confluence) -- not natively registered,
         # reachable via aiAgents.mcpProfiles.atlassian.
