@@ -10,27 +10,27 @@ rec {
   mcpPackageVersions = {
     npm = {
       # renovate: datasource=npm depName=@upstash/context7-mcp
-      context7 = "4.3.0";
+      context7 = "4.4.3";
       # renovate: datasource=npm depName=chrome-devtools-mcp
-      chromeDevtools = "1.10.1";
+      chromeDevtools = "1.11.0";
       # renovate: datasource=npm depName=puppeteer-mcp-server
       puppeteer = "0.7.2";
       # renovate: datasource=npm depName=@modelcontextprotocol/server-memory
-      memory = "1.0.0";
+      memory = "2.0.0";
       # renovate: datasource=npm depName=@modelcontextprotocol/server-sequential-thinking
-      sequentialThinking = "1.0.0";
+      sequentialThinking = "2.0.0";
     };
     pypi = {
       # renovate: datasource=pypi depName=crawl4ai versioning=pep440
-      crawl4ai = "0.9.4";
+      crawl4ai = "0.9.5";
       # renovate: datasource=pypi depName=mcp-server-fetch versioning=pep440
-      fetch = "2026.10.10";
+      fetch = "2026.10.19";
       # renovate: datasource=pypi depName=headroom-ai versioning=pep440
-      headroom = "0.40.0";
+      headroom = "0.41.0";
       # renovate: datasource=pypi depName=mcp-nixos versioning=pep440
       nixos = "3.1.0";
       # renovate: datasource=pypi depName=mcp-server-time versioning=pep440
-      time = "2026.10.10";
+      time = "2026.10.19";
     };
   };
 
@@ -40,9 +40,9 @@ rec {
   prebuiltReleases = {
     ollaya = {
       # renovate: datasource=github-releases depName=ollaya-dev/ollaya
-      version = "0.12.1";
+      version = "0.14.0";
       # release-sha256: depName=ollaya-dev/ollaya asset=ollaya-darwin-arm64.tgz
-      darwinArm64Hash = "sha256-PzBtIwkNgCMEXEvApT1GBg+tMqWljxT+VLhQRMYGnWw=";
+      darwinArm64Hash = "sha256-axIdFzKMCNXB+cHbX2Cz6lKm0yDaUkJjfls4WB6W7lI=";
     };
   };
 

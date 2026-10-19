@@ -19,7 +19,7 @@ DRY_RUN=false
 CLEANUP_ONLY=false
 SKIP_SKILL_SCAN=false
 # renovate: datasource=github-tags depName=NVIDIA/skillspector
-SKILLSPECTOR_TAG="v2.12.0"
+SKILLSPECTOR_TAG="v2.13.0"
 SKILLSPECTOR_REPO="https://github.com/NVIDIA/skillspector.git"
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
