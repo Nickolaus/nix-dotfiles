@@ -17,6 +17,11 @@ let
   mattpocockSkillsSrc = aiSources.skills.mattpocock-skills;
   iHaveAdhdSrc = aiSources.skills.i-have-adhd;
 
+  # A skill is implicitly invocable unless its own frontmatter opts out.
+  skillIsImplicit = skillMd:
+    builtins.match ".*disable-model-invocation: true.*"
+      (builtins.head (lib.splitString "\n---\n" skillMd)) == null;
+
   mattpocockSkill = { category, name, implicit }: {
     inherit name;
     value = {
@@ -31,42 +36,50 @@ let
     };
   };
 
-  mattpocockEngineeringSkills = [
-    { name = "ask-matt"; implicit = false; }
-    { name = "code-review"; implicit = true; }
-    { name = "codebase-design"; implicit = true; }
-    { name = "diagnosing-bugs"; implicit = true; }
-    { name = "domain-modeling"; implicit = true; }
-    { name = "grill-with-docs"; implicit = false; }
-    { name = "implement"; implicit = false; }
-    { name = "improve-codebase-architecture"; implicit = false; }
-    { name = "prototype"; implicit = true; }
-    { name = "research"; implicit = true; }
-    { name = "setup-matt-pocock-skills"; implicit = false; }
-    { name = "tdd"; implicit = true; }
-    { name = "to-spec"; implicit = false; }
-    { name = "to-tickets"; implicit = false; }
-    { name = "triage"; implicit = false; }
-    { name = "wayfinder"; implicit = false; }
-  ];
+  # Upstream's plugin manifest is the curated release list: it excludes
+  # deprecated, in-progress and misc skills, so a version bump needs no
+  # catalog edits. Implicit invocation follows each skill's own frontmatter.
+  mattpocockManifest = builtins.fromJSON
+    (builtins.readFile (mattpocockSkillsSrc + "/.claude-plugin/plugin.json"));
 
-  mattpocockProductivitySkills = [
-    { name = "grill-me"; implicit = false; }
-    { name = "grilling"; implicit = true; }
-    { name = "handoff"; implicit = false; }
-    { name = "teach"; implicit = false; }
-    { name = "writing-for-agents"; implicit = false; }
-  ];
+  mattpocockSkills = map
+    (path:
+      let
+        parts = lib.splitString "/" path;
+        name = lib.last parts;
+        skillMd = builtins.readFile (mattpocockSkillsSrc + "/skills/${builtins.elemAt parts 2}/${name}/SKILL.md");
+      in
+      {
+        inherit name;
+        category = builtins.elemAt parts 2;
+        implicit = skillIsImplicit skillMd;
+      })
+    mattpocockManifest.skills;
 
-  cavemanSkills = [
-    "caveman"
-    "caveman-commit"
-    "caveman-review"
-    "caveman-compress"
-    "caveman-help"
-    "caveman-stats"
-    "cavecrew"
-  ];
+  # Upstream's skill registry marks the output-style skills (suite "output")
+  # and lists the standalone ones in preserved_skill_ids. Cloud, agent-native
+  # and native-pack skills are deliberately left out: a new upstream skill in
+  # an unlisted suite stays opt-in. Implicit invocation follows frontmatter.
+  cavemanRegistry = builtins.fromJSON (builtins.readFile (cavemanSrc + "/skills/registry.json"));
+
+  cavemanSkills = lib.unique (
+    cavemanRegistry.preserved_skill_ids
+    ++ map (skill: skill.id)
+      (builtins.filter (skill: builtins.elem "output" (skill.suites or [ ])) cavemanRegistry.skills)
+  );
+
+  # Upstream skills this catalog deliberately does not install, surfaced by
+  # agent-catalog-check so a new upstream skill is noticed, not silently ignored.
+  mattpocockOnboarded = map (skill: skill.name) mattpocockSkills;
+  mattpocockNotOnboarded = lib.concatMap
+    (category:
+      lib.filter (name: !(builtins.elem name mattpocockOnboarded))
+        (builtins.attrNames (lib.filterAttrs (_: type: type == "directory")
+          (builtins.readDir (mattpocockSkillsSrc + "/skills/${category}")))))
+    (builtins.attrNames (lib.filterAttrs (_: type: type == "directory")
+      (builtins.readDir (mattpocockSkillsSrc + "/skills"))));
+  cavemanNotOnboarded = lib.filter (id: !(builtins.elem id cavemanSkills))
+    (map (skill: skill.id) cavemanRegistry.skills);
 
   browserQaLabSkill = ''
     ---
@@ -359,6 +372,12 @@ in
       default = true;
     };
 
+    upstreamNotOnboarded = mkOption {
+      type = types.attrsOf (types.listOf types.str);
+      default = { };
+      description = "Upstream skills each pinned source ships that this catalog deliberately leaves out.";
+    };
+
     skills = mkOption {
       type = types.attrsOf skillType;
       default =
@@ -368,31 +387,20 @@ in
               name = skill;
               value = {
                 source = cavemanSrc + "/skills/${skill}";
-                # Claude gets default caveman behavior from managed
-                # ~/.claude/CLAUDE.md plus optional hooks in caveman.nix.
-                targets = [ "codex" "cursor" "vibe" ];
+                # Default caveman behavior comes from the managed global
+                # instructions file plus the Claude hooks in caveman.nix; the
+                # marketplace plugin is removed there, so skills ship from here.
+                targets = [ "codex" "claude" "cursor" "vibe" ];
                 trust = "pinned-flake";
                 owner = "caveman";
-                implicit = true;
+                implicit = skillIsImplicit (builtins.readFile (cavemanSrc + "/skills/${skill}/SKILL.md"));
               };
             })
             cavemanSkills)
         // builtins.listToAttrs
           (map
-            (skill:
-              mattpocockSkill {
-                category = "engineering";
-                inherit (skill) name implicit;
-              })
-            mattpocockEngineeringSkills)
-        // builtins.listToAttrs
-          (map
-            (skill:
-              mattpocockSkill {
-                category = "productivity";
-                inherit (skill) name implicit;
-              })
-            mattpocockProductivitySkills)
+            (skill: mattpocockSkill { inherit (skill) category name implicit; })
+            mattpocockSkills)
         // {
           browser-qa-lab = {
             text = browserQaLabSkill;
@@ -483,6 +491,11 @@ in
   };
 
   config = mkIf (config.aiAgents.enable && cfg.enable) {
+    aiAgents.catalog.upstreamNotOnboarded = {
+      "github:mattpocock/skills" = mattpocockNotOnboarded;
+      caveman = cavemanNotOnboarded;
+    };
+
     assertions =
       lib.mapAttrsToList
         (name: skill: {

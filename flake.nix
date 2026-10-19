@@ -19,7 +19,7 @@
     # AI agent source inputs. Flake input declarations must stay static here;
     # flake/ai-agent-sources.nix groups their typed use sites.
     caveman = {
-      url = "github:JuliusBrussee/caveman/v3.2.0";
+      url = "github:JuliusBrussee/caveman/v4.0.1";
       flake = false;
     };
 
@@ -28,8 +28,10 @@
       flake = false;
     };
 
+    # No upstream tags/releases as of pinning; pinned by commit instead so
+    # `nix flake update` cannot move it silently.
     gstack = {
-      url = "github:garrytan/gstack/main";
+      url = "github:garrytan/gstack/e23f7b807ff4788f6d7c90af2ab82960bd8c5851";
       flake = false;
     };
 

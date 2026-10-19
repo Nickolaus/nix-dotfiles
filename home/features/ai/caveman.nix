@@ -39,7 +39,11 @@ let
   nodePackage = pkgs.nodejs_24;
   node = "${nodePackage}/bin/node";
   claudeHookNode = "${perUserSystemProfileBin}/node";
-  installer = "${cavemanSrc}/bin/install.js";
+  installer = "${cavemanSrc}/installer/install.js";
+  # Hooks-only installer: copies the pinned hook scripts and wires settings.json
+  # without touching Claude Code plugins. The unified installer above always
+  # installs the marketplace plugin, which runs its own copy of the same hooks.
+  hooksInstaller = "${cavemanSrc}/src/hooks/install.sh";
   repairClaudeHookNode = pkgs.writeShellScript "caveman-repair-claude-hook-node" ''
     set -euo pipefail
 
@@ -56,7 +60,7 @@ let
 
     const settingsPath = process.argv[2];
     const hookNode = process.argv[3];
-    const managed = new Set(["caveman-activate.js", "caveman-mode-tracker.js"]);
+    const managed = new Set(["caveman-activate.js", "caveman-mode-tracker.js", "caveman-stats.js"]);
 
     function tokenize(command) {
       const out = [];
@@ -107,9 +111,11 @@ let
           if (!entry || !Array.isArray(entry.hooks)) continue;
           for (const hook of entry.hooks) {
             if (!hook || typeof hook.command !== "string") continue;
-            const script = tokenize(hook.command).find((part) => managed.has(path.basename(part)));
-            if (!script) continue;
-            const next = shellQuote(hookNode) + " " + shellQuote(script);
+            const tokens = tokenize(hook.command);
+            const at = tokens.findIndex((part) => managed.has(path.basename(part)));
+            if (at < 0) continue;
+            // Keep flags after the script (--subagent, --record): they pick the hook's mode.
+            const next = [shellQuote(hookNode), shellQuote(tokens[at]), ...tokens.slice(at + 1).map(shellQuote)].join(" ");
             if (hook.command !== next) {
               hook.command = next;
               changed = true;
@@ -155,8 +161,10 @@ in
     type = lib.types.bool;
     default = true;
     description = ''
-      Install caveman's Claude Code plugin + SessionStart/UserPromptSubmit hooks +
-      statusline badge (via the upstream installer's `--with-hooks` mode).
+      Install caveman's SessionStart/SubagentStart/UserPromptSubmit/SessionEnd hooks +
+      statusline badge from the pinned flake input (upstream's hooks-only
+      `src/hooks/install.sh`), and remove the marketplace plugin, which would run
+      its own unpinned copy of the same hooks and fire every event twice.
       Self-cleaning: this activation script always runs, and disabling this runs
       the installer's own `--uninstall`, which removes exactly its own settings.json
       entries and hook files (confirmed it preserves unrelated hooks -- e.g. an IDE's
@@ -175,19 +183,20 @@ in
     PATH="${perUserSystemProfileBin}:$PATH"
     if command -v claude >/dev/null 2>&1; then
       ${if cfg.claudeHooks.enable then ''
-        # Upstream installer copies hook files from a read-only Nix store source; the
-        # copies inherit that read-only mode, so re-running without this chmod fails
-        # with "EACCES: permission denied" on the second and every subsequent switch
-        # (confirmed directly). --force is deliberately not used here: without it the
-        # installer correctly skips the already-installed plugin/marketplace steps
-        # (no needless network calls on every rebuild) and only re-copies hook files.
+        # The marketplace plugin tracks upstream outside the flake pin and wires the same
+        # hooks as the standalone install, so keeping both fires each hook twice. Remove
+        # it every switch; both commands fail harmlessly once it is gone.
+        claude plugin uninstall caveman@caveman --yes >/dev/null 2>&1 || true
+        claude plugin marketplace remove caveman >/dev/null 2>&1 || true
+        # Hook files are copied from the read-only Nix store and inherit that mode, so
+        # make them writable first or the next switch fails with "EACCES: permission
+        # denied" (confirmed directly). --force re-copies them from the pinned source.
         chmod -R u+w "$HOME/.claude/hooks" 2>/dev/null || true
-        ${node} ${installer} --only claude --with-hooks --no-mcp-shrink --non-interactive || true
-        # Caveman's installer records process.execPath into settings.json. If the
-        # plugin is ever run by Homebrew's node, that becomes a versioned Cellar path
-        # and breaks on the next brew upgrade. Keep Claude settings mutable, but
-        # declaratively normalize only our managed hook commands to the stable Nix
-        # profile node path after every switch.
+        ${pkgs.bash}/bin/bash ${hooksInstaller} --force || true
+        # Hook commands use whatever `node` is first on PATH. If that is Homebrew's node,
+        # the command pins a versioned Cellar path that breaks on the next brew upgrade.
+        # Keep Claude settings mutable, but declaratively normalize only our managed hook
+        # commands to the stable Nix profile node path after every switch.
         ${repairClaudeHookNode} "$HOME/.claude/settings.json" ${lib.escapeShellArg claudeHookNode} \
           || echo "Warning: failed to normalize caveman Claude hook node path" >&2
       '' else ''
@@ -238,28 +247,39 @@ in
       echo "the way it is for the other three. To force it in Cursor too: Cursor Settings > Rules >"
       echo "User Rules, and paste a short pointer at the skill (one-time manual step, per-machine)."
       echo
-      echo "Claude's caveman plugin + hooks + statusline (beyond the default CLAUDE.md style"
-      echo "above) install automatically on every switch (caveman.claudeHooks.enable, default"
-      echo "true) -- self-cleaning, so setting it false and rebuilding runs the real"
-      echo "'--uninstall' and removes them again. For just the plugin without hooks/statusline,"
-      echo "run caveman-claude-install-minimal by hand."
+      echo "Claude hooks + statusline come from the pinned source on every switch"
+      echo "(caveman.claudeHooks.enable, default true): src/hooks/install.sh. The marketplace"
+      echo "plugin is removed on every switch because it runs a second, unpinned copy of the"
+      echo "same hooks. Setting the option false and rebuilding runs the real '--uninstall'."
+      echo
+      echo "Claude hook wiring (each caveman event should appear exactly once):"
+      ${node} - "$HOME/.claude/settings.json" <<'JS'
+      const fs = require("fs");
+      let settings = {};
+      try { settings = JSON.parse(fs.readFileSync(process.argv[2], "utf8")); } catch (_) {}
+      const counts = {};
+      for (const [event, entries] of Object.entries(settings.hooks || {})) {
+        for (const entry of entries || []) {
+          for (const hook of entry.hooks || []) {
+            if (/caveman-(activate|mode-tracker|stats)\.js/.test(hook.command || "")) {
+              counts[event] = (counts[event] || 0) + 1;
+            }
+          }
+        }
+      }
+      for (const event of ["SessionStart", "SubagentStart", "UserPromptSubmit", "SessionEnd"]) {
+        const n = counts[event] || 0;
+        console.log("  " + (n === 1 ? "ok      " : n === 0 ? "missing " : "DUPLICATE") + " " + event + " (" + n + ")");
+      }
+      const plugin = (settings.enabledPlugins || {})["caveman@caveman"];
+      if (plugin !== undefined) console.log("  DUPLICATE plugin caveman@caveman still enabled in settings.json (plugin runs its own hooks)");
+      JS
     '')
 
     (pkgs.writeShellScriptBin "caveman-upstream-dry-run" ''
       set -euo pipefail
 
       exec ${node} ${installer} --dry-run --minimal --no-mcp-shrink "$@"
-    '')
-
-    (pkgs.writeShellScriptBin "caveman-claude-install-minimal" ''
-      set -euo pipefail
-
-      if ! command -v claude >/dev/null 2>&1; then
-        echo "claude command not found. Apply the profile that installs claude-code first." >&2
-        exit 1
-      fi
-
-      exec ${node} ${installer} --only claude --minimal --no-mcp-shrink --non-interactive "$@"
     '')
   ];
 }
