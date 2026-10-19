@@ -80,7 +80,16 @@ in
       fetch.writeCommitGraph = true;
       feature.manyFiles = true;
       index.version = 4;
-      core.fsmonitor = true;
+      # Daemon mode leaks one orphaned git-core/git fsmonitor--daemon process
+      # per repo path touched, never reaped (confirmed upstream: no idle
+      # timeout on any platform, see docs/git-fsmonitor-daemon-leak-root-cause.md).
+      # Hit 964 stale daemons / 4.4GB RSS after 5 days of agent sessions across
+      # many repos/worktrees, driving swap/load high enough to stall unrelated
+      # process launches system-wide. Default off; opted back in below only
+      # for sbp (16k+ tracked files — the one repo where the git-status win is
+      # worth the per-worktree daemon), via an exact includeIf so ephemeral
+      # agent worktrees elsewhere never spawn one.
+      core.fsmonitor = false;
       core.untrackedCache = true;
       init.templateDir = "~/.config/git/templates";
 
@@ -92,6 +101,12 @@ in
       includeIf."gitdir:${homeDir}/Programming/work/".path = "~/.config/git/work.inc";
       includeIf."gitdir:${homeDir}/Programming/personal/".path = "~/.config/git/personal.inc";
       includeIf."gitdir:${homeDir}/.config/nix-dotfiles/".path = "~/.config/git/personal.inc";
+
+      # Trailing slash: also covers sbp's own linked worktrees (task branches
+      # under orca/workspaces, /private/tmp), which are long-lived dev
+      # checkouts, not the ephemeral agent throwaways core.fsmonitor=false
+      # above is protecting everything else from.
+      includeIf."gitdir:${homeDir}/Programming/work/sbp/".path = "~/.config/git/fsmonitor-enabled.inc";
     };
   };
 
@@ -110,6 +125,11 @@ in
   };
 
   home.file = gitIncludes // {
+    ".config/git/fsmonitor-enabled.inc".text = ''
+      [core]
+        fsmonitor = true
+    '';
+
     ".ssh/allowed_signers".text =
       lib.concatStringsSep "\n" (lib.mapAttrsToList signerLine keys.signing.keys);
 
