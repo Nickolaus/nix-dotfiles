@@ -239,6 +239,10 @@ update_determinate() {
 update_configuration() {
     log_step "Step 3: Updating Configuration"
 
+    # Tag and commit pins never move with `nix flake update`; surface the ones that lag.
+    log_info "Checking skill source pins against upstream..."
+    ./scripts/check-skill-pins.sh || log_warning "Skill pin check failed; continuing"
+
     log_info "Updating flake inputs to latest versions..."
     if nix flake update; then
         log_success "Flake inputs updated successfully"

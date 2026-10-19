@@ -150,6 +150,7 @@ let
       (builtins.attrNames cfg.skills);
     roles = builtins.attrNames cfg.roles;
     plugins = builtins.attrNames cfg.plugins;
+    upstreamNotOnboarded = cfg.upstreamNotOnboarded or { };
     inherit roleCountsByTarget pluginCountsByTarget;
   };
 
@@ -272,6 +273,44 @@ let
                 warnings.append(f"{skill['name']}: description is very short")
             elif len(description) > 1024:
                 errors.append(f"{skill['name']}: description exceeds 1024 chars")
+
+    # Rendered copies must match the pinned source: a mismatch means the last
+    # switch did not apply (or a file was edited by hand).
+    for skill in manifest.get("skills", []):
+        if not skill.get("managed") or not skill.get("scanSources"):
+            continue
+        source = os.path.join(skill["scanSources"][0], "SKILL.md")
+        if not os.path.isfile(source):
+            continue
+        with open(source, "rb") as f:
+            expected = f.read()
+        for rel in skill.get("renderedSkillFiles", []):
+            path = os.path.join(home, rel)
+            if os.path.isfile(path):
+                with open(path, "rb") as f:
+                    if f.read() != expected:
+                        errors.append(f"{skill['name']}: {path} differs from pinned source (switch not applied?)")
+
+    # Skill directories no catalog entry accounts for (e.g. a skill removed
+    # upstream or dropped from the catalog) keep shadowing until deleted.
+    expected_dirs = {d for skill in manifest.get("skills", []) for d in skill.get("expectedSkillDirs", [])}
+    for root in sorted({os.path.dirname(d) for d in expected_dirs}):
+        full_root = os.path.join(home, root)
+        if not os.path.isdir(full_root):
+            continue
+        for entry in sorted(os.listdir(full_root)):
+            rel = os.path.join(root, entry)
+            if entry.startswith(".") or entry == "synced" or rel in expected_dirs:
+                continue
+            if os.path.isdir(os.path.join(full_root, entry)):
+                warnings.append(f"orphan skill directory not in the catalog: {rel}")
+
+    not_onboarded = manifest.get("upstreamNotOnboarded", {})
+    if any(not_onboarded.values()):
+        print("Upstream skills deliberately not onboarded:")
+        for owner, names in sorted(not_onboarded.items()):
+            if names:
+                print(f"  {owner}: {', '.join(sorted(names))}")
 
     if warnings:
         print("Warnings:")

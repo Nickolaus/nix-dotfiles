@@ -517,20 +517,28 @@ vibe-status         # Managed MCP server list, config path, skills note
 - **Serena context**: no `targetOverrides.vibe` was added for Serena — Vibe inherits the base `--context=codex` args, since both are terminal-style CLI agents with equivalent tool-schema needs.
 - `vibe-status` lists the exact managed server names and the current Headroom routing state, so you can tell a Nix-managed entry apart from anything you've added yourself.
 
-#### Caveman Agent Compression
+#### Skill Catalog Upkeep
 ```bash
-caveman-status                  # Check pinned Codex skill install and usage hints
-caveman-upstream-dry-run        # Preview Caveman upstream installer actions
-caveman-claude-install-minimal  # Explicit Claude plugin install, no hooks/MCP shrink
-caveman-claude-install-full     # Explicit Claude plugin + hooks, no MCP shrink
+./scripts/check-skill-pins.sh   # Compare pinned skill sources (caveman, mattpocock-skills, gstack, i-have-adhd) with upstream; update-system.sh runs it before `nix flake update`
+agent-catalog-check             # After a switch: rendered skills exist, match the pinned source, no orphan dirs; lists upstream skills deliberately not onboarded
+./scripts/check-config.sh       # Pre-switch: evaluates configs and runs the SkillSpector gate on the candidate catalog
 ```
 
-- Caveman skills are installed declaratively from the pinned Nix flake input into **both** `~/.agents/skills/` (Codex, Vibe — both follow the [Agent Skills spec](https://agentskills.io/specification)) **and** `~/.cursor/skills/` (Cursor's own equally-documented global skills location, [cursor.com/docs/skills](https://cursor.com/docs/skills)) — same source, same list, fanned out to both prefixes from one place in `caveman.nix` rather than hand-duplicated. No manifest/registration step needed for either; Cursor's own built-in skills stay separate under `~/.cursor/skills-cursor/`.
-- **Full-intensity caveman style is on by default** for Codex, Vibe, and Claude Code — each tool's global instructions file (`~/.codex/AGENTS.md`, `~/.vibe/AGENTS.md`, `~/.claude/CLAUDE.md`) gets a short "activate immediately" preamble followed by the pinned `caveman` flake input's own `SKILL.md` embedded **verbatim** (`builtins.readFile`, not a hand-copied paraphrase) — single source of truth, so bumping the flake input is the only thing ever needed to keep the default style current. None of these mutate app-owned settings/MCP state, so — unlike the Claude plugin/hook install below — they're safe to enable unconditionally.
+- Tag and commit pins never move with `nix flake update`, so a lagging pin only shows up in `check-skill-pins.sh`. Bump a tag pin in `flake.nix`, then `nix flake update <input>`.
+- Matt Pocock skills follow the pinned release's `.claude-plugin/plugin.json`; caveman skills follow `skills/registry.json` (suite `output` plus `preserved_skill_ids`). Both are derived at eval time, so a bump needs no list edits. Skills upstream adds in other suites stay opt-in and show up under "not onboarded".
+
+#### Caveman Agent Compression
+```bash
+caveman-status                  # Check pinned skill installs and that each Claude hook is wired exactly once
+caveman-upstream-dry-run        # Preview Caveman upstream installer actions
+```
+
+- Caveman skills are installed declaratively from the pinned Nix flake input into `~/.claude/skills/`, `~/.agents/skills/` (Codex, Vibe — both follow the [Agent Skills spec](https://agentskills.io/specification)) and `~/.cursor/skills/` (Cursor's own equally-documented global skills location, [cursor.com/docs/skills](https://cursor.com/docs/skills)) — same source, same list, fanned out to every prefix from `hosts/shared/ai-agent-catalog.nix` rather than hand-duplicated. No manifest/registration step needed for either; Cursor's own built-in skills stay separate under `~/.cursor/skills-cursor/`.
+- **Full-intensity caveman style is on by default** for Codex, Vibe, and Claude Code — each tool's global instructions file (`~/.codex/AGENTS.md`, `~/.vibe/AGENTS.md`, `~/.claude/CLAUDE.md`) gets a short "activate immediately" preamble followed by the pinned `caveman` flake input's own `SKILL.md` embedded **verbatim** (`builtins.readFile`, not a hand-copied paraphrase) — single source of truth, so bumping the flake input is the only thing ever needed to keep the default style current. None of these mutate app-owned settings/MCP state, so — unlike the Claude hook install below — they're safe to enable unconditionally.
 - **Cursor is the one exception to "on by default"**: it has no global-rules file Nix can manage — Cursor's own docs/help confirm "User Rules" live only in opaque local settings state (not exported to disk, no `settings.json` key), unlike its file-based Project Rules (`.cursor/rules/*.mdc`) or the skills directory above. So the skill is *available* in Cursor (invoke with `/caveman` or a matching request, exactly like Cursor's own built-in skills) but not forced on-by-default the way it is for the other three. To force it in Cursor too: Cursor Settings ➜ Rules ➜ User Rules, paste a short pointer at the skill (one-time manual step, per-machine, not automatable).
 - Say `stop caveman` / `normal mode` to turn it off for the rest of a session (it resumes as the default next session); switch intensity with `/caveman lite|full|ultra` (Codex/Vibe skill invocation) or plain language.
 - Caveman's upstream `/caveman` convention is not registered as a current Codex CLI slash command by this declarative setup.
-- Claude's caveman *skill/plugin* install (`caveman-claude-install-minimal`/`-full`, beyond the default `CLAUDE.md` style above) stays explicit because it mutates Claude-managed plugin/hook state.
+- Claude hooks and the statusline badge are installed on every switch from the pinned source (`src/hooks/install.sh`, `caveman.claudeHooks.enable`). The upstream marketplace plugin is removed on every switch: it runs a second, unpinned copy of the same hooks, so each event would fire twice. Do not `claude plugin install caveman@caveman` by hand. `caveman-status` flags duplicates.
 - `caveman-shrink` and repo-local `--with-init` rules are intentionally not default.
 
 #### Troubleshooting
