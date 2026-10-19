@@ -80,8 +80,7 @@ let
     # first "wins" it, and every other repo/worktree gets rejected with
     # "CBM could not start because the active account daemon uses a different
     # cache directory" until that daemon exits (DeusData/codebase-memory-mcp,
-    # observed on v0.10.8 and v0.11.0; see
-    # docs/codebase-memory-mcp-stale-lock-root-cause.md). v0.11.0 exposes
+    # observed on v0.10.8 and v0.11.0). v0.11.0 exposes
     # CBM_RUNTIME_DIR as a supported override (confirmed via `strings` on the
     # installed binary: `env_vars = ["CBM_CACHE_DIR", "CBM_RUNTIME_DIR"]`), so
     # scope it per repo the same way CBM_CACHE_DIR is scoped above -- each
