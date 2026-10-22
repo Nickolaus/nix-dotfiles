@@ -47,7 +47,7 @@
       flake = false;
     };
 
-    serena.url = "github:oraios/serena/v2.0.0";
+    serena.url = "github:oraios/serena/v2.1.0";
 
     codebase-memory-mcp.url = "github:DeusData/codebase-memory-mcp/v0.12.1";
 

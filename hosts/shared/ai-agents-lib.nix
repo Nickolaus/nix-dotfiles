@@ -40,9 +40,9 @@ rec {
   prebuiltReleases = {
     ollaya = {
       # renovate: datasource=github-releases depName=ollaya-dev/ollaya
-      version = "0.14.0";
+      version = "0.16.0";
       # release-sha256: depName=ollaya-dev/ollaya asset=ollaya-darwin-arm64.tgz
-      darwinArm64Hash = "sha256-axIdFzKMCNXB+cHbX2Cz6lKm0yDaUkJjfls4WB6W7lI=";
+      darwinArm64Hash = "sha256-ViYZsm9vnkRrlCRK55FZk6eadf5YtoMYHEaSckDIfPI=";
     };
   };
 
