@@ -5,7 +5,7 @@ description: Use when adding, importing, pinning, reviewing, or updating Agent S
 
 # Nix Skill Onboard
 
-Use this repo-scoped skill to onboard a requested Agent Skill into this repository's Nix-managed `aiAgents.catalog`, or to explain why it should stay out of the catalog.
+Use this repo-scoped skill to onboard a requested Agent Skill into this repository's Nix-managed `aiAgents.catalog`, or to explain why it fails trust, metadata, or security review. Fit, value, and overlap with installed tools belong to `ai-tool-evaluate`; run it first when that decision is still open.
 
 This skill is itself project-local. Keep its source of truth under `.agents/skills/nix-skill-onboard`; do not add `nix-skill-onboard` to `aiAgents.catalog`.
 
