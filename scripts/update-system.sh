@@ -472,6 +472,8 @@ update_homebrew() {
     if ! HOMEBREW_NO_AUTO_UPDATE=1 brew bundle --file="$brewfile" --no-upgrade --jobs=1; then
         rm -f "$brewfile"
         log_error "Homebrew bundle convergence failed"
+        # A self-updating app that Homebrew no longer tracks fails adoption here.
+        log_info "If a cask failed with 'chgrp: ... Operation not permitted', re-adopt it from a terminal that has App Management permission: brew install --cask --adopt <cask>"
         exit 1
     fi
 
