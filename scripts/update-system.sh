@@ -211,36 +211,42 @@ update_determinate() {
         return 0
     fi
 
-    log_info "Checking current Determinate Nix version..."
-    current_version=$(determinate-nixd version 2> /dev/null || echo "unknown")
-    log_info "Current version: $current_version"
+    current_version=$(determinate_version)
+    log_info "Current Determinate Nix version: $current_version"
 
-    log_info "Upgrading Determinate Nix to latest version..."
-    if sudo determinate-nixd upgrade; then
-        log_success "Determinate Systems upgraded successfully"
-
-        # Check new version
-        new_version=$(determinate-nixd version 2> /dev/null || echo "unknown")
-        log_info "New version: $new_version"
-
-        # Verify upgrade
-        log_info "Verifying upgrade completed successfully..."
-        daemon_status=""
-        if daemon_status=$(sudo determinate-nixd status 2>&1); then
-            log_success "Determinate Systems is healthy after upgrade"
-        elif echo "$daemon_status" | grep -q "invalid-token"; then
-            log_warning "Determinate Systems is running after upgrade (FlakeHub token expired)"
-            log_info "This is non-critical. To restore FlakeHub access: determinate-nixd login"
-        else
-            log_error "Determinate Systems daemon issues after upgrade"
-            print_indented_error "$daemon_status"
-            log_info "Try restarting with: $(determinate_restart_hint)"
-            exit 1
-        fi
-    else
-        log_warning "Determinate Systems upgrade failed or not needed"
-    # Continue anyway as this might not be critical
+    if ! sudo determinate-nixd upgrade; then
+        # Not critical: the rest of the update works on the current daemon.
+        log_warning "Determinate Systems upgrade failed; continuing"
+        return 0
     fi
+
+    new_version=$(determinate_version)
+    if [[ "$new_version" == "$current_version" ]]; then
+        log_success "Determinate Nix $current_version is already current"
+        return 0
+    fi
+    log_success "Determinate Nix upgraded: $current_version -> $new_version"
+
+    daemon_status=""
+    if daemon_status=$(sudo determinate-nixd status 2>&1); then
+        log_success "Determinate Systems is healthy after upgrade"
+    elif echo "$daemon_status" | grep -q "invalid-token"; then
+        log_warning "Determinate Systems is running after upgrade (FlakeHub token expired)"
+        log_info "This is non-critical. To restore FlakeHub access: determinate-nixd login"
+    else
+        log_error "Determinate Systems daemon issues after upgrade"
+        print_indented_error "$daemon_status"
+        log_info "Try restarting with: $(determinate_restart_hint)"
+        exit 1
+    fi
+}
+
+# First semantic version in `determinate-nixd version` output (the daemon's).
+determinate_version() {
+    local output version
+    output=$(determinate-nixd version 2> /dev/null) || output=""
+    version=$(grep -m1 -oE '[0-9]+\.[0-9]+\.[0-9]+' <<< "$output") || version="unknown"
+    echo "$version"
 }
 
 # Step 3: Update Configuration
