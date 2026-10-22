@@ -31,13 +31,13 @@
     # No upstream tags/releases as of pinning; pinned by commit instead so
     # `nix flake update` cannot move it silently.
     gstack = {
-      url = "github:garrytan/gstack/e23f7b807ff4788f6d7c90af2ab82960bd8c5851";
+      url = "github:garrytan/gstack/c580561e8a5ac08e6cbdd52c7a0ce521ab6310a5";
       flake = false;
     };
 
     # No upstream tags/releases as of pinning; pinned by commit instead.
     i-have-adhd = {
-      url = "github:ayghri/i-have-adhd/2ed064090711586e0c97a2fbbf15465fe8f1808b";
+      url = "github:ayghri/i-have-adhd/1ecea1993b7fce257ffbd686c070948b5e07eda6";
       flake = false;
     };
 
