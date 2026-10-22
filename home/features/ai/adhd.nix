@@ -10,10 +10,10 @@ let
   # Single point of truth: the pinned `i-have-adhd` flake input's own SKILL.md
   # is embedded verbatim (not hand-paraphrased), so bumping the flake input is
   # the only thing ever needed to keep this in sync. Upstream ships this skill
-  # opt-in (`disable-model-invocation: true`, honored directly by Claude Code
-  # and Codex regardless of the aiAgents.catalog entry's own implicit
-  # setting), so making it the default here means injecting the ruleset the
-  # same way caveman.nix does rather than relying on skill auto-invocation.
+  # opt-in (frontmatter `disable-model-invocation: true` for Claude Code,
+  # Cursor, and Vibe; agents/openai.yaml policy for Codex), so making it the
+  # default here means injecting the ruleset the same way caveman.nix does
+  # rather than relying on skill auto-invocation.
   iHaveAdhdSkillFile = iHaveAdhdSrc + "/skills/i-have-adhd/SKILL.md";
   adhdDefaultInstructions = ''
 

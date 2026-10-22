@@ -463,12 +463,13 @@ in
 
           i-have-adhd = {
             source = iHaveAdhdSrc + "/skills/i-have-adhd";
-            # Upstream sets `disable-model-invocation: true` -- Claude Code and
-            # Codex both honor that flag directly off SKILL.md regardless of
-            # this catalog's implicit setting, so implicit=false here just
-            # keeps our bookkeeping honest. The always-on behavior the user
-            # wants comes from home/features/ai/adhd.nix injecting the same
-            # SKILL.md verbatim into CLAUDE.md/AGENTS.md, not from this flag.
+            # Upstream opts out of implicit invocation twice: frontmatter
+            # `disable-model-invocation: true` (Claude Code, Cursor, Vibe) and
+            # agents/openai.yaml `policy.allow_implicit_invocation: false`
+            # (Codex reads only this). implicit=false records that; it does not
+            # change rendering. The always-on behavior comes from
+            # home/features/ai/adhd.nix injecting the same SKILL.md verbatim
+            # into CLAUDE.md/AGENTS.md, not from this flag.
             targets = [ "codex" "claude" "cursor" "vibe" ];
             trust = "pinned-flake";
             owner = "github:ayghri/i-have-adhd";
