@@ -115,13 +115,24 @@ SCAN_EXCEPTIONS=(
     # shutil.which-resolved, shell=True-free subprocess.run call (with
     # --strict-mcp-config hardening) misread as dangerous code execution.
     "caveman-compress"
+    # 2026-10-22: diagram-design at commit 7a12007b. Pin-scoped
+    # (`name@scan source`), so a pin bump changes the store path and fails
+    # the gate again until re-reviewed. Findings: 88 "Hidden Instructions"
+    # are SVG geometry comments in example HTML/references (all 1861 comments
+    # grepped for directives, URLs, secrets: none); anti-refusal, credential
+    # and prompt-leakage hits are diagram label text and export_svg.py CDATA
+    # parsing; analysis-evasion is partial reference coverage. Scripts make no
+    # network or subprocess calls.
+    "diagram-design@/nix/store/w6k9shqpddqxf6kx92pw0jdlh3x74b5c-source/skills/diagram-design"
 )
 
+# An entry matches every source of a skill (`name`) or one pinned source
+# (`name@/nix/store/...`).
 is_scan_exception() {
-    local candidate=$1
+    local name=$1 source=$2
     local exception
     for exception in "${SCAN_EXCEPTIONS[@]}"; do
-        [[ "$exception" == "$candidate" ]] && return 0
+        [[ "$exception" == "$name" || "$exception" == "$name@$source" ]] && return 0
     done
     return 1
 }
@@ -174,13 +185,13 @@ while IFS= read -r skill_record; do
             CAUTION)
                 echo "  warning  score=$score severity=$severity recommendation=$recommendation"
                 warnings=$((warnings + 1))
-                if [[ "$strict" == true ]] && ! is_scan_exception "$skill_name"; then
+                if [[ "$strict" == true ]] && ! is_scan_exception "$skill_name" "$source_path"; then
                     echo "error: strict mode blocks CAUTION recommendation for $skill_name" >&2
                     exit 1
                 fi
                 ;;
             DO_NOT_INSTALL)
-                if is_scan_exception "$skill_name"; then
+                if is_scan_exception "$skill_name" "$source_path"; then
                     echo "  exception score=$score severity=$severity recommendation=$recommendation (documented false positive, see SCAN_EXCEPTIONS)"
                     warnings=$((warnings + 1))
                 else

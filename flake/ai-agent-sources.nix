@@ -11,6 +11,7 @@
     gstack = flake.inputs.gstack;
     mattpocock-skills = flake.inputs.mattpocock-skills;
     i-have-adhd = flake.inputs.i-have-adhd;
+    diagram-design = flake.inputs.diagram-design;
   };
 
   mcps = {

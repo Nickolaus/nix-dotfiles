@@ -41,6 +41,12 @@
       flake = false;
     };
 
+    # No upstream tags; releases are per-commit manifest bumps, so pin by commit.
+    diagram-design = {
+      url = "github:cathrynlavery/diagram-design/7a12007b5a4246894f342a2e52e78facbc62eca3";
+      flake = false;
+    };
+
     serena.url = "github:oraios/serena/v2.0.0";
 
     codebase-memory-mcp.url = "github:DeusData/codebase-memory-mcp/v0.12.1";

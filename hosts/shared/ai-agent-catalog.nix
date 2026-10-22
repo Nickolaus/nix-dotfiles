@@ -16,6 +16,7 @@ let
   gstackSrc = aiSources.skills.gstack;
   mattpocockSkillsSrc = aiSources.skills.mattpocock-skills;
   iHaveAdhdSrc = aiSources.skills.i-have-adhd;
+  diagramDesignSrc = aiSources.skills.diagram-design;
 
   # A skill is implicitly invocable unless its own frontmatter opts out.
   skillIsImplicit = skillMd:
@@ -472,6 +473,19 @@ in
             trust = "pinned-flake";
             owner = "github:ayghri/i-have-adhd";
             implicit = false;
+          };
+
+          diagram-design = {
+            source = diagramDesignSrc + "/skills/diagram-design";
+            # Owns standalone diagram files (HTML/SVG, PNG export) and restyling
+            # existing draw.io, Mermaid, or Excalidraw sources; it never emits
+            # Mermaid. Diagrams that live in Markdown stay inline Mermaid.
+            # Branding persists in ~/.diagram-design/profiles plus a project
+            # .diagram-design marker, since the store copy is read-only.
+            targets = [ "codex" "claude" "cursor" "vibe" ];
+            trust = "pinned-flake";
+            owner = "github:cathrynlavery/diagram-design";
+            implicit = skillIsImplicit (builtins.readFile (diagramDesignSrc + "/skills/diagram-design/SKILL.md"));
           };
         };
       description = "Declarative reusable AI-agent skills.";
