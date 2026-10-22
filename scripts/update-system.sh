@@ -21,6 +21,10 @@ SKIP_SKILL_SCAN=false
 # renovate: datasource=github-tags depName=NVIDIA/skillspector
 SKILLSPECTOR_TAG="v2.13.0"
 SKILLSPECTOR_REPO="https://github.com/NVIDIA/skillspector.git"
+# yara-python ships self-contained macOS wheels only up to cp313. Newer
+# interpreters build it from source against Homebrew's OpenSSL, which breaks
+# the YARA analyzer on the next openssl major upgrade.
+SKILLSPECTOR_PYTHON="3.13"
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
@@ -82,17 +86,21 @@ ensure_skillspector() {
         exit 1
     fi
 
-    if command -v skillspector > /dev/null 2>&1 && skillspector --version 2> /dev/null | grep -Fq "${SKILLSPECTOR_TAG#v}"; then
+    local tool_python
+    tool_python="$(uv tool dir)/skillspector/bin/python"
+    if command -v skillspector > /dev/null 2>&1 && skillspector --version 2> /dev/null | grep -Fq "${SKILLSPECTOR_TAG#v}" \
+        && "$tool_python" -c 'import yara' > /dev/null 2>&1; then
         log_success "SkillSpector $SKILLSPECTOR_TAG is already installed"
         return 0
     fi
 
     # Transitional fallback: SkillSpector is not currently available as a
     # nixpkgs package, and upstream only ships via git (never published to
-    # PyPI) -- install only when absent or at the wrong pinned tag; normal
-    # upgrades reuse the already-installed binary and stay offline.
+    # PyPI) -- install only when absent, at the wrong pinned tag, or with a
+    # YARA analyzer that cannot load; normal upgrades reuse the
+    # already-installed binary and stay offline.
     log_info "Installing pinned SkillSpector $SKILLSPECTOR_TAG..."
-    if uv tool install "skillspector @ git+${SKILLSPECTOR_REPO}@${SKILLSPECTOR_TAG}"; then
+    if uv tool install --force --python "$SKILLSPECTOR_PYTHON" "skillspector @ git+${SKILLSPECTOR_REPO}@${SKILLSPECTOR_TAG}"; then
         log_success "SkillSpector $SKILLSPECTOR_TAG is ready"
     else
         log_error "Could not install SkillSpector $SKILLSPECTOR_TAG"
