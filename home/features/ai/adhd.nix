@@ -22,6 +22,15 @@ let
     definition itself, verbatim from ${iHaveAdhdSkillFile}, which governs
     output shape and when to drop it for the rest of the session.
 
+    Precedence with caveman: i-have-adhd owns response structure: the
+    first-line action, numbered steps, a one-line state restatement, time
+    estimates, visible wins, and the final next action. caveman owns
+    sentence-level wording. The task always needs these structural elements,
+    so caveman's no-recap, no-unrequested-lists and no-follow-up-offers rules
+    leave them in place and only compress their wording. A one-line state
+    restatement is not a recap. Write the final next action as a concrete
+    `Next:` line, never as an offer question.
+
     ${builtins.readFile iHaveAdhdSkillFile}
   '';
 in
