@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import functools
 import json
 import os
 import re
@@ -68,14 +69,33 @@ def fetch_text(url: str) -> str:
         return response.read().decode()
 
 
+@functools.cache
+def github_token() -> str | None:
+    # Unauthenticated GitHub API calls share a 60/hour per-IP budget; fall
+    # back to the gh CLI login so a local run gets the authenticated limit.
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        return token
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout.strip() or None
+
+
 def fetch_json(url: str) -> dict:
     headers = {
         "Accept": "application/json",
         "User-Agent": "nix-dotfiles-mcp-runtime-version-check",
     }
-    github_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-    if github_token and url.startswith("https://api.github.com/"):
-        headers["Authorization"] = f"Bearer {github_token}"
+    if url.startswith("https://api.github.com/") and (token := github_token()):
+        headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.load(response)

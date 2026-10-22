@@ -258,7 +258,14 @@ update_configuration() {
     ./scripts/check-skill-pins.sh || log_warning "Skill pin check failed; continuing"
 
     log_info "Updating flake inputs to latest versions..."
-    if nix flake update; then
+    # Unauthenticated GitHub API calls share a 60/hour per-IP budget, which one
+    # flake update nearly exhausts. Lend Nix the gh CLI login for this call
+    # only, through the environment so the token stays out of process args.
+    local nix_config="${NIX_CONFIG:-}" github_token
+    if github_token=$(gh auth token 2> /dev/null) && [[ -n "$github_token" ]]; then
+        nix_config+=$'\n'"access-tokens = github.com=$github_token"
+    fi
+    if NIX_CONFIG="$nix_config" nix flake update; then
         log_success "Flake inputs updated successfully"
     else
         log_error "Failed to update flake inputs"
