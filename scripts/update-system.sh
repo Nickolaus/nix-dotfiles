@@ -19,7 +19,7 @@ DRY_RUN=false
 CLEANUP_ONLY=false
 SKIP_SKILL_SCAN=false
 # renovate: datasource=github-tags depName=NVIDIA/skillspector
-SKILLSPECTOR_TAG="v2.13.0"
+SKILLSPECTOR_TAG="v2.13.1"
 SKILLSPECTOR_REPO="https://github.com/NVIDIA/skillspector.git"
 # yara-python ships self-contained macOS wheels only up to cp313. Newer
 # interpreters build it from source against Homebrew's OpenSSL, which breaks
