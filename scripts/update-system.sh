@@ -397,12 +397,19 @@ upgrade_declared_homebrew() {
         fi
     done < "$formulae_file"
 
+    local cask_log
+    cask_log=$(mktemp -t nix-dotfiles-brew-cask.XXXXXX)
+    track_temp_file "$cask_log"
+
     while IFS= read -r name; do
         [[ -n "$name" ]] || continue
         log_info "Upgrading Homebrew cask: $name"
-        if ! HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade --cask "$name"; then
+        if ! HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade --cask "$name" 2>&1 | tee "$cask_log"; then
             FAILED_HOMEBREW_UPGRADES+=("cask:$name")
             log_warning "Homebrew cask upgrade failed; continuing: $name"
+            if grep -q "It seems there is already an App at" "$cask_log"; then
+                log_info "Stale Caskroom staging copy; retry with: brew reinstall --cask $name"
+            fi
         fi
     done < "$casks_file"
 
