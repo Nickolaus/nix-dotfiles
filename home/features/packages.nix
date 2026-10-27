@@ -59,7 +59,7 @@
     kind
     awscli2
     ssm-session-manager-plugin
-    terraform_1
+    terraform
 
     # ═══════════════════════════════════════════════════════════════════════════
     # 🐳 CONTAINER & DOCKER TOOLS
