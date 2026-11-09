@@ -60,17 +60,17 @@
     "diagram-design": {
       "flake": false,
       "locked": {
-        "lastModified": 1792604770,
-        "narHash": "sha256-SfMJfTEvzDZynsBwlihgV4RvBtYVqoE4AgAk5S1fYx4=",
+        "lastModified": 1794194210,
+        "narHash": "sha256-3VwY5pq0H4cVx5rGxb8N/h5YtFZeU9FhNZonAATXCkA=",
         "owner": "cathrynlavery",
         "repo": "diagram-design",
-        "rev": "7a12007b5a4246894f342a2e52e78facbc62eca3",
+        "rev": "6a7f19fcc132b39b126bea90167679b46b14bcc4",
         "type": "github"
       },
       "original": {
         "owner": "cathrynlavery",
         "repo": "diagram-design",
-        "rev": "7a12007b5a4246894f342a2e52e78facbc62eca3",
+        "rev": "6a7f19fcc132b39b126bea90167679b46b14bcc4",
         "type": "github"
       }
     },

@@ -43,7 +43,7 @@
 
     # No upstream tags; releases are per-commit manifest bumps, so pin by commit.
     diagram-design = {
-      url = "github:cathrynlavery/diagram-design/7a12007b5a4246894f342a2e52e78facbc62eca3";
+      url = "github:cathrynlavery/diagram-design/6a7f19fcc132b39b126bea90167679b46b14bcc4";
       flake = false;
     };
 
