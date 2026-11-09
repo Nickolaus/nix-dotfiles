@@ -29,6 +29,8 @@ rec {
       headroom = "0.42.0";
       # renovate: datasource=pypi depName=mcp-nixos versioning=pep440
       nixos = "3.1.0";
+      # renovate: datasource=pypi depName=pyghidra-mcp versioning=pep440
+      pyghidraMcp = "0.3.0";
       # renovate: datasource=pypi depName=mcp-server-time versioning=pep440
       time = "2026.10.19";
     };
@@ -51,6 +53,13 @@ rec {
   };
 
   ollayaSupported = lib.meta.availableOn pkgs.stdenv.hostPlatform ollaya;
+
+  # nixpkgs' ghidra is the backing install pyghidra-mcp drives, and it is not
+  # available on every platform this repo is evaluated for. Gate the MCP server
+  # entry and the ghidra feature module on the same predicate so an unsupported
+  # host renders neither instead of failing to evaluate. Only read
+  # `pkgs.ghidra`'s store path inside a branch guarded by this.
+  ghidraSupported = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.ghidra;
 
   # Shared by every script that reads/edits TOML via tomlkit (Vibe's config.toml merge,
   # the MCP-profile onboarding scripts) -- one derivation instead of each caller declaring

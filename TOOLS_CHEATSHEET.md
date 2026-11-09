@@ -350,6 +350,7 @@ mcp-profile-nix-dotfiles   # Aggregated stdio endpoint: default baseline + seren
 mcp-profile-web            # default baseline + chrome-devtools/puppeteer, for browser automation
 mcp-profile-web-crawl      # default baseline + crawl4ai, explicit site crawling/extraction
 mcp-profile-decide         # default baseline + ollaya, local search-hit gating (aarch64-darwin)
+mcp-profile-reverse-engineering   # default baseline + pyghidra-mcp, headless Ghidra binary analysis
 mcp-profile-atlassian      # default baseline + atlassian
 mcp-profile-openai-api     # default baseline + openaiDeveloperDocs
 mcp-profile-scratchpad     # default baseline + memory
@@ -360,7 +361,8 @@ mcp-profile-offboard-codex-many <profile> <root-dir>   # Remove repo-local Codex
 ```
 
 - `context7`, `fetch`, `sequential-thinking`, `time`, `github`, and `headroom` are the universal baseline (`defaultProfileServers` in `hosts/shared/ai-agents.nix`) and stay natively registered for all 4 clients. `codebase-memory` is also natively registered (for Codex/Claude/Vibe, not Cursor) via a wrapper command that resolves a per-repo `CBM_CACHE_DIR` from the git root at spawn time, avoiding global cross-repo graph bleed without any per-repo config.
-- `serena`, `chrome-devtools`, `puppeteer`, `crawl4ai`, `ollaya`, `atlassian`, `openaiDeveloperDocs`, and `memory` are `targets = [ ]` -- not natively loaded anywhere -- and reachable only through the profile above that carries them.
+- `serena`, `chrome-devtools`, `puppeteer`, `crawl4ai`, `ollaya`, `pyghidra-mcp`, `atlassian`, `openaiDeveloperDocs`, and `memory` are `targets = [ ]` -- not natively loaded anywhere -- and reachable only through the profile above that carries them.
+- `pyghidra-mcp` drives a headless Ghidra install (`ghidra.enable`, default on where nixpkgs' `ghidra` is available) over stdio: no listening socket, no Ghidra GUI extension outside Nix. Its ~25 tools cover decompiling, disassembling, xrefs, and callgraphs for compiled binaries; source-level questions stay with `codebase-memory`, Graphify, or Serena. Run `ghidra-status` for the wiring and `ghidra-doctor` to verify PyGhidra can drive the read-only Nix install.
 - `crawl4ai` is profile-only and local tooling is disabled by default. Set `crawl4ai.enable = true`, export `CRAWL4AI_API_TOKEN`, run `crawl4ai-server`, then use `mcp-profile-web-crawl` for crawler-grade site extraction.
 - Every non-`default` profile is `defaultProfileServers ++ [ ... ]` in Nix, not a hand-relisted set, so the baseline can't drift between profiles.
 - Each `mcp-profile-<name>` binary is a FastMCP proxy (`home/features/ai/mcp-profiles.nix`, `uv run` since FastMCP isn't in nixpkgs) spawned fresh per invocation and exited after -- never a persistent or shared process, so unrelated repos/sessions never multiplex onto the same Serena workspace, browser session, or other stateful backend.

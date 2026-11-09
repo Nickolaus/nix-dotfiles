@@ -114,6 +114,43 @@ let
     exec "$cbm_bin" "$@"
   '';
 
+  # pyghidra-mcp's `--project-path` defaults to the *relative* path
+  # `pyghidra_mcp_projects`, so an unscoped launch creates a Ghidra project
+  # directory inside whatever repo the spawning session's cwd happens to be --
+  # the same write-inside-a-repo failure mode codebaseMemoryScopedWrapper
+  # exists to prevent. Pin it to one absolute directory under $XDG_DATA_HOME
+  # instead, so Ghidra projects accumulate in one place no matter which repo
+  # the session started in and nothing is ever written into a working tree.
+  #
+  # The two exported variables are what PyGhidra needs to find Ghidra and a
+  # JVM: nixpkgs' ghidra only prefixes its JDK onto PATH inside its own
+  # `support/launch.sh` wrapper, which never runs here because PyGhidra starts
+  # the JVM in-process through jpype. JAVA_HOME must track the `openjdk`
+  # `pkgs/tools/security/ghidra/build.nix` builds against (openjdk25 as of
+  # ghidra 12.1.4); a newer Ghidra pinned against a newer JDK needs this
+  # bumped in the same pass.
+  pyghidraMcpWrapper =
+    let
+      uvx = aiAgentsLib.mkUvxCommand {
+        package = "pyghidra-mcp";
+        version = mcpPackageVersions.pypi.pyghidraMcp;
+      };
+    in
+    pkgs.writeShellScript "pyghidra-mcp-scoped" ''
+      set -euo pipefail
+
+      export GHIDRA_INSTALL_DIR=${pkgs.ghidra}/lib/ghidra
+      export JAVA_HOME=${pkgs.openjdk25}
+
+      project_dir="''${XDG_DATA_HOME:-$HOME/.local/share}/pyghidra-mcp/projects"
+      ${pkgs.coreutils}/bin/mkdir -p "$project_dir"
+
+      exec ${uvx.command} ${lib.escapeShellArgs uvx.args} \
+        --transport stdio \
+        --project-path "$project_dir" \
+        "$@"
+    '';
+
   mcpServerTargetOverrideType = types.submodule ({ ... }: {
     options = {
       type = mkOption {
@@ -489,6 +526,26 @@ in
             cursor.args = [ "start-mcp-server" "--context=ide" "--project-from-cwd" "--open-web-dashboard" "False" ];
           };
         };
+      } // lib.optionalAttrs aiAgentsLib.ghidraSupported {
+        # Headless binary reverse engineering (decompile, disassemble, xrefs,
+        # callgraphs) over a local Ghidra install -- not natively registered,
+        # reachable via aiAgents.mcpProfiles.reverse-engineering. ~25 tools for
+        # a job that only comes up when there is a binary and no source, so it
+        # stays off the default profile. Upstream Ghidra ships no MCP server;
+        # pyghidra-mcp (Apache-2.0, PyPI) is the headless, stdio-transport
+        # bridge, which needs no listening socket and no Ghidra GUI extension
+        # installed outside Nix.
+        #
+        # Write-capable: rename_function, rename_variable, set_variable_type,
+        # set_function_prototype and set_comment mutate the Ghidra project
+        # database under $XDG_DATA_HOME, never the analyzed binary itself.
+        pyghidra-mcp = {
+          type = "stdio";
+          command = "${pyghidraMcpWrapper}";
+          # First launch resolves the uvx environment and starts a JVM.
+          startupTimeoutSec = 30;
+          targets = [ ];
+        };
       } // lib.optionalAttrs aiAgentsLib.ollayaSupported {
         # Local decision models (search-hit gating) -- not natively registered,
         # reachable via aiAgents.mcpProfiles.decide. `ollaya mcp` is a thin
@@ -547,6 +604,11 @@ in
         scratchpad = {
           servers = defaultProfileServers ++ [ "memory" ];
           description = "Opt-in cross-repo notes -- memory.jsonl is global by upstream design, not per-repo.";
+        };
+      } // lib.optionalAttrs aiAgentsLib.ghidraSupported {
+        reverse-engineering = {
+          servers = defaultProfileServers ++ [ "pyghidra-mcp" ];
+          description = "Binary reverse engineering -- headless Ghidra decompile/xref/callgraph tools; needs the ghidra package (ghidra-status).";
         };
       } // lib.optionalAttrs aiAgentsLib.ollayaSupported {
         decide = {

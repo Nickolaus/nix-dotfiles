@@ -9,6 +9,7 @@
     ./commit-workflow.nix
     ./crawl4ai.nix
     ./cursor-agent.nix
+    ./ghidra.nix
     ./graphify.nix
     ./headroom.nix
     ./mcp-profiles.nix
