@@ -408,7 +408,7 @@ upgrade_declared_homebrew() {
             FAILED_HOMEBREW_UPGRADES+=("cask:$name")
             log_warning "Homebrew cask upgrade failed; continuing: $name"
             if grep -q "It seems there is already an App at" "$cask_log"; then
-                log_info "Stale Caskroom staging copy; retry with: brew reinstall --cask $name"
+                log_info "App at destination is not owned by the cask; retry with: brew install --cask --force $name"
             fi
         fi
     done < "$casks_file"
