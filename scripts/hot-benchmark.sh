@@ -450,15 +450,17 @@ benchmark_model() {
         git add "$test_file" 2>/dev/null || true
         
         # Time the OpenCommit dry run
-        local start_time=$(date +%s.%N)
+        local start_time
+        start_time=$(date +%s.%N)
         
         # Use real OpenCommit with dry-run and auto-confirm
         local oco_output
         oco_output=$(oco --dry-run --yes 2>&1)
         local oco_exit_code=$?
         
-        local end_time=$(date +%s.%N)
-        local duration=$(echo "$end_time - $start_time" | bc -l)
+        local end_time duration
+        end_time=$(date +%s.%N)
+        duration=$(echo "$end_time - $start_time" | bc -l)
         
         if [ "$oco_exit_code" -eq 0 ] && [ -n "$oco_output" ]; then
             total_time=$(echo "$total_time + $duration" | bc -l)
@@ -490,8 +492,9 @@ benchmark_model() {
     done
     
     if [ "$successful_runs" -gt 0 ]; then
-        local avg_time=$(echo "scale=2; $total_time / $successful_runs" | bc -l)
-        local avg_quality=$(echo "scale=1; $total_quality / $successful_runs" | bc -l)
+        local avg_time avg_quality
+        avg_time=$(echo "scale=2; $total_time / $successful_runs" | bc -l)
+        avg_quality=$(echo "scale=1; $total_quality / $successful_runs" | bc -l)
         printf "%.2f,%.1f" "$avg_time" "$avg_quality"
         return 0
     else
@@ -534,8 +537,9 @@ get_performance_rating() {
 # Generate results report
 generate_report() {
     local results_file="$1"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local test_env="$(uname -s) $(uname -m)"
+    local timestamp test_env
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    test_env="$(uname -s) $(uname -m)"
     
     log "Generating comprehensive report..."
     
@@ -557,7 +561,6 @@ generate_report() {
 EOF
 
     # Read results and generate summary tables
-    local temp_results="/tmp/benchmark_results.tmp"
     
     # Sort models by average performance
     {
@@ -566,10 +569,11 @@ EOF
         
         while IFS=',' read -r model simple_time simple_quality complex_time complex_quality avg_time avg_quality; do
             [ "$model" = "Model" ] && continue  # Skip header
-            local rating=$(get_performance_rating "$avg_time")
-            local simple_quality_rating=$(get_quality_rating $(printf "%.0f" "$simple_quality"))
-            local complex_quality_rating=$(get_quality_rating $(printf "%.0f" "$complex_quality"))
-            local avg_quality_rating=$(get_quality_rating $(printf "%.0f" "$avg_quality"))
+            local rating simple_quality_rating complex_quality_rating avg_quality_rating
+            rating=$(get_performance_rating "$avg_time")
+            simple_quality_rating=$(get_quality_rating "$(printf "%.0f" "$simple_quality")")
+            complex_quality_rating=$(get_quality_rating "$(printf "%.0f" "$complex_quality")")
+            avg_quality_rating=$(get_quality_rating "$(printf "%.0f" "$avg_quality")")
             printf "| \`%s\` | %.2f | %s | %.2f | %s | %.2f | %s | %s |\n" \
                 "$model" "$simple_time" "$simple_quality_rating" "$complex_time" "$complex_quality_rating" "$avg_time" "$avg_quality_rating" "$rating"
         done < "$RESULTS_DIR/raw_results.csv" | sort -t'|' -k6 -n
@@ -611,9 +615,10 @@ EOF
 
 # Update README.md with results
 update_readme() {
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local test_env="$(uname -s) $(uname -m)"
-    local model_count=$(wc -l < "$RESULTS_DIR/raw_results.csv" | tr -d ' ')
+    local timestamp test_env model_count
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    test_env="$(uname -s) $(uname -m)"
+    model_count=$(wc -l < "$RESULTS_DIR/raw_results.csv" | tr -d ' ')
     ((model_count--))  # Subtract header line
     
     log "Updating README.md with latest results..."
@@ -830,13 +835,14 @@ main() {
             IFS=',' read -r complex_time complex_quality <<< "$complex_result"
             
             # Calculate averages
-            local avg_time=$(echo "scale=2; ($simple_time + $complex_time) / 2" | bc -l)
-            local avg_quality=$(echo "scale=1; ($simple_quality + $complex_quality) / 2" | bc -l)
+            local avg_time avg_quality
+            avg_time=$(echo "scale=2; ($simple_time + $complex_time) / 2" | bc -l)
+            avg_quality=$(echo "scale=1; ($simple_quality + $complex_quality) / 2" | bc -l)
             
             # Save results
             echo "$model,$simple_time,$simple_quality,$complex_time,$complex_quality,$avg_time,$avg_quality" >> "$raw_results"
             
-            success "Model $model completed - Avg: ${avg_time}s, Quality: $(get_quality_rating $(printf "%.0f" "$avg_quality"))"
+            success "Model $model completed - Avg: ${avg_time}s, Quality: $(get_quality_rating "$(printf "%.0f" "$avg_quality")")"
         else
             warn "Model $model had errors - skipping from results"
         fi
