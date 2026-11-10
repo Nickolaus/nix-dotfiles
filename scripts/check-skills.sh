@@ -48,8 +48,25 @@ if [[ ! -f "$manifest" ]]; then
     exit 2
 fi
 
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib/skillspector.sh
+source "$script_dir/lib/skillspector.sh"
+
 if ! command -v skillspector >/dev/null 2>&1; then
     echo "error: skillspector is not installed; run scripts/update-system.sh" >&2
+    exit 2
+fi
+
+# A SCAN_EXCEPTIONS entry records findings read from one scanner version, so a
+# verdict from a different version is not the verdict that was reviewed. Fail
+# closed on drift instead of scanning with whatever happens to be installed:
+# the gate does not install anything itself, because mutable installs belong to
+# update-system.sh.
+if ! skillspector_version_matches_pin; then
+    installed=$(skillspector_installed_version)
+    echo "error: skillspector ${installed:-unknown} is installed, but this repo pins ${SKILLSPECTOR_TAG}" >&2
+    echo "       run scripts/update-system.sh, or install the pin directly:" >&2
+    echo "       uv tool install --force --python ${SKILLSPECTOR_PYTHON} \"skillspector @ git+${SKILLSPECTOR_REPO}@${SKILLSPECTOR_TAG}\"" >&2
     exit 2
 fi
 

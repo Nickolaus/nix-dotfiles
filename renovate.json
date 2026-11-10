@@ -37,8 +37,8 @@
     },
     {
       "customType": "regex",
-      "description": "Update SkillSpector's pinned git tag in update-system.sh -- installed via git+tag (upstream ships no PyPI release), so it needs the same github-tags tracking as flake.nix's tag-pinned inputs.",
-      "fileMatch": ["^scripts/update-system\\.sh$"],
+      "description": "Update SkillSpector's pinned git tag in scripts/lib/skillspector.sh, the one definition update-system.sh installs from and check-skills.sh enforces -- installed via git+tag (upstream ships no PyPI release), so it needs the same github-tags tracking as flake.nix's tag-pinned inputs.",
+      "fileMatch": ["^scripts/lib/skillspector\\.sh$"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\w+=\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\""
       ]

@@ -18,16 +18,16 @@ PRUNE_BREW=false
 DRY_RUN=false
 CLEANUP_ONLY=false
 SKIP_SKILL_SCAN=false
-# renovate: datasource=github-tags depName=NVIDIA/skillspector
-SKILLSPECTOR_TAG="v2.13.1"
-SKILLSPECTOR_REPO="https://github.com/NVIDIA/skillspector.git"
-# yara-python ships self-contained macOS wheels only up to cp313. Newer
-# interpreters build it from source against Homebrew's OpenSSL, which breaks
-# the YARA analyzer on the next openssl major upgrade.
-SKILLSPECTOR_PYTHON="3.13"
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
+
+# SkillSpector's pin and version comparison are shared with
+# scripts/check-skills.sh, so the installed scanner and the gate's expectation
+# cannot drift apart.
+# shellcheck source=lib/skillspector.sh
+source "$SCRIPT_DIR/lib/skillspector.sh"
+
 DARWIN_HOST=${NIX_DARWIN_HOST:-zoidberg}
 NIXOS_HOST=${NIXOS_HOST:-}
 TEMP_FILES=()
@@ -88,7 +88,7 @@ ensure_skillspector() {
 
     local tool_python
     tool_python="$(uv tool dir)/skillspector/bin/python"
-    if command -v skillspector > /dev/null 2>&1 && skillspector --version 2> /dev/null | grep -Fq "${SKILLSPECTOR_TAG#v}" \
+    if command -v skillspector > /dev/null 2>&1 && skillspector_version_matches_pin \
         && "$tool_python" -c 'import yara' > /dev/null 2>&1; then
         log_success "SkillSpector $SKILLSPECTOR_TAG is already installed"
         return 0
