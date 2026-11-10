@@ -10,29 +10,29 @@ rec {
   mcpPackageVersions = {
     npm = {
       # renovate: datasource=npm depName=@upstash/context7-mcp
-      context7 = "4.4.4";
+      context7 = "4.6.0";
       # renovate: datasource=npm depName=chrome-devtools-mcp
       chromeDevtools = "1.12.0";
       # renovate: datasource=npm depName=puppeteer-mcp-server
       puppeteer = "0.7.2";
       # renovate: datasource=npm depName=@modelcontextprotocol/server-memory
-      memory = "2.0.0";
+      memory = "2.1.0";
       # renovate: datasource=npm depName=@modelcontextprotocol/server-sequential-thinking
-      sequentialThinking = "2.0.0";
+      sequentialThinking = "2.1.1";
     };
     pypi = {
       # renovate: datasource=pypi depName=crawl4ai versioning=pep440
       crawl4ai = "0.9.5";
       # renovate: datasource=pypi depName=mcp-server-fetch versioning=pep440
-      fetch = "2026.10.24";
+      fetch = "2026.11.4";
       # renovate: datasource=pypi depName=headroom-ai versioning=pep440
-      headroom = "0.42.0";
+      headroom = "0.44.0";
       # renovate: datasource=pypi depName=mcp-nixos versioning=pep440
       nixos = "3.1.0";
       # renovate: datasource=pypi depName=pyghidra-mcp versioning=pep440
       pyghidraMcp = "0.3.0";
       # renovate: datasource=pypi depName=mcp-server-time versioning=pep440
-      time = "2026.10.19";
+      time = "2026.11.4";
     };
   };
 
