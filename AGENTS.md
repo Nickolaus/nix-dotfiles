@@ -1,6 +1,7 @@
 # Agent Instructions
 
 - Inspect before editing. Prefer `rg` and `rg --files` for search.
+- Code style and diff-reviewable rules live in `CODING_STANDARDS.md`. Read it before writing Nix or shell; this file stays the authority on process.
 - Preserve user changes and never revert unrelated work.
 - Use Nix/Home Manager for declarative packages. On Darwin, use Homebrew casks for GUI apps that need current macOS app integration.
 - Keep Home Manager and nix-darwin activation idempotent. Mutable Homebrew upgrades belong in `scripts/update-system.sh`.
