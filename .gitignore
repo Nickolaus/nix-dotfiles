@@ -1,8 +1,8 @@
 result
-  result- *
+result-*
 
 # Images directory outputs
-images/result *
+images/result*
 images/*.iso
 images/*.qcow2
 images/*.img
