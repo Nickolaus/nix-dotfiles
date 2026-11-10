@@ -115,15 +115,24 @@ SCAN_EXCEPTIONS=(
     # shutil.which-resolved, shell=True-free subprocess.run call (with
     # --strict-mcp-config hardening) misread as dangerous code execution.
     "caveman-compress"
-    # 2026-10-22: diagram-design at commit 7a12007b. Pin-scoped
+    # 2026-11-10: diagram-design at commit 6a7f19fc. Pin-scoped
     # (`name@scan source`), so a pin bump changes the store path and fails
     # the gate again until re-reviewed. Findings: 88 "Hidden Instructions"
-    # are SVG geometry comments in example HTML/references (all 1861 comments
-    # grepped for directives, URLs, secrets: none); anti-refusal, credential
-    # and prompt-leakage hits are diagram label text and export_svg.py CDATA
-    # parsing; analysis-evasion is partial reference coverage. Scripts make no
-    # network or subprocess calls.
-    "diagram-design@/nix/store/w6k9shqpddqxf6kx92pw0jdlh3x74b5c-source/skills/diagram-design"
+    # are SVG geometry comments in example HTML/references (all 1878 comments
+    # grepped for directives, URLs, secrets: the one hit is the
+    # `source-url: https://example.com` placeholder in the profile frontmatter
+    # example of references/profiles.md); anti-refusal is "NO WARNING" label
+    # text in the journey examples, credential is "access token" in the OAuth
+    # sequence example, prompt leakage is the `return rules` tail of
+    # export_svg.py's CSS/CDATA rule collector; the rogue-agent, excessive-
+    # agency, least-privilege and output-handling hits are reference prose
+    # about snapshots, profile tokens and export trimming; analysis-evasion is
+    # partial reference coverage in SKILL.md. The six scripts import only the
+    # standard library (urllib.parse for unquote/urlparse, no network client),
+    # make no subprocess, eval or exec call, and write only to the output path
+    # their caller passes. Assets reference no host beyond the W3C namespace
+    # URIs and the Google Fonts stylesheet, and carry no inline event handler.
+    "diagram-design@/nix/store/b8lwjsifl3rd7fv87cdczbkch142dsc3-source/skills/diagram-design"
 )
 
 # An entry matches every source of a skill (`name`) or one pinned source
