@@ -78,6 +78,7 @@
       "ghostty" # GPU-accelerated terminal emulator; nixpkgs ghostty has no darwin platform support
       "t3-code" # Minimal GUI control plane for AI coding agents (t3.codes)
       "fluidvoice" # Offline voice-to-text dictation app with AI enhancement; not in nixpkgs
+      "raycast" # Launcher with a global hotkey, App Intents and Accessibility grants; the cask self-updates in place, so the bundle path stays stable where a nixpkgs store path changes on every upgrade and drops both the LaunchServices registration and the TCC grants
       "chatgpt" # OpenAI ChatGPT desktop app; official Codex-app replacement (codex-app cask deprecated), not in nixpkgs
     ];
   };

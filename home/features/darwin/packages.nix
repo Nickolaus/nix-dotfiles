@@ -19,7 +19,9 @@ lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
     # 🤖 AI & PRODUCTIVITY TOOLS
     # ═══════════════════════════════════════════════════════════════════════════
     # chatgpt # DMG source URL unreliable, install via Homebrew
-    raycast
+    # raycast # Managed as a Homebrew cask: it self-updates and its hotkey,
+    # App Intents and Accessibility grants need a bundle path that survives
+    # upgrades (see ../../../modules/darwin/brew).
     # ═══════════════════════════════════════════════════════════════════════════
     # 💻 DEVELOPMENT ENVIRONMENTS & IDEs
     # ═══════════════════════════════════════════════════════════════════════════
