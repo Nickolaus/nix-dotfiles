@@ -56,21 +56,17 @@ echo ""
 # Determine which architecture to build
 if [ "${1:-}" = "arm" ] || [ "${1:-}" = "aarch64" ]; then
     BUILD_ARCH="arm"
-    FLAKE_OUTPUT="farnsworth-installer-arm"
 elif [ "${1:-}" = "x86" ] || [ "${1:-}" = "x86_64" ]; then
     BUILD_ARCH="x86"
-    FLAKE_OUTPUT="farnsworth-installer-x86"
 elif [ "${1:-}" = "both" ]; then
     BUILD_ARCH="both"
 else
     # Auto-detect
     if [ "$ARCH" = "aarch64" ]; then
         BUILD_ARCH="arm"
-        FLAKE_OUTPUT="farnsworth-installer-arm"
         print_step "Auto-detected: Building ARM installer (native)"
     else
         BUILD_ARCH="x86"
-        FLAKE_OUTPUT="farnsworth-installer-x86"
         print_step "Auto-detected: Building x86_64 installer"
     fi
 fi
