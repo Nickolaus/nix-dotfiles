@@ -40,8 +40,29 @@ if ! command -v gh > /dev/null 2>&1; then
     exit 0
 fi
 
-# Flake inputs that feed aiAgents.catalog skill sources.
-inputs=(caveman mattpocock-skills gstack i-have-adhd)
+# Flake inputs that feed aiAgents.catalog skill sources, read out of the typed
+# registry that the catalog modules themselves resolve, so adding a skill input
+# there cannot leave this check behind. Read textually rather than with
+# `nix eval`: flake/ai-agent-sources.nix is a function of the flake, so it has
+# no standalone attribute to evaluate, and going through the flake would cost a
+# full evaluation in a script whose contract is a quick upstream report.
+# Matching the awk pass over flake.nix below, which is already textual.
+sources_registry="flake/ai-agent-sources.nix"
+if [[ ! -f "$sources_registry" ]]; then
+    echo "error: missing skill source registry: $sources_registry" >&2
+    exit 2
+fi
+
+mapfile -t inputs < <(awk '
+    /^  skills = \{/ { found = 1; next }
+    found && /^  \};/ { exit }
+    found { print }
+' "$sources_registry" | sed -nE 's/^[[:space:]]*[A-Za-z0-9_-]+[[:space:]]*=[[:space:]]*flake\.inputs\.([A-Za-z0-9_.-]+)[[:space:]]*;.*/\1/p')
+
+if [[ "${#inputs[@]}" -eq 0 ]]; then
+    echo "error: no skill inputs found in $sources_registry" >&2
+    exit 2
+fi
 
 behind=0
 
