@@ -122,7 +122,27 @@
     cursor-cli               # Cursor CLI agent for AI-powered code editing
     codex                    # OpenAI's coding agent
     opencode                 # Multi-provider agentic coding CLI (opencode.ai)
-    (mistral-vibe.overrideAttrs (old: { doCheck = false; doInstallCheck = false; }))  # Mistral's terminal coding agent (vibe, vibe-acp) -- upstream 2.19.0 test suite runs in installCheckPhase (doInstallCheck) and has flaky Textual UI failures in sandboxed build
+    # Mistral's terminal coding agent (vibe, vibe-acp).
+    #
+    # doCheck/doInstallCheck: the pytestCheckHook suite runs in installCheckPhase
+    # and has flaky Textual UI failures in a sandboxed build.
+    #
+    # vibe-rs buildInputs: rustPlatform's cargoUseSystemLibs exports
+    # AWS_LC_SYS_USE_SYSTEM=1, and aws-lc-sys 0.45.0 panics rather than falling
+    # back to its vendored copy when no system AWS-LC is present. Upstream
+    # vibe-rs.nix does not list aws-lc, so the Rust TUI fails to build. Adding
+    # aws-lc matches how every other nixpkgs consumer of aws-lc-sys declares it
+    # (monolith, zed-editor), so this drops out once nixpkgs carries the same
+    # one-line fix.
+    (mistral-vibe.overrideAttrs (old: {
+      doCheck = false;
+      doInstallCheck = false;
+      passthru = old.passthru // {
+        vibe-rs = old.passthru.vibe-rs.overrideAttrs (o: {
+          buildInputs = o.buildInputs ++ [ aws-lc ];
+        });
+      };
+    }))
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 📊 DATA & ANALYTICS
