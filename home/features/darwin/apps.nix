@@ -1,4 +1,5 @@
-{ ... }: {
+{ pkgs, lib, ... }:
+lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
   # macOS resolves an app bundle through LaunchServices, which records the
   # bundle's real path. Home Manager's default for a pre-25.11 stateVersion is
   # `targets.darwin.linkApps`, which exposes each app as a symlink into
