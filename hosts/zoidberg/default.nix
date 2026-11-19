@@ -8,6 +8,7 @@
   imports = [
     ../shared/ai-agents-default.nix
     ../shared/determinate.nix
+    ../shared/nix-gc-darwin.nix
     ../shared/fonts.nix
     ../../modules/darwin/aerospace
     ../../modules/darwin/brew
@@ -55,5 +56,8 @@
 
   time.timeZone = "Europe/Berlin";
 
+  # Determinate owns /etc/nix/nix.conf. This also disables nix-darwin's
+  # `nix.gc.automatic`, so scheduled collection comes from
+  # ../shared/nix-gc-darwin.nix instead.
   nix.enable = false;
 }

@@ -9,6 +9,8 @@
     nixpkgs-fmt
     nh
     nixd         # Nix language server -- also what Serena's LSP backend uses for Nix-aware navigation
+    nix-tree     # Interactive closure browser: which package makes a generation big
+    nix-du       # Store graph weighted by what GC would actually free; renders via graphviz
     
     # ═══════════════════════════════════════════════════════════════════════════
     # 🔐 SECURITY & SECRETS MANAGEMENT

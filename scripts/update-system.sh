@@ -30,6 +30,18 @@ source "$SCRIPT_DIR/lib/skillspector.sh"
 
 DARWIN_HOST=${NIX_DARWIN_HOST:-zoidberg}
 NIXOS_HOST=${NIXOS_HOST:-}
+
+# Generation retention for cleanup_generations. Every retained generation is a
+# live GC root pinning its whole closure, so this value is the upper bound on
+# how much the store can be reclaimed, not just a convenience setting.
+GC_RETENTION=${GC_RETENTION:-45d}
+GC_KEEP_MIN=${GC_KEEP_MIN:-5}
+
+# A rebuild needs headroom for the new closure before any of the old one can be
+# freed. Determinate's own collector only targets 5-20% free, which on a large
+# disk is far less than a full system closure, so the script enforces its own
+# floor before building.
+MIN_FREE_GIB=${MIN_FREE_GIB:-50}
 TEMP_FILES=()
 FAILED_HOMEBREW_UPGRADES=()
 
@@ -644,20 +656,35 @@ scrub_macl_from_dead_apps() {
     fi
 }
 
-# Prune uv's cache only when no uv-managed process is actively using it.
+# Prune uv's cache.
+#
+# The MCP servers in this configuration run as `uv tool uvx ...` and
+# `uv run --script ...`, which hold a shared lock on $UV_CACHE_DIR for their
+# entire lifetime. Plain `uv cache prune` therefore blocks on the lock and
+# times out whenever any MCP server is up - which is always. That is why the
+# cache is able to grow without bound.
+#
+# `--force` skips the in-use check rather than the reference check: it still
+# only removes entries no cached environment references, so environments the
+# running servers execute from survive. Resolution and install work is a
+# different matter, because it writes into the cache concurrently, so a uv
+# process doing that is still a hard skip.
 prune_uv_cache() {
     if ! command -v uv > /dev/null 2>&1; then
         log_info "uv is not installed; skipping uv cache prune"
         return 0
     fi
 
-    local active_uv_processes
-    active_uv_processes=$(
+    local writing_uv_processes
+    writing_uv_processes=$(
         ps -axo pid=,command= |
             awk '
-                /(^|\/| )uv( |$)|\/\.cache\/uv\// &&
-                $0 !~ /uv cache prune/ &&
-                $0 !~ /awk / {
+                $0 !~ /uv cache (prune|clear)/ &&
+                $0 !~ /awk / &&
+                /(^|\/| )uv( |$)/ &&
+                (/ (add|build|export|lock|pip|publish|remove|sync|venv|tree)( |$)/ ||
+                 / tool (install|upgrade|uninstall)( |$)/ ||
+                 / python (install|uninstall)( |$)/) {
                     print
                     count++
                 }
@@ -665,17 +692,54 @@ prune_uv_cache() {
             '
     ) || true
 
-    if [[ -n "$active_uv_processes" ]]; then
-        log_warning "uv cache is currently in use; skipping uv cache prune"
-        echo "$active_uv_processes" | sed -n '1,10p'
+    if [[ -n "$writing_uv_processes" ]]; then
+        log_warning "A uv process is writing to the cache; skipping uv cache prune"
+        echo "$writing_uv_processes" | sed -n '1,10p'
         return 0
     fi
 
-    log_info "Pruning uv cache..."
-    if uv cache prune; then
-        log_success "uv cache pruned"
+    local before
+    before=$(du -sh "${UV_CACHE_DIR:-$HOME/.cache/uv}" 2> /dev/null | awk '{ print $1 }')
+    log_info "Pruning uv cache (currently ${before:-unknown})..."
+
+    if uv cache prune --force; then
+        local after
+        after=$(du -sh "${UV_CACHE_DIR:-$HOME/.cache/uv}" 2> /dev/null | awk '{ print $1 }')
+        log_success "uv cache pruned (${before:-unknown} -> ${after:-unknown})"
     else
         log_warning "uv cache prune failed (non-critical)"
+    fi
+
+    log_info "A full reset needs the long-running uv MCP servers stopped first:"
+    log_info "  quit Claude Code and headroom, then run: uv cache clear"
+}
+
+# Offer to drop the codebase-memory MCP graph cache.
+#
+# The cache is derived state: each graph is rebuilt on the next
+# index_repository call, so dropping it costs indexing time, not data.
+# It has no size bound of its own, so it is worth checking on every cleanup.
+prune_codebase_memory_cache() {
+    local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/codebase-memory-mcp"
+
+    if [[ ! -d "$cache_dir" ]]; then
+        log_info "No codebase-memory cache present; nothing to prune"
+        return 0
+    fi
+
+    local size
+    size=$(du -sh "$cache_dir" 2> /dev/null | awk '{ print $1 }')
+    log_info "codebase-memory cache: ${size:-unknown} at $cache_dir"
+
+    if ! confirm "Drop the codebase-memory graph cache? (rebuilt on next index)"; then
+        log_info "Keeping the codebase-memory cache"
+        return 0
+    fi
+
+    if rm -rf -- "$cache_dir"; then
+        log_success "codebase-memory cache dropped"
+    else
+        log_warning "Could not drop the codebase-memory cache (non-critical)"
     fi
 }
 
@@ -683,27 +747,28 @@ prune_uv_cache() {
 cleanup_generations() {
     log_step "Cleanup: Removing Old Generations"
 
-    local retention="180d"
+    local retention="$GC_RETENTION"
     local user_profile="/nix/var/nix/profiles/per-user/$USER/profile"
 
-    log_info "Cleaning up old generations (keeping last $retention)..."
+    log_info "Cleaning up old generations (keeping last $retention, minimum $GC_KEEP_MIN)..."
 
     if command -v nh > /dev/null 2>&1; then
         log_info "Removing old generations with nh..."
-        if ! nh clean all --keep-since "$retention" --elevation-strategy auto --no-gc; then
+        if ! nh clean all --keep "$GC_KEEP_MIN" --keep-since "$retention" --elevation-strategy auto --no-gc; then
             log_warning "nh generation cleanup failed (non-critical)"
         fi
 
         scrub_macl_from_dead_apps
 
         log_info "Running Nix store garbage collection and optimisation with nh..."
-        if nh clean all --keep-since "$retention" --elevation-strategy auto --optimise; then
+        if nh clean all --keep "$GC_KEEP_MIN" --keep-since "$retention" --elevation-strategy auto --optimise; then
             log_success "Old generations cleaned up, unreachable store paths deleted, and store optimised"
         else
             log_warning "nh store garbage collection failed (non-critical)"
         fi
 
         prune_uv_cache
+        prune_codebase_memory_cache
 
         return 0
     fi
@@ -739,6 +804,70 @@ cleanup_generations() {
     fi
 
     prune_uv_cache
+    prune_codebase_memory_cache
+}
+
+# Report free GiB on the filesystem holding the Nix store.
+free_store_gib() {
+    # df -k is POSIX on both macOS and Linux; -P keeps the output on one line
+    # even when the device name is long.
+    df -Pk /nix/store 2>/dev/null | awk 'NR == 2 { printf "%d", $4 / 1024 / 1024 }'
+}
+
+# Guard the rebuild against running out of space mid-build.
+#
+# A rebuild that exhausts the disk aborts before any cleanup step can free
+# space, so the next run starts from the same state and fails the same way.
+# This runs before apply_changes and prunes generations first when space is
+# short, which is the only ordering that breaks that cycle.
+ensure_build_headroom() {
+    log_step "Pre-flight: Nix Store Headroom"
+
+    local free_gib
+    free_gib=$(free_store_gib)
+
+    if [[ -z "$free_gib" ]]; then
+        log_warning "Could not determine free space on /nix/store; skipping headroom check"
+        return 0
+    fi
+
+    log_info "Free space on /nix/store: ${free_gib} GiB (floor: ${MIN_FREE_GIB} GiB)"
+
+    if [[ "$free_gib" -ge "$MIN_FREE_GIB" ]]; then
+        log_success "Sufficient headroom for a rebuild"
+        return 0
+    fi
+
+    log_warning "Below the ${MIN_FREE_GIB} GiB floor; a rebuild may fail part-way through"
+
+    local generations=0
+    if [[ -d /nix/var/nix/profiles ]]; then
+        generations=$(find /nix/var/nix/profiles -maxdepth 1 -name 'system-*-link' | wc -l | tr -d ' ')
+        log_info "System profile holds $generations generation(s), each pinning its full closure"
+    fi
+
+    if ! confirm "Run generation cleanup and garbage collection now, before building?"; then
+        log_warning "Proceeding without cleanup; the rebuild may fail on low disk"
+        return 0
+    fi
+
+    cleanup_generations
+
+    free_gib=$(free_store_gib)
+    log_info "Free space after cleanup: ${free_gib} GiB"
+
+    if [[ -n "$free_gib" && "$free_gib" -lt "$MIN_FREE_GIB" ]]; then
+        log_warning "Still below the ${MIN_FREE_GIB} GiB floor after cleanup"
+        log_info "Largest reclaimable targets usually sit outside the Nix store:"
+        log_info "  uv cache          : uv cache prune --force"
+        log_info "  codebase-memory   : rm -rf \"${XDG_CACHE_HOME:-$HOME/.cache}/codebase-memory-mcp\""
+        log_info "  container VM image: reclaim unused space in OrbStack or Colima"
+        log_info "Inspect interactively with: ncdu ~  or  dust -d 1 -r ~"
+        if ! confirm "Continue with the rebuild anyway?"; then
+            log_info "Update cancelled by user"
+            exit 0
+        fi
+    fi
 }
 
 # Main function
@@ -771,6 +900,7 @@ main() {
 
     # Execute update workflow
     check_system_health
+    ensure_build_headroom
     update_determinate
     update_configuration
     update_homebrew "$platform"
@@ -800,7 +930,7 @@ usage() {
     echo "Options:"
     echo "  --help, -h       Show this help message"
     echo "  --dry-run        Show what would be done without executing"
-    echo "  --cleanup        Clean generations older than 180 days, run Nix store GC, optimise the store, and prune caches"
+    echo "  --cleanup        Clean generations older than \$GC_RETENTION (default 45d, keeping \$GC_KEEP_MIN), run Nix store GC, optimise the store, and prune caches"
     echo "  --upgrade-brew   Explicitly upgrade outdated Homebrew packages declared in the generated Brewfile"
     echo "  --upgrade-auto-update-casks  Include self-updating casks such as Cursor"
     echo "  --prune-brew     Explicitly remove Homebrew packages not declared in the generated Brewfile"
@@ -809,8 +939,12 @@ usage() {
     echo "Environment:"
     echo "  NIX_DARWIN_HOST  Darwin host (default: zoidberg)"
     echo "  NIXOS_HOST       NixOS host (default: architecture-based farnsworth host)"
+    echo "  GC_RETENTION     Generation retention for cleanup (default: 45d)"
+    echo "  GC_KEEP_MIN      Generations always kept regardless of age (default: 5)"
+    echo "  MIN_FREE_GIB     Free-space floor enforced before a rebuild (default: 50)"
     echo
     echo "This script performs a comprehensive system update:"
+    echo "0. Verify Nix store headroom, pruning generations first if space is short"
     echo "1. Check system health and evaluate declared host configurations"
     echo "2. Update Determinate Systems Nix"
     echo "3. Update flake inputs, MCP runtime pins, and re-evaluate declared host configurations"
@@ -828,9 +962,10 @@ usage() {
 dry_run() {
     echo "DRY RUN: Would perform the following steps:"
     if [[ "$CLEANUP_ONLY" == true ]]; then
-        echo "Cleanup: Remove generations older than 180 days, run Nix store GC, optimise the store, and prune caches"
+        echo "Cleanup: Remove generations older than $GC_RETENTION (keeping at least $GC_KEEP_MIN), run Nix store GC, optimise the store, and prune caches"
         return 0
     fi
+    echo "0. Verify Nix store headroom; prune generations before building if below ${MIN_FREE_GIB} GiB"
     echo "1. Check Determinate Systems daemon status and evaluate declared host configurations"
     echo "2. Upgrade Determinate Nix to latest version"
     echo "3. Update flake inputs and MCP runtime pins, then re-evaluate declared host configurations"

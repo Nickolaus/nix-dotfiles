@@ -1,6 +1,16 @@
 { pkgs
 , ...
 }: {
+  # determinate-nixd's collector, declared rather than left to the installer's
+  # default. It keeps 5-20% of the disk free, which is a safety net against a
+  # full disk but not a substitute for pruning generations - every retained
+  # generation is a live GC root, so the collector cannot reclaim it. Darwin
+  # hosts get scheduled generation pruning from ./nix-gc-darwin.nix; NixOS hosts
+  # use `nix.gc` in their own host module.
+  environment.etc."determinate/config.json".text = builtins.toJSON {
+    garbageCollector.strategy = "automatic";
+  };
+
   environment.etc."nix/nix.custom.conf".text = ''
     lazy-trees = true
     auto-optimise-store = true

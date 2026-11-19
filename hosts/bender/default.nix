@@ -26,6 +26,15 @@
     trusted-users = [ "root" "C.Hessel" ];
   };
 
+  # Retained generations are live GC roots, so without this the store grows
+  # monotonically and determinate-nixd finds nothing it is allowed to delete.
+  # Matches the 45d retention used by scripts/update-system.sh.
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 45d";
+  };
+
   users.users."C.Hessel" = {
     isNormalUser = true;
     description = "C.Hessel";

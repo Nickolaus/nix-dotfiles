@@ -72,6 +72,13 @@ let
     cache_dir="''${XDG_CACHE_HOME:-$HOME/.cache}/codebase-memory-mcp/repos/$slug-$hash"
     ${pkgs.coreutils}/bin/mkdir -p "$cache_dir"
 
+    # The cache key is a hash of the absolute git root, which makes every
+    # worktree its own ~600 MB graph and makes the key one-way: once a worktree
+    # is deleted, nothing can tell that its cache entry is now unreachable, and
+    # it is never evicted. Record the path the entry belongs to so a pruner can
+    # test whether it still exists - see home/features/cache-hygiene.nix.
+    printf '%s\n' "$root" > "$cache_dir/.source-path"
+
     export CBM_CACHE_DIR="$cache_dir"
 
     # codebase-memory-mcp's daemon rendezvous socket is a single machine-wide

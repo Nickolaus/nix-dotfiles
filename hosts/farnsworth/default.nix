@@ -215,11 +215,13 @@
       ];
     };
 
-    # Garbage collection
+    # Garbage collection. Retained generations are live GC roots, so this
+    # retention is the upper bound on what the store can ever reclaim.
+    # Matches the 45d retention used by scripts/update-system.sh.
     gc = {
       automatic = true;
       dates = "weekly";
-      options = "--delete-older-than 30d";
+      options = "--delete-older-than 45d";
     };
   };
 

@@ -1,6 +1,7 @@
 { ... }: {
   imports = [
     ./packages.nix
+    ./cache-hygiene.nix
     ./shell
     ./git
     ./ssh
