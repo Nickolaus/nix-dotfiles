@@ -22,9 +22,6 @@ lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
     # ═══════════════════════════════════════════════════════════════════════════
   ]
   ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [ slack ]  # x86_64-only (no ARM build)
-  ++ lib.optionals (pkgs.stdenv.hostPlatform.isx86_64 || pkgs.stdenv.hostPlatform.isAarch64) [
-    warp-terminal # Unfree terminal trial; not expected to be binary-cached in nixpkgs
-  ]
   ++ [
 
     # ═══════════════════════════════════════════════════════════════════════════

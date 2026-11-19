@@ -1,9 +1,0 @@
----
-name: Update system
-command: cd ~/.config/nix-dotfiles && ./scripts/update-system.sh
-tags:
-  - nix-dotfiles
-  - update
-description: Run the dotfiles system update script.
-arguments: []
-shells: []

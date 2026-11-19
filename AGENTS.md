@@ -5,7 +5,7 @@
 - Preserve user changes and never revert unrelated work.
 - Use Nix/Home Manager for declarative packages. On Darwin, use Homebrew casks for GUI apps that need current macOS app integration.
 - Keep Home Manager and nix-darwin activation idempotent. Mutable Homebrew upgrades belong in `scripts/update-system.sh`.
-- Manage secrets through sops-nix. Never commit credentials, tokens, or Warp/Oz/MCP secrets.
+- Manage secrets through sops-nix. Never commit credentials, tokens, or MCP secrets.
 - Run checks only for the changed surface. For docs-only changes, do docs/link/format sanity checks, not Nix evals. For Nix module or flake changes, use focused `nix eval`, `nix flake check`, or `./scripts/check-config.sh` depending on scope.
 - Use explicit `rtk <cmd>` for `git`, `rg`, `find` and test runners when the Bash hook does not rewrite them (non-Bash tools, richer shell paths).
 - Use subagents when explicitly authorized and useful. Explicit authorization includes direct user requests for delegation/subagents and user-invoked skills or workflows whose instructions call for background agents, parallel sub-agents, or delegation. Favor subagents for sidecar research, broad code exploration, diff review, and standards/spec review when fresh context improves quality or protects the main context window. Keep urgent, blocking, tightly coupled, security-sensitive, destructive, or secret-bearing work in the main session. Do local preflight first, spawn independent work in parallel when helpful, avoid repeated wait loops, close agents when done, and briefly state why work is delegated or kept local.

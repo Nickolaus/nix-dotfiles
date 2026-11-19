@@ -74,7 +74,7 @@
       "phpstorm" # PHP IDE
       "discord" # Voice and text chat
       "zed" # Fast native code editor; Homebrew cask tracks current macOS app releases
-      "warp" # Agent-enabled terminal trial; Homebrew cask tracks current macOS app releases
+      "opencloud" # OpenCloud desktop sync client; not in nixpkgs, Homebrew cask ships the signed upstream pkg
       "ghostty" # GPU-accelerated terminal emulator; nixpkgs ghostty has no darwin platform support
       "t3-code" # Minimal GUI control plane for AI coding agents (t3.codes)
       "fluidvoice" # Offline voice-to-text dictation app with AI enhancement; not in nixpkgs

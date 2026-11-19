@@ -106,7 +106,6 @@
 
         # Development-focused app launches
         ctrl-enter = "exec-and-forget open -na WezTerm";
-        ctrl-shift-enter = "exec-and-forget open -na Warp";
         ctrl-b = "exec-and-forget open -na \"Google Chrome\" --args --new-window";
 
         # System utilities
@@ -191,12 +190,6 @@
         {
           "if" = {
             "app-id" = "com.github.wez.wezterm";
-          };
-          "run" = "move-node-to-workspace 7";
-        }
-        {
-          "if" = {
-            "app-id" = "dev.warp.Warp-Stable";
           };
           "run" = "move-node-to-workspace 7";
         }

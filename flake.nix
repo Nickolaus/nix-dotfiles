@@ -150,8 +150,8 @@
       mkWslHome = system:
         home-manager.lib.homeManagerConfiguration {
           # `legacyPackages` carries no config, so unlike the NixOS and Darwin
-          # hosts this path needs its own allowUnfree for slack, warp-terminal,
-          # and the other unfree packages home/bender.nix pulls in.
+          # hosts this path needs its own allowUnfree for slack and the
+          # other unfree packages home/bender.nix pulls in.
           pkgs = import nixpkgs {
             inherit system;
             config.allowUnfree = true;
