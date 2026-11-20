@@ -47,7 +47,7 @@ lib.mkIf pkgs.stdenv.hostPlatform.isDarwin (
           "--cpu"
           "4"
           "--memory"
-          "8"
+          "16"
           "--vm-type"
           "vz"
           "--mount-type"
