@@ -141,8 +141,15 @@ lib.mkIf isDarwin {
     run mkdir -p ${lib.escapeShellArg logDir}
   '';
 
+  # These three agents run in the `user` launchd domain. They touch only files
+  # under $HOME and need no Aqua session, and launchd loads
+  # ~/Library/LaunchAgents only at graphical login. In the `user` domain the
+  # nix-darwin side of Home Manager bootstraps them at boot instead, so a
+  # Saturday prune still runs on a machine that is powered on but sitting at
+  # the login window.
   launchd.agents.codex-session-prune = {
     enable = true;
+    domain = "user";
     config = {
       ProgramArguments = [ "${codexPruneScript}" ];
       # Saturday 05:15, last in the chain so the three never contend for IO.
@@ -165,6 +172,7 @@ lib.mkIf isDarwin {
 
   launchd.agents.cbm-cache-prune = {
     enable = true;
+    domain = "user";
     config = {
       ProgramArguments = [ "${cbmPruneScript}" ];
       # Saturday 04:45, after the uv prune so the two do not contend for IO.
@@ -187,6 +195,7 @@ lib.mkIf isDarwin {
 
   launchd.agents.uv-cache-prune = {
     enable = true;
+    domain = "user";
     config = {
       ProgramArguments = [ "${uvPruneScript}" ];
       # Saturday 04:15, a day before the system GC in
