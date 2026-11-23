@@ -22,11 +22,11 @@ rec {
     };
     pypi = {
       # renovate: datasource=pypi depName=crawl4ai versioning=pep440
-      crawl4ai = "0.9.5";
+      crawl4ai = "0.9.6";
       # renovate: datasource=pypi depName=mcp-server-fetch versioning=pep440
       fetch = "2026.11.18";
       # renovate: datasource=pypi depName=headroom-ai versioning=pep440
-      headroom = "0.44.0";
+      headroom = "0.45.0";
       # renovate: datasource=pypi depName=mcp-nixos versioning=pep440
       nixos = "3.1.1";
       # renovate: datasource=pypi depName=pyghidra-mcp versioning=pep440

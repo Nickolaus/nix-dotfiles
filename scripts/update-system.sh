@@ -44,6 +44,7 @@ GC_KEEP_MIN=${GC_KEEP_MIN:-5}
 MIN_FREE_GIB=${MIN_FREE_GIB:-50}
 TEMP_FILES=()
 FAILED_HOMEBREW_UPGRADES=()
+STRANDED_CASK_APPS=()
 
 track_temp_file() {
     TEMP_FILES+=("$1")
@@ -189,7 +190,7 @@ check_system_health() {
     if command -v determinate-nixd > /dev/null 2>&1; then
         log_info "Checking Determinate Systems daemon status..."
         daemon_status=""
-        if daemon_status=$(sudo determinate-nixd status 2>&1); then
+        if daemon_status=$(determinate-nixd status 2>&1); then
             log_success "Determinate Systems daemon is healthy"
         elif echo "$daemon_status" | grep -q "invalid-token"; then
             log_warning "Authentication token expired (non-critical - only affects FlakeHub access)"
@@ -240,7 +241,7 @@ update_determinate() {
     log_success "Determinate Nix upgraded: $current_version -> $new_version"
 
     daemon_status=""
-    if daemon_status=$(sudo determinate-nixd status 2>&1); then
+    if daemon_status=$(determinate-nixd status 2>&1); then
         log_success "Determinate Systems is healthy after upgrade"
     elif echo "$daemon_status" | grep -q "invalid-token"; then
         log_warning "Determinate Systems is running after upgrade (FlakeHub token expired)"
@@ -438,7 +439,13 @@ prune_homebrew() {
 
     log_warning "Homebrew prune requested explicitly"
     log_info "Previewing Homebrew dependencies not declared in the generated Brewfile..."
-    if HOMEBREW_NO_AUTO_UPDATE=1 brew bundle cleanup --file="$brewfile" --all; then
+    # `brew bundle cleanup` without `--force` is only a preview when it cannot
+    # reach a terminal. On a TTY it prompts and, when the prompt is accepted,
+    # performs the whole cleanup itself and then exits 0 - indistinguishable
+    # here from having found nothing to prune. Closing stdin keeps the call a
+    # true preview, so exit 1 means "would uninstall" and the removal stays
+    # behind this script's own confirmation below.
+    if HOMEBREW_NO_AUTO_UPDATE=1 brew bundle cleanup --file="$brewfile" --all < /dev/null; then
         log_success "No undeclared Homebrew dependencies to prune"
         return 0
     fi
@@ -453,6 +460,77 @@ prune_homebrew() {
     else
         log_error "Homebrew bundle cleanup failed"
         return 1
+    fi
+}
+
+# Homebrew installs a cask's `app` artifact by renaming the staged bundle out of
+# the Caskroom into the app directory, and uninstalls it by renaming it back. An
+# upgrade is both in sequence, so an upgrade that is interrupted or denied
+# between the two can leave the bundle parked in the Caskroom with an empty
+# directory at the install path. The receipt still records the version as
+# installed, so `brew list --cask` and `brew outdated` keep reporting the cask as
+# healthy while the app cannot launch at all.
+#
+# Finishing the rename needs no App Management grant: rename(2) onto an empty
+# directory is permitted where deleting an app bundle is not. Anything other than
+# an empty directory at the install path is reported instead of touched, because
+# it is no longer the interrupted-rename shape and only a reinstall can repair it.
+repair_stranded_cask_apps() {
+    local appdir=/Applications
+    if [[ "${HOMEBREW_CASK_OPTS:-}" =~ --appdir(=|[[:space:]]+)([^[:space:]]+) ]]; then
+        appdir=${BASH_REMATCH[2]}
+    fi
+
+    local caskroom
+    caskroom="$(brew --prefix)/Caskroom"
+    [[ -d "$caskroom" ]] || return 0
+
+    log_info "Checking installed casks for app bundles stranded in the Caskroom..."
+
+    local repaired=0
+    local staged
+    local target
+    local token
+    while IFS= read -r -d '' staged; do
+        # A symlink is how `brew install --cask --adopt` records a bundle it
+        # adopted where it already stood, not a stranded one.
+        [[ -L "$staged" ]] && continue
+        [[ -d "$staged/Contents/MacOS" ]] || continue
+
+        target="$appdir/$(basename "$staged")"
+        token=$(basename "$(dirname "$(dirname "$staged")")")
+
+        # Nothing at the install path is not the interrupted-rename shape. It
+        # is also how a cask that stages an installer or a helper bundle looks
+        # once it is correctly installed, so it carries no signal either way.
+        [[ -d "$target" ]] || continue
+
+        if [[ -n "$(ls -A "$target" 2> /dev/null)" ]]; then
+            # A populated install path alongside a staged copy is only a
+            # problem when the installed bundle is incomplete.
+            if [[ ! -d "$target/Contents/MacOS" ]]; then
+                log_warning "Cask $token has an incomplete app bundle at $target"
+                log_info "Repair it with: brew reinstall --cask $token"
+                STRANDED_CASK_APPS+=("$token")
+            fi
+            continue
+        fi
+
+        log_info "Finishing interrupted cask install for $token: $staged -> $target"
+        if mv "$staged" "$appdir/"; then
+            repaired=$((repaired + 1))
+            log_success "Restored app bundle: $target"
+        else
+            log_warning "Could not restore app bundle: $target"
+            log_info "Repair it with: brew reinstall --cask $token"
+            STRANDED_CASK_APPS+=("$token")
+        fi
+    done < <(find "$caskroom" -mindepth 3 -maxdepth 3 -name "*.app" -print0 2> /dev/null)
+
+    if ((repaired > 0)); then
+        log_success "Restored $repaired stranded cask app bundle(s); relaunch those apps"
+    elif ((${#STRANDED_CASK_APPS[@]} == 0)); then
+        log_success "No stranded cask app bundles found"
     fi
 }
 
@@ -516,6 +594,8 @@ update_homebrew() {
         log_info "Skipping Homebrew prune; pass --prune-brew to opt in"
     fi
 
+    repair_stranded_cask_apps
+
     rm -f "$brewfile"
 }
 
@@ -523,29 +603,49 @@ update_homebrew() {
 apply_changes() {
     local platform=$1
     local rebuild_log
+    local system_path
     log_step "Step 5: Applying Changes"
 
     case $platform in
         "darwin")
-            log_info "Applying macOS configuration changes..."
+            # Only activation needs root; building the closure does not. Doing
+            # the build first means a refused elevation costs nothing but the
+            # activation itself, and leaves a store path that a later
+            # `darwin-rebuild switch` activates without rebuilding.
+            log_info "Building the macOS system closure without elevation..."
+            if ! system_path=$(nix build "$REPO_ROOT#darwinConfigurations.$DARWIN_HOST.system" \
+                --no-link --print-out-paths --show-trace); then
+                log_error "Failed to build the macOS system closure"
+                exit 1
+            fi
+            log_success "System closure built: $system_path"
+
+            log_info "Activating the macOS configuration..."
             rebuild_log=$(mktemp -t nix-dotfiles-darwin-rebuild.XXXXXX)
             track_temp_file "$rebuild_log"
             if sudo darwin-rebuild switch --flake "$REPO_ROOT#$DARWIN_HOST" --show-trace 2>&1 | tee "$rebuild_log"; then
                 log_success "macOS configuration applied successfully"
+            elif grep -q "reloadHammerspoon" "$rebuild_log" && grep -q "Killed: 9" "$rebuild_log"; then
+                # A failed Hammerspoon reload does not undo the activation.
+                log_warning "Hammerspoon reload failed (non-critical)"
+                log_info "Manually reloading Hammerspoon..."
+                killall Hammerspoon 2> /dev/null || true
+                sleep 1
+                open -a Hammerspoon 2> /dev/null || true
+                log_success "macOS configuration applied (with manual Hammerspoon reload)"
+            elif grep -qiE "blocked by the IT-Admins|Endpoint Privilege Management" "$rebuild_log"; then
+                # Endpoint policy refused the elevation, so nothing was
+                # activated and no generation was created. A rollback hint
+                # would point at the previous generation, which is still the
+                # current one.
+                log_error "Activation needs root and endpoint policy refused the sudo elevation"
+                log_info "Everything up to activation is done; the built closure is $system_path"
+                log_info "Activate it once elevation is available with: sudo darwin-rebuild switch --flake $REPO_ROOT#$DARWIN_HOST"
+                exit 1
             else
-                # Check if failure was due to Hammerspoon reload (non-critical)
-                if grep -q "reloadHammerspoon" "$rebuild_log" && grep -q "Killed: 9" "$rebuild_log"; then
-                    log_warning "Hammerspoon reload failed (non-critical)"
-                    log_info "Manually reloading Hammerspoon..."
-                    killall Hammerspoon 2> /dev/null || true
-                    sleep 1
-                    open -a Hammerspoon 2> /dev/null || true
-                    log_success "macOS configuration applied (with manual Hammerspoon reload)"
-                else
-                    log_error "Failed to apply macOS configuration"
-                    log_info "You can rollback with: sudo nix-env --rollback --profile /nix/var/nix/profiles/system"
-                    exit 1
-                fi
+                log_error "Failed to apply macOS configuration"
+                log_info "You can rollback with: sudo nix-env --rollback --profile /nix/var/nix/profiles/system"
+                exit 1
             fi
             ;;
         "linux")
@@ -577,7 +677,7 @@ verify_system_health() {
         log_info "Determinate Systems not installed; skipping daemon verification"
     else
         daemon_status=""
-        if daemon_status=$(sudo determinate-nixd status 2>&1); then
+        if daemon_status=$(determinate-nixd status 2>&1); then
             log_success "Determinate Systems is healthy"
         elif echo "$daemon_status" | grep -q "invalid-token"; then
             log_success "Determinate Systems daemon is running (FlakeHub token expired)"
@@ -912,10 +1012,16 @@ main() {
         cleanup_generations
     fi
 
-    if ((${#FAILED_HOMEBREW_UPGRADES[@]} > 0)); then
+    if ((${#FAILED_HOMEBREW_UPGRADES[@]} > 0 || ${#STRANDED_CASK_APPS[@]} > 0)); then
         echo -e "\n${YELLOW}⚠️ System update completed with Homebrew warnings.${NC}"
-        echo -e "${BLUE}Your nix-dotfiles configuration is up to date; some Homebrew packages were not upgraded.${NC}"
-        log_warning "Homebrew upgrades not completed: ${FAILED_HOMEBREW_UPGRADES[*]}"
+        echo -e "${BLUE}Your nix-dotfiles configuration is up to date; some Homebrew packages need attention.${NC}"
+        if ((${#FAILED_HOMEBREW_UPGRADES[@]} > 0)); then
+            log_warning "Homebrew upgrades not completed: ${FAILED_HOMEBREW_UPGRADES[*]}"
+        fi
+        if ((${#STRANDED_CASK_APPS[@]} > 0)); then
+            log_warning "Casks with an unusable app bundle: ${STRANDED_CASK_APPS[*]}"
+            log_info "Reinstall each one with: brew reinstall --cask <cask>"
+        fi
     else
         echo -e "\n${GREEN}✅ System update completed successfully!${NC}"
         echo -e "${BLUE}Your nix-dotfiles configuration is now up to date.${NC}"
@@ -979,6 +1085,7 @@ dry_run() {
     if [[ "$PRUNE_BREW" == true ]]; then
         echo "4b. Preview and optionally prune undeclared Homebrew packages"
     fi
+    echo "4c. Restore cask app bundles left stranded in the Caskroom by an interrupted install"
     echo "5. Apply configuration changes (darwin-rebuild/nixos-rebuild)"
     echo "6. Verify system health"
 }
