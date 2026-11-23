@@ -349,7 +349,6 @@ mcp-profile-status         # Declared profiles, member servers, and which server
 mcp-profile-nix-dotfiles   # Aggregated stdio endpoint: default baseline + serena, for this repo
 mcp-profile-web            # default baseline + chrome-devtools/puppeteer, for browser automation
 mcp-profile-web-crawl      # default baseline + crawl4ai, explicit site crawling/extraction
-mcp-profile-decide         # default baseline + ollaya, local search-hit gating (aarch64-darwin)
 mcp-profile-reverse-engineering   # default baseline + pyghidra-mcp, headless Ghidra binary analysis
 mcp-profile-atlassian      # default baseline + atlassian
 mcp-profile-openai-api     # default baseline + openaiDeveloperDocs
@@ -361,7 +360,7 @@ mcp-profile-offboard-codex-many <profile> <root-dir>   # Remove repo-local Codex
 ```
 
 - `context7`, `fetch`, `sequential-thinking`, `time`, `github`, and `headroom` are the universal baseline (`defaultProfileServers` in `hosts/shared/ai-agents.nix`) and stay natively registered for all 4 clients. `codebase-memory` is also natively registered (for Codex/Claude/Vibe, not Cursor) via a wrapper command that resolves a per-repo `CBM_CACHE_DIR` from the git root at spawn time, avoiding global cross-repo graph bleed without any per-repo config.
-- `serena`, `chrome-devtools`, `puppeteer`, `crawl4ai`, `ollaya`, `pyghidra-mcp`, `atlassian`, `openaiDeveloperDocs`, and `memory` are `targets = [ ]` -- not natively loaded anywhere -- and reachable only through the profile above that carries them.
+- `serena`, `chrome-devtools`, `puppeteer`, `crawl4ai`, `pyghidra-mcp`, `atlassian`, `openaiDeveloperDocs`, and `memory` are `targets = [ ]` -- not natively loaded anywhere -- and reachable only through the profile above that carries them.
 - `pyghidra-mcp` drives a headless Ghidra install (`ghidra.enable`, default on where nixpkgs' `ghidra` is available) over stdio: no listening socket, no Ghidra GUI extension outside Nix. Its ~25 tools cover decompiling, disassembling, xrefs, and callgraphs for compiled binaries; source-level questions stay with `codebase-memory`, Graphify, or Serena. Run `ghidra-status` for the wiring and `ghidra-doctor` to verify PyGhidra can drive the read-only Nix install.
 - `crawl4ai` is profile-only and local tooling is disabled by default. Set `crawl4ai.enable = true`, export `CRAWL4AI_API_TOKEN`, run `crawl4ai-server`, then use `mcp-profile-web-crawl` for crawler-grade site extraction.
 - Every non-`default` profile is `defaultProfileServers ++ [ ... ]` in Nix, not a hand-relisted set, so the baseline can't drift between profiles.
@@ -438,20 +437,21 @@ chonkie-update # Manual uv tool upgrade
 - Codex and Claude subscription auth remain untouched. Chonkie provider-backed features use provider API SDKs/keys, not ChatGPT or Claude Code subscription entitlements.
 - `chonkie-serve` defaults to localhost and refuses Headroom proxy ports.
 
-#### Ollaya Search-Hit Gating
+#### Search-Hit Gating (local decision model)
 
 ```bash
-ollaya-setup     # One time: pull winnow:e4b (~8 GB) and (re)create the frozen `linkgate` model
-ollaya-gate --query "<query>" < hits.jsonl   # {"title","url","snippet"} per line in, keep/skip JSONL out
-ollaya-status    # Daemon, serve/runner memory, loaded models, log path
-ollaya-stop      # Stop the daemon
+llm-pull gate    # One time: install the gate profile's decision model (d1:3b, ~3.7 GB)
+hit-gate --query "<query>" < hits.jsonl   # {"title","url","snippet"} per line in, keep/skip JSONL out
+hit-gate-status  # Endpoint, model, install state, loaded models
+llm-smoke gate   # One typed question against /v1/systemone
 ```
 
-- Pinned prebuilt release (`prebuiltReleases.ollaya` in `hosts/shared/ai-agents-lib.nix`, package in `packages/ollaya`), aarch64-darwin only. `scripts/update-mcp-runtime-versions.py --write` bumps the version and its tarball hash together.
-- No launchd agent: the first `ollaya`, `ollaya-gate`, or MCP call starts a detached `ollaya serve` on `127.0.0.1:11435`. Loaded models unload after `OLLAYA_KEEP_ALIVE` (5m) idle; the idle daemon uses about 15 MB. `winnow:e4b` uses about 8 GB while loaded.
-- Models live in `~/.local/share/ollaya/models`, logs in `~/.local/state/ollaya/server.log`. The pidfile is always `~/.ollaya/server.11435.pid`.
-- `ollaya-gate` drops a hit only when `fetch=skip` and either its confidence reaches `ollaya.skipConfidence` (0.5) or `relevant` is below `ollaya.dropRelevantBelow` (0.1). Expect about 0.4 s per hit warm, plus up to 26 s for a cold model load.
-- MCP access is opt-in via `mcp-profile-decide`; agents must pass `model: "linkgate"` and must not call `pull_model`. The bundled upstream `ollaya-decisions` skill is not installed: it recommends `curl | sh` installs and routing/triage use.
+- Runs on the managed Ollama service (`localAi`), so there is no second daemon, registry, or model store. The model is the `gate` profile in `localAi.profiles`; `llm-models`, `llm-pull`, `llm-status`, and `llm-doctor` report it alongside `commit` and `general`.
+- Decision models answer a typed question schema in one forward pass over `POST /v1/systemone`: `choice` questions return `choice`/`probabilities`/`confidence`, `noul` questions return a single probability. They have no chat surface, so `llm-run gate` refuses and points at `hit-gate`.
+- `hit-gate` sends a frozen two-question schema (`fetch` choice, `relevant` noul) with the query in the state, so one loaded model serves every query and callers cannot widen the question set.
+- It scores result metadata only (title, url, snippet). Validating the content behind a URL belongs to whatever fetches it.
+- `hit-gate` drops a hit only when `fetch=skip` and either its confidence reaches `hitGate.skipConfidence` (0.5) or `relevant` is below `hitGate.dropRelevantBelow` (0.1). Expect about 1 s per hit warm. Prefer ranking by `relevant` over dropping when a list is long.
+- Ollama's MLX-only decision models (`d3`, `tev1`, `nimble`, `clef`, `pplx-decider`, `strands-decider`, `laya`, `kev`) cannot be used: the binary loads `libmlxc.dylib` dynamically, nixpkgs carries no Apple MLX C library, and the pull fails with "this model requires MLX support". `d1` and `d1-omni` ship GGUF weights and work.
 
 #### AI Usage Reporting
 ```bash

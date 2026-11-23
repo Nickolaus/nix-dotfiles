@@ -36,24 +36,6 @@ rec {
     };
   };
 
-  # Prebuilt upstream release binaries. scripts/update-mcp-runtime-versions.py
-  # bumps `version` and refreshes each `release-sha256` hash from the
-  # release's own sha256sum.txt in the same pass.
-  prebuiltReleases = {
-    ollaya = {
-      # renovate: datasource=github-releases depName=ollaya-dev/ollaya
-      version = "0.18.0";
-      # release-sha256: depName=ollaya-dev/ollaya asset=ollaya-darwin-arm64.tgz
-      darwinArm64Hash = "sha256-1tV0N/bwuMDzpr4LdFmzJFIEbm/J8RtIYS2rK5eNWRI=";
-    };
-  };
-
-  ollaya = pkgs.callPackage ../../packages/ollaya {
-    inherit (prebuiltReleases.ollaya) version darwinArm64Hash;
-  };
-
-  ollayaSupported = lib.meta.availableOn pkgs.stdenv.hostPlatform ollaya;
-
   # nixpkgs' ghidra is the backing install pyghidra-mcp drives, and it is not
   # available on every platform this repo is evaluated for. Gate the MCP server
   # entry and the ghidra feature module on the same predicate so an unsupported

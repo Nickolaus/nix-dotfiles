@@ -11,9 +11,11 @@ let
 
   commitModel = cfg.profiles.commit.model;
   generalModel = cfg.profiles.general.model;
+  gateModel = cfg.profiles.gate.model;
 
   commitSize = cfg.profiles.commit.size;
   generalSize = cfg.profiles.general.size;
+  gateSize = cfg.profiles.gate.size;
 
   managedDarwinLaunchAgentLabels = [
     "org.nix-community.home.ollama"
@@ -63,6 +65,7 @@ let
       case "$1" in
         commit) echo "${commitModel}" ;;
         general) echo "${generalModel}" ;;
+        gate) echo "${gateModel}" ;;
         *)
           echo "Unknown profile: $1" >&2
           return 1
@@ -74,6 +77,7 @@ let
       case "$1" in
         commit) echo "${commitSize}" ;;
         general) echo "${generalSize}" ;;
+        gate) echo "${gateSize}" ;;
         *)
           echo "unknown" >&2
           return 1
@@ -242,6 +246,28 @@ in
           description = "Approximate download size for the general profile.";
         };
       };
+
+      gate = {
+        model = mkOption {
+          type = types.str;
+          default = "d1:3b";
+          description = ''
+            Decision model answering typed question schemas over `/v1/systemone`,
+            used by `hit-gate` to score search results. It has no chat surface,
+            so `llm-run` and `llm-smoke` treat it separately from the
+            prompt-driven profiles. Models tagged for Ollama's MLX runtime
+            cannot be used here: this Ollama build loads `libmlxc.dylib`
+            dynamically and nixpkgs carries no Apple MLX C library, so such a
+            pull fails with "this model requires MLX support".
+          '';
+        };
+
+        size = mkOption {
+          type = types.str;
+          default = "3.7GB";
+          description = "Approximate download size for the gate profile.";
+        };
+      };
     };
   };
 
@@ -305,7 +331,7 @@ in
           echo "Declared local AI profiles"
           echo ""
 
-          for profile in commit general; do
+          for profile in commit general gate; do
             model="$(profile_model "$profile")"
             size="$(profile_size "$profile")"
 
@@ -354,7 +380,7 @@ in
           ${commonShell}
 
           if [[ $# -ne 1 ]]; then
-            echo "Usage: llm-pull <commit|general|all>"
+            echo "Usage: llm-pull <commit|general|gate|all>"
             exit 1
           fi
 
@@ -375,13 +401,14 @@ in
             all)
               pull_profile commit
               pull_profile general
+              pull_profile gate
               ;;
-            commit|general)
+            commit|general|gate)
               pull_profile "$1"
               ;;
             *)
               echo "Unknown profile: $1"
-              echo "Usage: llm-pull <commit|general|all>"
+              echo "Usage: llm-pull <commit|general|gate|all>"
               exit 1
               ;;
           esac
@@ -398,6 +425,13 @@ in
 
           profile="$1"
           shift
+
+          if [[ "$profile" == "gate" ]]; then
+            echo "The gate profile answers a question schema, not a prompt."
+            echo "Next step: hit-gate --query \"<query>\" < hits.jsonl"
+            exit 1
+          fi
+
           model="$(profile_model "$profile")"
 
           require_service
@@ -428,6 +462,24 @@ in
             echo "Model not installed for profile '$profile': $model"
             echo "Next step: llm-pull $profile"
             exit 1
+          fi
+
+          if [[ "$profile" == "gate" ]]; then
+            echo "Running smoke test for gate ($model)..."
+            curl -fsS "$endpoint/v1/systemone" \
+              -H 'Content-Type: application/json' \
+              -d "$(${pkgs.jq}/bin/jq -nc --arg model "$model" '{
+                model: $model,
+                questions: {
+                  relevant: {
+                    type: "noul",
+                    instructions: "The state names a macOS launchd topic."
+                  }
+                },
+                state: { title: "launchd domains on macOS: user vs gui" }
+              }')" \
+              | ${pkgs.jq}/bin/jq -e '.answers.relevant.noul'
+            exit
           fi
 
           case "$profile" in
@@ -510,7 +562,7 @@ in
 
           echo ""
           echo "Declared profiles"
-          for profile in commit general; do
+          for profile in commit general gate; do
             model="$(profile_model "$profile")"
             if model_installed "$model"; then
               status="installed"

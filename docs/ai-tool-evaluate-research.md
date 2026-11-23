@@ -30,7 +30,7 @@ responsibilities, and returns a verdict with a preference rule.
 - `agent-catalog-check` is a Python script over `~/.agents/catalog/manifest.json` (`home/features/ai/agent-catalog.nix:190-341`). The manifest exports only skill fields: `owner trust implicit managed targets` (`:131`). It has no MCP data. The check covers frontmatter validity, the 1024-char description limit, drift from the pinned source, orphan skill directories (skipping `synced`), and `upstreamNotOnboarded` (`:240-313`). Duplicate names are reported as "n/a", because attrset keys are unique (`:430`).
 - `upstreamNotOnboarded` already records upstream skills that were deliberately left out (`hosts/shared/ai-agent-catalog.nix:71-82`, `:494-497`). The live check lists 13 caveman and 10 mattpocock skills there. This is an existing reject record for skills.
 - `ai-receipt-log` exists. It accepts `--kind decision` and the statuses `info|pass|fail|needs-work|ready|blocked` (`home/features/ai/workflow-receipts.nix:8-24`, `:55-157`). The global receipt rules forbid prompts, secrets, file contents, and full paths. They also define receipts as local state, not project source (`workflow-receipts.nix:203-204`; rendered into the global CLAUDE.md).
-- Hand-written "Boundary rules" blocks exist in `home/features/ai/chonkie.nix:55`, `home/features/ai/ollaya.nix:152`, and `home/features/ai/crawl4ai.nix:123`. Each one names a neighbour tool and a preference: chonkie vs graphify/codebase-memory, ollaya vs fetch/crawl4ai, crawl4ai vs context7/fetch/web profile. In each case both tools are kept, with a rule for when to use which.
+- Hand-written "Boundary rules" blocks exist in `home/features/ai/chonkie.nix:55`, `home/features/ai/hit-gate.nix`, and `home/features/ai/crawl4ai.nix:123`. Each one names a neighbour tool and a preference: chonkie vs graphify/codebase-memory, hit-gate vs fetch/crawl4ai, crawl4ai vs context7/fetch/web profile. In each case both tools are kept, with a rule for when to use which.
 - `docs/ai-agent-catalog-plan.md` plans validation for duplicate names, unsupported targets, missing sources, and role references (`:412-444`). It has no responsibility or overlap concept. Hooks are "existing hook modules or future `catalog.hooks`", and plugins are declared but not rendered (`:178-179`, `hosts/shared/ai-agent-catalog.nix:486-490`). Nothing planned conflicts with this proposal.
 
 ### 2.2 Observed overlaps, verified
@@ -101,7 +101,7 @@ The draft is about 520 chars, under the 1,024 spec limit and the 1,536 Claude li
    - Catalog skills: `agent-catalog-status`, `agent-catalog-check` (orphans, runtime-owned, `upstreamNotOnboarded`), and `jq` over `~/.agents/catalog/manifest.json`.
    - Outside the catalog: `~/.claude/skills/synced/` (claude.ai), plugin skills (`enabledPlugins` in `~/.claude/settings.json`), and vendor built-ins listed in the session.
    - MCP: `aiAgents.mcpServers` and `aiAgents.mcpProfiles` in `hosts/shared/ai-agents.nix`, plus `mcp-profile-status`.
-   - Always-on instructions: `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.vibe/AGENTS.md`, and the feature modules that write them (`adhd.nix`, `caveman.nix`, `chonkie.nix`, `ollaya.nix`, `crawl4ai.nix`, `rtk.nix`, …).
+   - Always-on instructions: `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.vibe/AGENTS.md`, and the feature modules that write them (`adhd.nix`, `caveman.nix`, `chonkie.nix`, `hit-gate.nix`, `crawl4ai.nix`, `rtk.nix`, …).
    - Hooks: `.hooks` in `~/.claude/settings.json`, `~/.cursor/hooks.json`, and the Codex requirements hooks (`rtk.nix`).
    - CLI tools: `home.packages` and the `*-status` commands in `home/features/ai/*.nix`.
 3. **Find overlaps.** For each inventory entry with the same or a neighbouring job, classify the overlap as `none`, `adjacent`, `partial`, or `full`. Also check:
@@ -136,7 +136,7 @@ The verdicts follow the Radar rings, plus one verdict for overlaps:
 
 - `adopt`: onboard as trusted (`pinned-flake` or `vendored-reviewed`).
 - `replace <X>`: adopt and retire X. Mark the old decision superseded, as in an ADR.
-- `coexist <X>`: keep both with a written boundary rule. This matches the existing chonkie, ollaya, and crawl4ai blocks.
+- `coexist <X>`: keep both with a written boundary rule. This matches the existing chonkie, hit-gate, and crawl4ai blocks.
 - `trial`: `external-experimental`, `implicit = false`, with a review trigger.
 - `reject`: record the reason. For skills, add to `upstreamNotOnboarded`.
 

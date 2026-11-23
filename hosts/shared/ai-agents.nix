@@ -553,17 +553,6 @@ in
           startupTimeoutSec = 30;
           targets = [ ];
         };
-      } // lib.optionalAttrs aiAgentsLib.ollayaSupported {
-        # Local decision models (search-hit gating) -- not natively registered,
-        # reachable via aiAgents.mcpProfiles.decide. `ollaya mcp` is a thin
-        # proxy; the first tool call starts the shared, detached `ollaya serve`
-        # daemon, which unloads models after OLLAYA_KEEP_ALIVE idle.
-        ollaya = {
-          type = "stdio";
-          command = lib.getExe aiAgentsLib.ollaya;
-          args = [ "mcp" ];
-          targets = [ ];
-        };
       };
       description = "Neutral cross-tool MCP server definitions rendered for each supported agent.";
     };
@@ -616,11 +605,6 @@ in
         reverse-engineering = {
           servers = defaultProfileServers ++ [ "pyghidra-mcp" ];
           description = "Binary reverse engineering -- headless Ghidra decompile/xref/callgraph tools; needs the ghidra package (ghidra-status).";
-        };
-      } // lib.optionalAttrs aiAgentsLib.ollayaSupported {
-        decide = {
-          servers = defaultProfileServers ++ [ "ollaya" ];
-          description = "Local decision models for scoring search hits before fetch/crawl; run ollaya-setup once.";
         };
       };
       description = ''

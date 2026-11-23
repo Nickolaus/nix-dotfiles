@@ -11,10 +11,10 @@
     ./cursor-agent.nix
     ./ghidra.nix
     ./graphify.nix
+    ./hit-gate.nix
     ./headroom.nix
     ./mcp-profiles.nix
     ./ollama.nix
-    ./ollaya.nix
     ./rtk.nix
     ./serena.nix
     ./vibe.nix
